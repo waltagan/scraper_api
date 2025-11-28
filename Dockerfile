@@ -34,5 +34,5 @@ RUN mkdir -p results && chmod 777 results
 EXPOSE 8000
 
 # Comando de inicialização usando a variável de ambiente PORT (padrão 8000 se não definida)
-CMD sh -c "uvicorn app.main:app --host :: --port ${PORT:-8000}"
+CMD sh -c "uvicorn app.main:app --host :: --port 8000"
 
