@@ -1,1 +1,1 @@
-web: uvicorn app.main:app --host :: --port 8000
+web: hypercorn app.main:app --bind [::]:$PORT

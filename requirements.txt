@@ -10,3 +10,4 @@ json_repair
 curl_cffi
 httpx
 beautifulsoup4
+hypercorn
