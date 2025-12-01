@@ -440,7 +440,22 @@ def _extract_links_html(html: str, base_url: str) -> Tuple[Set[str], Set[str]]:
         }
         
         for a in soup.find_all('a', href=True):
-            full = urljoin(base_url, a['href'])
+            href = a['href'].strip()
+            
+            # IGNORAR ÂNCORAS PURAS E JAVASCRIPT
+            if href.startswith('#') or href.lower().startswith('javascript:'):
+                continue
+                
+            full = urljoin(base_url, href)
+            
+            # IGNORAR ÂNCORAS NA MESMA PÁGINA (ex: base_url/#contato)
+            # Removemos a âncora para comparar
+            if '#' in full:
+                full_no_frag = full.split('#')[0]
+                base_no_frag = base_url.split('#')[0]
+                if full_no_frag == base_no_frag:
+                    continue
+
             parsed = urlparse(full)
             path_lower = parsed.path.lower()
             
