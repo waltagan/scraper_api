@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Global semaphore to limit concurrent Playwright instances
 # Prevents resource exhaustion and browser crashes
-playwright_semaphore = asyncio.Semaphore(2)  # Max 2 navegadores simultâneos
+playwright_semaphore = asyncio.Semaphore(10)  # Aumentado para priorizar velocidade
 
 @retry(
     retry=retry_if_exception_type((TargetClosedError, PlaywrightTimeout)),
@@ -167,43 +167,48 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
 
         async def scrape_subpage(sub_url):
             async with sem:
-                try:
-                    # Normalizar URL para lidar com caracteres especiais
-                    normalized_url = _normalize_url(sub_url)
-                    if normalized_url != sub_url:
-                        logger.debug(f"[Sub] URL normalizada: {sub_url} -> {normalized_url}")
-                    
-                    # Get fresh proxy for THIS specific request
-                    sub_proxy = await proxy_manager.get_next_proxy()
-                    
-                    # Try CFFI
-                    logger.debug(f"[Sub] Tentando CFFI para: {normalized_url}")
-                    text, pdfs, _ = await _cffi_scrape(normalized_url, sub_proxy)
-                    
-                    # Fallback System Curl
-                    if not text:
-                        logger.debug(f"[Sub] CFFI falhou, tentando System Curl para: {normalized_url}")
-                        text, pdfs, _ = await _system_curl_scrape(normalized_url, sub_proxy)
-                    
-                    if text:
-                        # Verificar se o conteúdo é muito pequeno (pode indicar problema)
-                        if len(text) < 500:
-                            logger.warning(f"⚠️ [Sub] Conteúdo muito pequeno para {normalized_url}: {len(text)} chars - pode indicar problema de scraping")
-                            # Mostrar preview do conteúdo para debug
-                            preview = '\n'.join(text.split('\n')[:10])
-                            logger.debug(f"📄 Preview do conteúdo coletado:\n{preview[:500]}")
+                # Normalizar URL para lidar com caracteres especiais
+                normalized_url = _normalize_url(sub_url)
+                if normalized_url != sub_url:
+                    logger.debug(f"[Sub] URL normalizada: {sub_url} -> {normalized_url}")
+                
+                # Loop de retry com rotação de proxy (Ultra Aggressive)
+                MAX_ATTEMPTS = 3
+                for attempt in range(MAX_ATTEMPTS):
+                    try:
+                        # Get fresh proxy for THIS attempt
+                        sub_proxy = await proxy_manager.get_next_proxy()
                         
-                        logger.info(f"[Sub] ✅ Success: {normalized_url} ({len(text)} chars)")
-                        print(f"[Sub] Success: {normalized_url}")
-                        return (normalized_url, text, pdfs)
-                    else:
-                        logger.warning(f"[Sub] ❌ Failed: {normalized_url} - Ambos CFFI e System Curl retornaram vazio")
-                        print(f"[Sub] Failed: {normalized_url}")
-                        return None
-                except Exception as e:
-                    logger.error(f"[Sub] ❌ Erro ao processar {sub_url}: {type(e).__name__}: {str(e)}", exc_info=True)
-                    print(f"[Sub] Failed: {sub_url} - Erro: {type(e).__name__}")
-                    return None
+                        logger.debug(f"[Sub] Tentativa {attempt+1}/{MAX_ATTEMPTS} para {normalized_url}")
+                        
+                        # Try CFFI (fail fast with timeout 6s)
+                        text, pdfs, _ = await _cffi_scrape(normalized_url, sub_proxy)
+                        
+                        # Fallback System Curl if CFFI failed
+                        if not text:
+                            text, pdfs, _ = await _system_curl_scrape(normalized_url, sub_proxy)
+                        
+                        if text:
+                            # Verificar se o conteúdo é muito pequeno (descartar erros de proxy/captcha que passam como 200)
+                            if len(text) < 100: 
+                                logger.warning(f"⚠️ [Sub] Conteúdo inválido/muito pequeno ({len(text)} chars) na tentativa {attempt+1}. Tentando próximo proxy...")
+                                continue
+                                
+                            logger.info(f"[Sub] ✅ Success: {normalized_url} ({len(text)} chars)")
+                            print(f"[Sub] Success: {normalized_url}")
+                            return (normalized_url, text, pdfs)
+                        
+                        # Se chegou aqui, ambos falharam nesta tentativa
+                        logger.debug(f"[Sub] Falha na tentativa {attempt+1} para {normalized_url}. Tentando próximo proxy...")
+                        
+                    except Exception as e:
+                        logger.warning(f"[Sub] Erro na tentativa {attempt+1} para {normalized_url}: {e}")
+                        continue
+
+                # Se saiu do loop, todas as tentativas falharam
+                logger.warning(f"[Sub] ❌ Failed: {normalized_url} - Todas as {MAX_ATTEMPTS} tentativas falharam")
+                print(f"[Sub] Failed: {normalized_url}")
+                return None
 
         # Launch parallel tasks
         tasks = [scrape_subpage(sub) for sub in target_subpages]
@@ -373,10 +378,10 @@ async def _system_curl_scrape_safe(url: str, proxy: Optional[str]) -> Tuple[str,
 # Let's revert to the pattern: Decorator on the Logic, Safe Wrapper for the Caller.
 
 # Redefining _cffi_scrape without the broad try/except, but with specific logic
-@retry(stop=stop_after_attempt(2), wait=wait_fixed(1))
+@retry(stop=stop_after_attempt(1), wait=wait_fixed(0))
 async def _cffi_scrape_logic(url: str, proxy: Optional[str]) -> Tuple[str, Set[str], Set[str]]:
-    # Timeout reduzido para 15s (fail-fast)
-    async with AsyncSession(impersonate="chrome120", proxy=proxy, timeout=15) as s:
+    # Timeout ultra agressivo de 6s (fail-fast)
+    async with AsyncSession(impersonate="chrome120", proxy=proxy, timeout=6) as s:
         resp = await s.get(url)
         if resp.status_code != 200: raise Exception(f"Status {resp.status_code}")
         return _parse_html(resp.text, url)
@@ -388,13 +393,13 @@ async def _cffi_scrape(url: str, proxy: Optional[str]) -> Tuple[str, Set[str], S
         logger.debug(f"[CFFI] Erro ao fazer scrape de {url}: {type(e).__name__}: {str(e)}")
         return "", set(), set()
 
-@retry(stop=stop_after_attempt(2), wait=wait_fixed(1))
+@retry(stop=stop_after_attempt(1), wait=wait_fixed(0))
 async def _system_curl_scrape_logic(url: str, proxy: Optional[str]) -> Tuple[str, Set[str], Set[str]]:
-    cmd = ["curl", "-L", "-k", "-s", "--max-time", "15"] # Timeout reduzido para 15s (fail-fast)
+    cmd = ["curl", "-L", "-k", "-s", "--max-time", "6"] # Timeout ultra agressivo de 6s
     if proxy: cmd.extend(["-x", proxy])
     cmd.extend(["-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36", url])
     
-    res = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=20) # Timeout do subprocess um pouco maior que o do curl
+    res = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=10) # Timeout do subprocess um pouco maior que o do curl
     if res.returncode != 0 or not res.stdout: raise Exception("Curl Failed")
     return _parse_html(res.stdout, url)
 

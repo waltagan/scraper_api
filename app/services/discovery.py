@@ -314,7 +314,7 @@ async def find_company_website(
     if nf:
         q1 = f'{nf} {city} site oficial'.strip()
         queries.append(q1)
-
+    
     # Query 2: Razão Social + Municipio (se existir)
     if rs:
         # Remover "LTDA", "S.A.", "EIRELI", "ME", "EPP" para limpar a busca
