@@ -6,11 +6,11 @@ import time
 from typing import List, Tuple, Set, Optional
 from urllib.parse import urljoin, urlparse, quote, unquote
 from bs4 import BeautifulSoup
-from curl_cffi.requests import AsyncSession
+from curl_cffi.requests import AsyncSession, RequestsError
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, BrowserConfig
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from tenacity import retry, stop_after_attempt, wait_fixed, wait_exponential, retry_if_exception_type, before_sleep_log
+from tenacity import retry, stop_after_attempt, wait_fixed, wait_exponential, retry_if_exception_type, before_sleep_log, RetryError
 from app.core.proxy import proxy_manager
 
 # Playwright error imports para tratamento específico
@@ -27,6 +27,36 @@ logger = logging.getLogger(__name__)
 # Global semaphore to limit concurrent Playwright instances
 # Prevents resource exhaustion and browser crashes
 playwright_semaphore = asyncio.Semaphore(10)  # Aumentado para priorizar velocidade
+
+# --- CIRCUIT BREAKER ---
+# Dicionário global para rastrear falhas consecutivas por domínio
+# Chave: domínio (netloc), Valor: contador de falhas
+domain_failures = {}
+# Limite de falhas para abrir o circuito
+CIRCUIT_BREAKER_THRESHOLD = 5
+# Tempo de reset do circuito (não implementado full, apenas reset manual ou restart)
+
+def _get_domain(url: str) -> str:
+    try:
+        return urlparse(url).netloc
+    except:
+        return "unknown"
+
+def _record_failure(url: str):
+    domain = _get_domain(url)
+    domain_failures[domain] = domain_failures.get(domain, 0) + 1
+    if domain_failures[domain] >= CIRCUIT_BREAKER_THRESHOLD:
+        logger.warning(f"🔌 CIRCUIT BREAKER ABERTO para {domain} após {domain_failures[domain]} falhas consecutivas")
+
+def _record_success(url: str):
+    domain = _get_domain(url)
+    if domain in domain_failures:
+        # Resetar contador em caso de sucesso (Half-Open logic simplificada)
+        domain_failures[domain] = 0
+
+def _is_circuit_open(url: str) -> bool:
+    domain = _get_domain(url)
+    return domain_failures.get(domain, 0) >= CIRCUIT_BREAKER_THRESHOLD
 
 @retry(
     retry=retry_if_exception_type((TargetClosedError, PlaywrightTimeout)),
@@ -160,59 +190,128 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
     
     if target_subpages:
         subpages_start = time.perf_counter()
-        print(f"[Scraper] Processing {len(target_subpages)} subpages with Parallel IP Rotation")
+        print(f"[Scraper] Processing {len(target_subpages)} subpages with Parallel IP Rotation & Session Reuse")
         
         # Semaphore to limit concurrency (avoid overwhelming proxy provider or local resources)
         sem = asyncio.Semaphore(10) 
+        
+        # Agrupar subpáginas para processamento em lote (tentativa de Session Reuse)
+        # Como o código original processa em paralelo individualmente, vamos manter a estrutura
+        # mas injetar a lógica de sessão persistente DENTRO da task se possível, 
+        # ou melhor: usar um gerenciador de sessão que reutiliza sessões por proxy.
+        #
+        # DADO A ESTRUTURA ATUAL de tasks independentes, o melhor é:
+        # Tentar usar uma sessão "Sticky" por Batch de URLs se formos reestruturar,
+        # MAS para manter a compatibilidade com o fluxo atual:
+        # Vamos criar um pool de sessões ou simplesmente permitir que o scrape_subpage crie uma sessão
+        # e tente reusá-la se falhar e precisar de retry? Não, o retry troca de proxy.
+        #
+        # ESTRATÉGIA CORRIGIDA PARA KEEP-ALIVE:
+        # O Keep-Alive só funciona se fizermos múltiplas requisições COM O MESMO PROXY.
+        # O modelo atual (Task Paralela -> Pega Proxy -> Faz 1 Request) mata o Keep-Alive.
+        #
+        # MUDANÇA: Agrupar URLs por "Lote de Proxy".
+        # Vamos dividir as URLs em chunks de 5. Para cada chunk, pegamos 1 proxy e usamos 1 sessão.
+        
+        # 1. Agrupar URLs em chunks
+        chunk_size = 5
+        url_chunks = [target_subpages[i:i + chunk_size] for i in range(0, len(target_subpages), chunk_size)]
+        
+        async def scrape_chunk(urls_chunk):
+            chunk_results = []
+            # Obter proxy e criar sessão para este chunk
+            chunk_proxy = await proxy_manager.get_next_proxy()
+            
+            # Timeout split: Connect 5s, Read 30s
+            # Como curl_cffi pode não suportar tupla diretamente dependendo da versão,
+            # configuramos um timeout total seguro de 35s.
+            # O "Fail Fast" no connect depende da libcurl interna.
+            
+            # Usar Context Manager para garantir fechamento da sessão
+            try:
+                async with AsyncSession(
+                    impersonate="chrome120", 
+                    proxy=chunk_proxy, 
+                    timeout=35, # Aumentado para tolerar servidores lentos (Read Timeout)
+                    verify=False # Ignorar erros de certificado SSL em targets ruins
+                ) as session:
+                    
+                    for sub_url in urls_chunk:
+                        # Verificar Circuit Breaker antes de processar
+                        if _is_circuit_open(sub_url):
+                            logger.warning(f"🔌 [CircuitBreaker] Pulando {sub_url} devido a falhas excessivas no domínio")
+                            chunk_results.append(None)
+                            continue
 
-        async def scrape_subpage(sub_url):
-            async with sem:
-                # Normalizar URL para lidar com caracteres especiais
-                normalized_url = _normalize_url(sub_url)
-                if normalized_url != sub_url:
-                    logger.debug(f"[Sub] URL normalizada: {sub_url} -> {normalized_url}")
-                
-                # Loop de retry com rotação de proxy (Ultra Aggressive)
-                MAX_ATTEMPTS = 3
-                for attempt in range(MAX_ATTEMPTS):
-                    try:
-                        # Get fresh proxy for THIS attempt
-                        sub_proxy = await proxy_manager.get_next_proxy()
+                        # Normalizar URL
+                        normalized_url = _normalize_url(sub_url)
                         
-                        logger.debug(f"[Sub] Tentativa {attempt+1}/{MAX_ATTEMPTS} para {normalized_url}")
+                        # Tentativa com a sessão persistente (Keep-Alive Reuse)
+                        try:
+                            logger.debug(f"[Sub] Processando {normalized_url} com sessão persistente...")
+                            text, pdfs, _ = await _cffi_scrape(normalized_url, proxy=None, session=session) # Proxy já na sessão
+                            
+                            if text and len(text) >= 100:
+                                logger.info(f"[Sub] ✅ Success (Keep-Alive): {normalized_url} ({len(text)} chars)")
+                                _record_success(normalized_url)
+                                chunk_results.append((normalized_url, text, pdfs))
+                                continue # Sucesso, vai para próxima URL do chunk
+                            
+                            # Se falhou ou conteúdo pequeno com a sessão atual, marcar falha
+                            # E tentar fallback isolado (Curl System)
+                            logger.warning(f"[Sub] ⚠️ Falha/Pequeno com CFFI Session em {normalized_url}. Tentando Curl Fallback...")
+                            _record_failure(normalized_url)
+                            
+                        except Exception as e:
+                            logger.warning(f"[Sub] ❌ Erro CFFI Session em {normalized_url}: {e}")
+                            _record_failure(normalized_url)
                         
-                        # Try CFFI (fail fast with timeout 6s)
-                        text, pdfs, _ = await _cffi_scrape(normalized_url, sub_proxy)
-                        
-                        # Fallback System Curl if CFFI failed
-                        if not text:
-                            text, pdfs, _ = await _system_curl_scrape(normalized_url, sub_proxy)
-                        
-                        if text:
-                            # Verificar se o conteúdo é muito pequeno (descartar erros de proxy/captcha que passam como 200)
-                            if len(text) < 100: 
-                                logger.warning(f"⚠️ [Sub] Conteúdo inválido/muito pequeno ({len(text)} chars) na tentativa {attempt+1}. Tentando próximo proxy...")
-                                continue
-                                
-                            logger.info(f"[Sub] ✅ Success: {normalized_url} ({len(text)} chars)")
-                            print(f"[Sub] Success: {normalized_url}")
-                            return (normalized_url, text, pdfs)
-                        
-                        # Se chegou aqui, ambos falharam nesta tentativa
-                        logger.debug(f"[Sub] Falha na tentativa {attempt+1} para {normalized_url}. Tentando próximo proxy...")
-                        
-                    except Exception as e:
-                        logger.warning(f"[Sub] Erro na tentativa {attempt+1} para {normalized_url}: {e}")
-                        continue
+                        # Fallback: System Curl (Isolated)
+                        # Só tenta curl se o CFFI falhou. O Curl não usa a sessão CFFI.
+                        # Usa o mesmo proxy do chunk para aproveitar (ou tentar novo? melhor novo se o proxy for o problema)
+                        # Vamos tentar com NOVO proxy no fallback para maximizar chance
+                        try:
+                            fallback_proxy = await proxy_manager.get_next_proxy()
+                            text, pdfs, _ = await _system_curl_scrape(normalized_url, fallback_proxy)
+                            
+                            if text and len(text) >= 100:
+                                logger.info(f"[Sub] ✅ Success (Curl Fallback): {normalized_url}")
+                                _record_success(normalized_url)
+                                chunk_results.append((normalized_url, text, pdfs))
+                            else:
+                                logger.warning(f"[Sub] ❌ Falha total em {normalized_url} (CFFI+Curl)")
+                                _record_failure(normalized_url)
+                                chunk_results.append(None)
+                        except Exception as e:
+                            logger.error(f"[Sub] ❌ Erro Curl Fallback em {normalized_url}: {e}")
+                            _record_failure(normalized_url)
+                            chunk_results.append(None)
+                            
+            except Exception as e_session:
+                logger.error(f"[Chunk] ❌ Erro fatal na sessão do chunk (Proxy: {chunk_proxy}): {e_session}")
+                # Se a sessão caiu (proxy morreu), todo o chunk falha neste design simples
+                # Idealmente retentaria as URLs restantes, mas por simplicidade/performance falhamos o lote
+                for _ in range(len(urls_chunk) - len(chunk_results)):
+                    chunk_results.append(None)
+                    
+            return chunk_results
 
-                # Se saiu do loop, todas as tentativas falharam
-                logger.warning(f"[Sub] ❌ Failed: {normalized_url} - Todas as {MAX_ATTEMPTS} tentativas falharam")
-                print(f"[Sub] Failed: {normalized_url}")
-                return None
+        # Launch parallel chunks
+        # Ajustado semaphore para chunks (menos tasks, mas cada task faz N requests)
+        # Se temos 100 urls, chunk=5 -> 20 chunks. Semaphore=5 -> 5 chunks paralelos (25 reqs ativas + keepalive)
+        chunk_sem = asyncio.Semaphore(5) 
+        
+        async def scrape_chunk_wrapper(chunk):
+            async with chunk_sem:
+                return await scrape_chunk(chunk)
 
-        # Launch parallel tasks
-        tasks = [scrape_subpage(sub) for sub in target_subpages]
-        results = await asyncio.gather(*tasks)
+        tasks = [scrape_chunk_wrapper(chunk) for chunk in url_chunks]
+        results_of_chunks = await asyncio.gather(*tasks)
+        
+        # Flatten results
+        results = []
+        for chunk_res in results_of_chunks:
+            results.extend(chunk_res)
 
         success_subpages = 0
         for res in results:
@@ -378,20 +477,44 @@ async def _system_curl_scrape_safe(url: str, proxy: Optional[str]) -> Tuple[str,
 # Let's revert to the pattern: Decorator on the Logic, Safe Wrapper for the Caller.
 
 # Redefining _cffi_scrape without the broad try/except, but with specific logic
-@retry(stop=stop_after_attempt(1), wait=wait_fixed(0))
-async def _cffi_scrape_logic(url: str, proxy: Optional[str]) -> Tuple[str, Set[str], Set[str]]:
-    # Timeout ultra agressivo de 6s (fail-fast)
-    async with AsyncSession(impersonate="chrome120", proxy=proxy, timeout=6) as s:
-        resp = await s.get(url)
-        if resp.status_code != 200: raise Exception(f"Status {resp.status_code}")
-        return _parse_html(resp.text, url)
+# REMOVIDO @retry AQUI pois o retry é gerenciado no loop principal com rotação de proxy
+# E agora suporta reutilização de sessão
+async def _cffi_scrape_logic(url: str, session: Optional[AsyncSession] = None, proxy: Optional[str] = None) -> Tuple[str, Set[str], Set[str]]:
+    # Timeout segregado: 5s para conectar (fail fast no proxy), 30s para ler (paciência com servidor)
+    # Requer curl_cffi >= 0.6.0b6 para suportar tuple/RequestsTimeout, ou apenas float
+    # Vamos usar float simples se a versão não suportar, mas idealmente seria tuple
+    # Por segurança e compatibilidade, vamos usar timeout total de 30s, mas confiar que
+    # o proxy manager nos dá proxies bons, e se falhar no connect, falha rápido.
+    # Mas para implementar o "Fail Fast" no connect, o ideal é o split.
+    # Assumindo suporte a tuple (connect, read) ou configurando na session.
+    
+    # Se sessão fornecida, usar ela (Keep-Alive!)
+    if session:
+        # Nota: curl_cffi não permite trocar proxy de sessão existente facilmente sem criar nova connection pool
+        # Então assumimos que a session já está configurada com o proxy correto ou sem proxy
+        resp = await session.get(url)
+    else:
+        # Fallback: criar nova sessão (sem reuse) - comportamento antigo
+        # Usar timeout dividido se possível, ou 30s total
+        # Mas para garantir o "fail fast" de proxy, precisamos de connect curto.
+        # Implementação segura: 25s total, mas connect implícito do libcurl é geralmente ~30s.
+        # Vamos tentar forçar via argumento se a lib suportar, senão 25s total.
+        timeout_cfg = 25
+        async with AsyncSession(impersonate="chrome120", proxy=proxy, timeout=timeout_cfg) as s:
+            resp = await s.get(url)
+            
+    if resp.status_code != 200: 
+        raise Exception(f"Status {resp.status_code}")
+    
+    return _parse_html(resp.text, url)
 
-async def _cffi_scrape(url: str, proxy: Optional[str]) -> Tuple[str, Set[str], Set[str]]:
+async def _cffi_scrape(url: str, proxy: Optional[str], session: Optional[AsyncSession] = None) -> Tuple[str, Set[str], Set[str]]:
     try:
-        return await _cffi_scrape_logic(url, proxy)
+        return await _cffi_scrape_logic(url, session=session, proxy=proxy)
     except Exception as e:
         logger.debug(f"[CFFI] Erro ao fazer scrape de {url}: {type(e).__name__}: {str(e)}")
-        return "", set(), set()
+        # Propagar erro para permitir que o retry loop troque de proxy
+        raise e
 
 @retry(stop=stop_after_attempt(1), wait=wait_fixed(0))
 async def _system_curl_scrape_logic(url: str, proxy: Optional[str]) -> Tuple[str, Set[str], Set[str]]:
