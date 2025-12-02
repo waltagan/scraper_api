@@ -96,9 +96,14 @@ async def _playwright_scrape_with_retry(url: str, proxy: Optional[str]) -> Tuple
             if not result.success or not result.markdown or len(result.markdown) < 200:
                 raise Exception("Playwright failed or content too short")
             
-            pdfs, links = _extract_links(result.markdown, url)
-            if not links: 
-                pdfs, links = _extract_links_html(result.html, url)
+            # Extrair links de Markdown E HTML para garantir cobertura total
+            # Markdown falha em links de imagem (nested brackets) -> HTML resolve
+            pdfs_md, links_md = _extract_links(result.markdown, url)
+            pdfs_html, links_html = _extract_links_html(result.html, url)
+            
+            # Combinar resultados (união de sets)
+            pdfs = pdfs_md | pdfs_html
+            links = links_md | links_html
             
             duration = time.perf_counter() - start_ts
             logger.info(
