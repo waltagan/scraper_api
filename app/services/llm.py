@@ -1003,16 +1003,18 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
         
         # Validar tipo antes de processar
         if isinstance(data, list):
-            logger.warning(f"⚠️ JSON parseado é uma lista, não um objeto. Primeiro item será usado.")
+            logger.warning(f"⚠️ JSON parseado é uma lista, não um objeto. Tentando extrair primeiro item...")
             if len(data) > 0 and isinstance(data[0], dict):
                 data = data[0]
                 logger.info("✅ Primeiro item da lista extraído como objeto")
             else:
-                raise ValueError(f"Lista vazia ou primeiro item não é um dict. Tipo: {type(data[0]) if len(data) > 0 else 'N/A'}")
+                logger.warning(f"⚠️ Lista vazia ou item inválido. Criando perfil vazio como fallback.")
+                data = {} # Fallback para evitar erro fatal
         
         if not isinstance(data, dict):
-            raise ValueError(f"JSON parseado não é um dict. Tipo: {type(data)}")
-        
+             logger.warning(f"⚠️ JSON não é dict nem lista válida. Usando dict vazio.")
+             data = {}
+
         logger.debug(f"✅ JSON parseado com sucesso. Chaves principais: {list(data.keys())}")
         
         # Verificar se há dados extraídos
@@ -1070,35 +1072,35 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
     except json.JSONDecodeError as e:
         logger.warning(f"⚠️ JSON padrão falhou para {model}. Tentando reparar JSON malformado...")
         logger.debug(f"❌ Erro de JSON: {e}")
-        logger.debug(f"📄 Conteúdo problemático (primeiros 500 chars): {raw_content[:500]}")
         try:
             data = json_repair.loads(raw_content)
             logger.info("✅ JSON reparado com sucesso")
             
             # Validar tipo após reparo
             if isinstance(data, list):
-                logger.warning(f"⚠️ JSON reparado ainda é uma lista. Primeiro item será usado.")
+                logger.warning(f"⚠️ JSON reparado ainda é uma lista. Tentando extrair primeiro item...")
                 if len(data) > 0 and isinstance(data[0], dict):
                     data = data[0]
                     logger.info("✅ Primeiro item da lista extraído após reparo")
                 else:
-                    raise ValueError(f"Lista vazia ou inválida após reparo")
+                    logger.warning(f"⚠️ Lista vazia após reparo. Usando dict vazio.")
+                    data = {}
             
             if not isinstance(data, dict):
-                raise ValueError(f"JSON reparado não é um dict. Tipo: {type(data)}")
+                logger.warning(f"⚠️ JSON reparado não é dict. Usando dict vazio.")
+                data = {}
             
             data = normalize_llm_response(data)
             profile = CompanyProfile(**data)
             return profile
         except Exception as e2:
             logger.error(f"❌ Falha crítica no parse do JSON mesmo após reparo: {e2}")
-            logger.error(f"📄 Conteúdo problemático (primeiros 500 chars): {raw_content[:500]}")
-            raise e2
+            # Retornar perfil vazio em vez de crashar
+            return CompanyProfile()
     except Exception as e:
         logger.error(f"❌ Erro ao validar/construir CompanyProfile de {model}: {e}")
-        logger.error(f"📊 Tipo de dados recebido: {type(data)}")
-        logger.error(f"📄 Dados recebidos: {str(data)[:500]}")
-        raise e
+        # Fail safe: retornar perfil vazio se a validação falhar
+        return CompanyProfile()
 
 async def analyze_content_with_fallback(text_content: str, provider_name: Optional[str] = None) -> CompanyProfile:
     """
@@ -1155,12 +1157,15 @@ async def analyze_content_with_fallback(text_content: str, provider_name: Option
                     last_error = e
                     continue  # Tentar próximo provedor
         
-        # Se chegou aqui, todos falharam
-        total_duration = time.perf_counter() - start_ts
-        error_msg = f"Todos os provedores LLM falharam. Último erro: {last_error}"
-        logger.error(f"[PERF] llm step=analyze_content_with_fallback_all_failed duration={total_duration:.3f}s")
-        logger.error(error_msg)
-        raise Exception(error_msg)
+    # Se chegou aqui, todos falharam
+    total_duration = time.perf_counter() - start_ts
+    error_msg = f"Todos os provedores LLM falharam. Último erro: {last_error}"
+    logger.error(f"[PERF] llm step=analyze_content_with_fallback_all_failed duration={total_duration:.3f}s")
+    
+    # EM VEZ DE LEVANTAR EXCEÇÃO, RETORNAR PERFIL VAZIO
+    # Isso permite que o fluxo continue e consolide o que foi possível extrair de outros chunks
+    logger.error(error_msg + " -> Retornando perfil vazio para este chunk.")
+    return CompanyProfile()
 
 async def process_chunk_with_retry(chunk: str, chunk_num: int, total_chunks: int, primary_provider: Optional[str] = None) -> Optional[CompanyProfile]:
     """
@@ -1237,6 +1242,10 @@ async def process_chunk_with_retry(chunk: str, chunk_num: int, total_chunks: int
     
     # Se todos os provedores falharam, tentar reprocessar uma vez (retry)
     logger.warning(f"🔄 Chunk {chunk_num}/{total_chunks}: Todos os provedores falharam. Tentando reprocessar uma vez...")
+    
+    # Adicionar delay antes do retry global para permitir recuperação de recursos/API
+    await asyncio.sleep(2)
+    
     for name, key, base_url, model in providers_to_try:
         try:
             logger.info(f"🔄 Chunk {chunk_num}/{total_chunks}: Retry com {name} ({model})...")
@@ -1280,8 +1289,16 @@ async def analyze_content(text_content: str) -> CompanyProfile:
     # Se houver apenas 1 chunk e for pequeno, ainda assim processar normalmente
     if len(chunks) == 1:
         logger.info(f"Uma única página detectada, processando diretamente...")
-        single_start = time.perf_counter()
-        profile = await analyze_content_with_fallback(chunks[0])
+        # Adicionar timeout no processamento de chunk único para evitar travamento infinito
+        try:
+            profile = await asyncio.wait_for(analyze_content_with_fallback(chunks[0]), timeout=120.0)
+        except asyncio.TimeoutError:
+            logger.error("❌ Timeout no processamento do chunk único (120s)")
+            return CompanyProfile()
+        except Exception as e:
+            logger.error(f"❌ Erro no processamento do chunk único: {e}")
+            return CompanyProfile()
+            
         total_duration = time.perf_counter() - global_start
         logger.info(
             f"[PERF] llm step=analyze_content_single_chunk duration={total_duration:.3f}s"
@@ -1309,7 +1326,12 @@ async def analyze_content(text_content: str) -> CompanyProfile:
     
     # Processar todos os chunks em paralelo (com throttling do semaphore)
     process_chunks_start = time.perf_counter()
-    partial_profiles = await asyncio.gather(*tasks, return_exceptions=True)
+    # Adicionar timeout global para todos os chunks para evitar hanging forever
+    try:
+        partial_profiles = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=240.0)
+    except asyncio.TimeoutError:
+        logger.error("❌ Timeout global no processamento de múltiplos chunks (240s)")
+        partial_profiles = []
     
     # Filtrar exceções e None, manter apenas perfis válidos
     valid_profiles = []
@@ -1341,7 +1363,8 @@ async def analyze_content(text_content: str) -> CompanyProfile:
         logger.error(
             f"[PERF] llm step=analyze_content_all_chunks_failed duration={total_duration:.3f}s"
         )
-        raise Exception("Todos os chunks falharam no processamento")
+        # Retornar perfil vazio em vez de exception para não quebrar a API
+        return CompanyProfile()
     
     # Analisar perfis antes do merge
     process_chunks_duration = time.perf_counter() - process_chunks_start

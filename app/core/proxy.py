@@ -18,6 +18,12 @@ class ProxyManager:
             
             async with httpx.AsyncClient() as client:
                 resp = await client.get(self.list_url, timeout=10)
+                
+                # Check for 429 specifically to avoid error spam
+                if resp.status_code == 429:
+                    logger.warning("[ProxyManager] Rate limit exceeded (429) while refreshing proxies. Using existing pool if available.")
+                    return
+                
                 resp.raise_for_status()
                 
                 # Format: IP:PORT:USERNAME:PASSWORD
