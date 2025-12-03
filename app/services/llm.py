@@ -16,27 +16,25 @@ logger = logging.getLogger(__name__)
 llm_semaphores = {
     # Gemini 1.5 Flash: 
     # - 10M tokens/min (TPM)
-    # - 2.000 requisições/min (RPM) oficialmente, mas suporta bursts maiores em pay-as-you-go
-    # Cálculo para 1000 sites/min:
-    # - Necessitamos ~1000 RPM (requisições por minuto)
-    # - Com latência média de 5s, precisamos de ~100 concorrência para atingir 1000 RPM
-    # - Margem de segurança: 150
-    "Google Gemini": asyncio.Semaphore(200),      
+    # - 2.000 requisições/min (RPM)
+    # Ajuste Agressivo/Seguro: 300
+    # Permite bursts para sites pequenos sem estourar RPM, e segura sites grandes no TPM.
+    "Google Gemini": asyncio.Semaphore(300),      
     
     # OpenAI GPT-4o-mini (Tier 4+):
     # - 10M tokens/min (TPM)
     # - 10k RPM
-    # Concorrência segura: 150
-    "OpenAI": asyncio.Semaphore(150),             
+    # Ajuste Agressivo/Seguro: 250
+    "OpenAI": asyncio.Semaphore(250),             
 }
 
 # Semaphore global para throttling geral
-# ALVO: 1000 sites/minuto
-# Cálculo: 1000 sites / 60 segs = 16.6 req/segundo
-# Se cada req demora ~5s (inferência):
-# Concorrência Necessária = 16.6 * 5 = 83 slots simultâneos
-# Configurando com margem de sobra para absorver picos e latência de rede
-llm_global_semaphore = asyncio.Semaphore(350)
+# ALVO: Maximização de Throughput (Híbrido Sites Pequenos/Grandes)
+# Configuração "Meio Termo": 500 slots simultâneos
+# - Sites Pequenos (2k tokens): ~5.000 RPM (limitado pelos providers)
+# - Sites Médios (12k tokens): ~1.200 RPM (limitado por tokens)
+# - Capacidade de pico teórica: 500 reqs * (60s/5s) = 6.000 RPM
+llm_global_semaphore = asyncio.Semaphore(500)
 
 # Configuração de fallback chain
 FALLBACK_CHAIN = [
