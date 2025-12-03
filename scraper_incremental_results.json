@@ -1,0 +1,820 @@
+{
+  "rounds": [
+    {
+      "round_number": 1,
+      "results": [
+        {
+          "url": "http://e2e.ind.br/",
+          "config": {
+            "playwright_semaphore": 35,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 15000,
+            "md_threshold": 0.7,
+            "min_word_threshold": 6,
+            "chunk_size": 15,
+            "chunk_semaphore": 40,
+            "session_timeout": 7,
+            "max_subpages": 40
+          },
+          "duration": 7.642969846725464,
+          "text_length": 74526,
+          "pdf_count": 0,
+          "links_count": 36,
+          "pages_count": 36,
+          "success": true,
+          "error": "",
+          "score": 0.8131570301532745
+        },
+        {
+          "url": "http://edjuniorengenharia.com.br/",
+          "config": {
+            "playwright_semaphore": 35,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 15000,
+            "md_threshold": 0.7,
+            "min_word_threshold": 6,
+            "chunk_size": 15,
+            "chunk_semaphore": 40,
+            "session_timeout": 7,
+            "max_subpages": 40
+          },
+          "duration": 2.8942131996154785,
+          "text_length": 3052,
+          "pdf_count": 0,
+          "links_count": 1,
+          "pages_count": 1,
+          "success": true,
+          "error": "",
+          "score": 0.3923617868003845
+        },
+        {
+          "url": "http://elamcoberturas.com/",
+          "config": {
+            "playwright_semaphore": 35,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 15000,
+            "md_threshold": 0.7,
+            "min_word_threshold": 6,
+            "chunk_size": 15,
+            "chunk_semaphore": 40,
+            "session_timeout": 7,
+            "max_subpages": 40
+          },
+          "duration": 8.936378002166748,
+          "text_length": 9929,
+          "pdf_count": 0,
+          "links_count": 6,
+          "pages_count": 6,
+          "success": true,
+          "error": "",
+          "score": 0.6278756219978332
+        }
+      ]
+    },
+    {
+      "round_number": 2,
+      "results": [
+        {
+          "url": "http://e2e.ind.br/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 8000,
+            "md_threshold": 0.7,
+            "min_word_threshold": 5,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 4,
+            "max_subpages": 50
+          },
+          "duration": 2.4350337982177734,
+          "text_length": 74526,
+          "pdf_count": 0,
+          "links_count": 36,
+          "pages_count": 36,
+          "success": true,
+          "error": "",
+          "score": 0.8183649662017821
+        },
+        {
+          "url": "http://edjuniorengenharia.com.br/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 8000,
+            "md_threshold": 0.7,
+            "min_word_threshold": 5,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 4,
+            "max_subpages": 50
+          },
+          "duration": 2.8717739582061768,
+          "text_length": 3052,
+          "pdf_count": 0,
+          "links_count": 1,
+          "pages_count": 1,
+          "success": true,
+          "error": "",
+          "score": 0.3923842260417938
+        },
+        {
+          "url": "http://elamcoberturas.com/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 8000,
+            "md_threshold": 0.7,
+            "min_word_threshold": 5,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 4,
+            "max_subpages": 50
+          },
+          "duration": 6.0175511837005615,
+          "text_length": 9929,
+          "pdf_count": 0,
+          "links_count": 6,
+          "pages_count": 6,
+          "success": true,
+          "error": "",
+          "score": 0.6307944488162994
+        }
+      ]
+    },
+    {
+      "round_number": 3,
+      "results": [
+        {
+          "url": "http://e2e.ind.br/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 4,
+            "md_threshold": 0.6,
+            "min_word_threshold": 6,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 5,
+            "max_subpages": 50
+          },
+          "duration": 2.1050729751586914,
+          "text_length": 53714,
+          "pdf_count": 0,
+          "links_count": 29,
+          "pages_count": 29,
+          "success": true,
+          "error": "",
+          "score": 0.7990949270248413
+        },
+        {
+          "url": "http://edjuniorengenharia.com.br/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 4,
+            "md_threshold": 0.6,
+            "min_word_threshold": 6,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 5,
+            "max_subpages": 50
+          },
+          "duration": 3.9533939361572266,
+          "text_length": 0,
+          "pdf_count": 0,
+          "links_count": 0,
+          "pages_count": 0,
+          "success": true,
+          "error": "",
+          "score": 0.29604660606384275
+        },
+        {
+          "url": "http://elamcoberturas.com/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 4,
+            "md_threshold": 0.6,
+            "min_word_threshold": 6,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 5,
+            "max_subpages": 50
+          },
+          "duration": 4.77850079536438,
+          "text_length": 6820,
+          "pdf_count": 0,
+          "links_count": 6,
+          "pages_count": 6,
+          "success": true,
+          "error": "",
+          "score": 0.5449814992046357
+        }
+      ]
+    },
+    {
+      "round_number": 4,
+      "results": [
+        {
+          "url": "http://e2e.ind.br/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 5,
+            "md_threshold": 0.6,
+            "min_word_threshold": 6,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 5,
+            "max_subpages": 50
+          },
+          "duration": 1.8285048007965088,
+          "text_length": 53714,
+          "pdf_count": 0,
+          "links_count": 29,
+          "pages_count": 29,
+          "success": true,
+          "error": "",
+          "score": 0.7993714951992035
+        },
+        {
+          "url": "http://edjuniorengenharia.com.br/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 5,
+            "md_threshold": 0.6,
+            "min_word_threshold": 6,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 5,
+            "max_subpages": 50
+          },
+          "duration": 0.9296860694885254,
+          "text_length": 0,
+          "pdf_count": 0,
+          "links_count": 0,
+          "pages_count": 0,
+          "success": true,
+          "error": "",
+          "score": 0.2990703139305115
+        },
+        {
+          "url": "http://elamcoberturas.com/",
+          "config": {
+            "playwright_semaphore": 30,
+            "circuit_breaker_threshold": 2,
+            "page_timeout": 5,
+            "md_threshold": 0.6,
+            "min_word_threshold": 6,
+            "chunk_size": 12,
+            "chunk_semaphore": 40,
+            "session_timeout": 5,
+            "max_subpages": 50
+          },
+          "duration": 5.048120975494385,
+          "text_length": 6820,
+          "pdf_count": 0,
+          "links_count": 6,
+          "pages_count": 6,
+          "success": true,
+          "error": "",
+          "score": 0.5447118790245056
+        }
+      ]
+    }
+  ],
+  "learning_history": [
+    {
+      "round": 1,
+      "learnings": {
+        "playwright_semaphore": {
+          "best_value": 35,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "circuit_breaker_threshold": {
+          "best_value": 2,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "page_timeout": {
+          "best_value": 15000,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "md_threshold": {
+          "best_value": 0.7,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "min_word_threshold": {
+          "best_value": 6,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "chunk_size": {
+          "best_value": 15,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "chunk_semaphore": {
+          "best_value": 40,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "session_timeout": {
+          "best_value": 7,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        },
+        "max_subpages": {
+          "best_value": 40,
+          "best_score": 0.6111314796504974,
+          "total_samples": 3
+        }
+      },
+      "round_stats": {
+        "total_results": 3,
+        "successful_results": 3,
+        "avg_score": 0.6111314796504974
+      }
+    },
+    {
+      "round": 2,
+      "learnings": {
+        "playwright_semaphore": {
+          "best_value": 30,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "circuit_breaker_threshold": {
+          "best_value": 2,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "page_timeout": {
+          "best_value": 8000,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "md_threshold": {
+          "best_value": 0.7,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "min_word_threshold": {
+          "best_value": 5,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "chunk_size": {
+          "best_value": 12,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "chunk_semaphore": {
+          "best_value": 40,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "session_timeout": {
+          "best_value": 4,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        },
+        "max_subpages": {
+          "best_value": 50,
+          "best_score": 0.6138478803532919,
+          "total_samples": 3
+        }
+      },
+      "round_stats": {
+        "total_results": 3,
+        "successful_results": 3,
+        "avg_score": 0.6138478803532919
+      }
+    },
+    {
+      "round": 3,
+      "learnings": {
+        "playwright_semaphore": {
+          "best_value": 30,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "circuit_breaker_threshold": {
+          "best_value": 2,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "page_timeout": {
+          "best_value": 4,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "md_threshold": {
+          "best_value": 0.6,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "min_word_threshold": {
+          "best_value": 6,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "chunk_size": {
+          "best_value": 12,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "chunk_semaphore": {
+          "best_value": 40,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "session_timeout": {
+          "best_value": 5,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        },
+        "max_subpages": {
+          "best_value": 50,
+          "best_score": 0.5467076774311065,
+          "total_samples": 3
+        }
+      },
+      "round_stats": {
+        "total_results": 3,
+        "successful_results": 3,
+        "avg_score": 0.5467076774311065
+      }
+    },
+    {
+      "round": 4,
+      "learnings": {
+        "playwright_semaphore": {
+          "best_value": 30,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "circuit_breaker_threshold": {
+          "best_value": 2,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "page_timeout": {
+          "best_value": 5,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "md_threshold": {
+          "best_value": 0.6,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "min_word_threshold": {
+          "best_value": 6,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "chunk_size": {
+          "best_value": 12,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "chunk_semaphore": {
+          "best_value": 40,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "session_timeout": {
+          "best_value": 5,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        },
+        "max_subpages": {
+          "best_value": 50,
+          "best_score": 0.5477178960514069,
+          "total_samples": 3
+        }
+      },
+      "round_stats": {
+        "total_results": 3,
+        "successful_results": 3,
+        "avg_score": 0.5477178960514069
+      }
+    }
+  ],
+  "speed_logs": [
+    {
+      "site": "http://e2e.ind.br/",
+      "empresa": "E2E ENGENHARIA E MONTAGEM LTDA",
+      "config": {
+        "playwright_semaphore": 35,
+        "page_timeout": 15000,
+        "chunk_size": 15,
+        "session_timeout": 7,
+        "max_subpages": 40
+      },
+      "start_time": 1764726907.689568,
+      "end_time": 1764726915.3325891,
+      "duration": 7.642969846725464,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 74526,
+        "pdf_count": 0,
+        "pages_count": 36,
+        "quality_score": 0.8131570301532745,
+        "chars_per_second": 9750.921630539959,
+        "pages_per_second": 4.710210915646063,
+        "efficiency_ratio": 0.10639280887673024
+      }
+    },
+    {
+      "site": "http://edjuniorengenharia.com.br/",
+      "empresa": "EDJUNIOR ENGENHARIA LTDA",
+      "config": {
+        "playwright_semaphore": 35,
+        "page_timeout": 15000,
+        "chunk_size": 15,
+        "session_timeout": 7,
+        "max_subpages": 40
+      },
+      "start_time": 1764726915.332644,
+      "end_time": 1764726918.226912,
+      "duration": 2.8942131996154785,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 3052,
+        "pdf_count": 0,
+        "pages_count": 1,
+        "quality_score": 0.3923617868003845,
+        "chars_per_second": 1054.5180294269562,
+        "pages_per_second": 0.3455170476497235,
+        "efficiency_ratio": 0.13556768618583911
+      }
+    },
+    {
+      "site": "http://elamcoberturas.com/",
+      "empresa": "EL-AM CONSTRUCOES E COMERCIO LTDA",
+      "config": {
+        "playwright_semaphore": 35,
+        "page_timeout": 15000,
+        "chunk_size": 15,
+        "session_timeout": 7,
+        "max_subpages": 40
+      },
+      "start_time": 1764726918.227005,
+      "end_time": 1764726927.16346,
+      "duration": 8.936378002166748,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 9929,
+        "pdf_count": 0,
+        "pages_count": 6,
+        "quality_score": 0.6278756219978332,
+        "chars_per_second": 1111.0765455078754,
+        "pages_per_second": 0.671412959315868,
+        "efficiency_ratio": 0.0702606382413094
+      }
+    },
+    {
+      "site": "http://e2e.ind.br/",
+      "empresa": "E2E ENGENHARIA E MONTAGEM LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 8000,
+        "chunk_size": 12,
+        "session_timeout": 4,
+        "max_subpages": 50
+      },
+      "start_time": 1764726927.1644769,
+      "end_time": 1764726929.599553,
+      "duration": 2.4350337982177734,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 74526,
+        "pdf_count": 0,
+        "pages_count": 36,
+        "quality_score": 0.8183649662017821,
+        "chars_per_second": 30605.73535141334,
+        "pages_per_second": 14.784189043432898,
+        "efficiency_ratio": 0.33607951019027005
+      }
+    },
+    {
+      "site": "http://edjuniorengenharia.com.br/",
+      "empresa": "EDJUNIOR ENGENHARIA LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 8000,
+        "chunk_size": 12,
+        "session_timeout": 4,
+        "max_subpages": 50
+      },
+      "start_time": 1764726929.599607,
+      "end_time": 1764726932.471422,
+      "duration": 2.8717739582061768,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 3052,
+        "pdf_count": 0,
+        "pages_count": 1,
+        "quality_score": 0.3923842260417938,
+        "chars_per_second": 1062.7577394379603,
+        "pages_per_second": 0.3482168215720709,
+        "efficiency_ratio": 0.13663478802729043
+      }
+    },
+    {
+      "site": "http://elamcoberturas.com/",
+      "empresa": "EL-AM CONSTRUCOES E COMERCIO LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 8000,
+        "chunk_size": 12,
+        "session_timeout": 4,
+        "max_subpages": 50
+      },
+      "start_time": 1764726932.471501,
+      "end_time": 1764726938.489114,
+      "duration": 6.0175511837005615,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 9929,
+        "pdf_count": 0,
+        "pages_count": 6,
+        "quality_score": 0.6307944488162994,
+        "chars_per_second": 1650.0067381053914,
+        "pages_per_second": 0.9970833345384579,
+        "efficiency_ratio": 0.10482577207235073
+      }
+    },
+    {
+      "site": "http://e2e.ind.br/",
+      "empresa": "E2E ENGENHARIA E MONTAGEM LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 4,
+        "chunk_size": 12,
+        "session_timeout": 5,
+        "max_subpages": 50
+      },
+      "start_time": 1764726938.490399,
+      "end_time": 1764726940.595516,
+      "duration": 2.1050729751586914,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 53714,
+        "pdf_count": 0,
+        "pages_count": 29,
+        "quality_score": 0.7990949270248413,
+        "chars_per_second": 25516.455074889152,
+        "pages_per_second": 13.7762445018391,
+        "efficiency_ratio": 0.37960438258184437
+      }
+    },
+    {
+      "site": "http://edjuniorengenharia.com.br/",
+      "empresa": "EDJUNIOR ENGENHARIA LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 4,
+        "chunk_size": 12,
+        "session_timeout": 5,
+        "max_subpages": 50
+      },
+      "start_time": 1764726940.5955682,
+      "end_time": 1764726944.5490649,
+      "duration": 3.9533939361572266,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 0,
+        "pdf_count": 0,
+        "pages_count": 0,
+        "quality_score": 0.29604660606384275,
+        "chars_per_second": 0.0,
+        "pages_per_second": 0.0,
+        "efficiency_ratio": 0.07488416556625917
+      }
+    },
+    {
+      "site": "http://elamcoberturas.com/",
+      "empresa": "EL-AM CONSTRUCOES E COMERCIO LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 4,
+        "chunk_size": 12,
+        "session_timeout": 5,
+        "max_subpages": 50
+      },
+      "start_time": 1764726944.549727,
+      "end_time": 1764726949.3283572,
+      "duration": 4.77850079536438,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 6820,
+        "pdf_count": 0,
+        "pages_count": 6,
+        "quality_score": 0.5449814992046357,
+        "chars_per_second": 1427.2258794256302,
+        "pages_per_second": 1.255623940843663,
+        "efficiency_ratio": 0.11404863628636869
+      }
+    },
+    {
+      "site": "http://e2e.ind.br/",
+      "empresa": "E2E ENGENHARIA E MONTAGEM LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 5,
+        "chunk_size": 12,
+        "session_timeout": 5,
+        "max_subpages": 50
+      },
+      "start_time": 1764726949.3291562,
+      "end_time": 1764726951.157697,
+      "duration": 1.8285048007965088,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 53714,
+        "pdf_count": 0,
+        "pages_count": 29,
+        "quality_score": 0.7993714951992035,
+        "chars_per_second": 29375.914122074948,
+        "pages_per_second": 15.859952890124985,
+        "efficiency_ratio": 0.43717221570924614
+      }
+    },
+    {
+      "site": "http://edjuniorengenharia.com.br/",
+      "empresa": "EDJUNIOR ENGENHARIA LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 5,
+        "chunk_size": 12,
+        "session_timeout": 5,
+        "max_subpages": 50
+      },
+      "start_time": 1764726951.1577501,
+      "end_time": 1764726952.0875032,
+      "duration": 0.9296860694885254,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 0,
+        "pdf_count": 0,
+        "pages_count": 0,
+        "quality_score": 0.2990703139305115,
+        "chars_per_second": 0.0,
+        "pages_per_second": 0.0,
+        "efficiency_ratio": 0.32168957215315436
+      }
+    },
+    {
+      "site": "http://elamcoberturas.com/",
+      "empresa": "EL-AM CONSTRUCOES E COMERCIO LTDA",
+      "config": {
+        "playwright_semaphore": 30,
+        "page_timeout": 5,
+        "chunk_size": 12,
+        "session_timeout": 5,
+        "max_subpages": 50
+      },
+      "start_time": 1764726952.0876842,
+      "end_time": 1764726957.1358552,
+      "duration": 5.048120975494385,
+      "success": true,
+      "error": null,
+      "performance_metrics": {
+        "text_length": 6820,
+        "pdf_count": 0,
+        "pages_count": 6,
+        "quality_score": 0.5447118790245056,
+        "chars_per_second": 1350.9977342276525,
+        "pages_per_second": 1.188561056505266,
+        "efficiency_ratio": 0.10790388773738917
+      }
+    }
+  ],
+  "summary": {
+    "total_rounds": 4,
+    "total_tests": 12,
+    "total_successes": 12,
+    "companies_tested": 3,
+    "optimization_type": "speed_optimization",
+    "focus": "maximum_speed_with_quality_above_0.6"
+  }
+}

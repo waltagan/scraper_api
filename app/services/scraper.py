@@ -24,16 +24,79 @@ except ImportError:
 # Configurar logger
 logger = logging.getLogger(__name__)
 
+# --- SCRAPER CONFIGURATION ---
+# Parâmetros configuráveis dinamicamente para otimização
+_scraper_config = {
+    'playwright_semaphore_limit': 10,
+    'circuit_breaker_threshold': 5,
+    'page_timeout': 60000,
+    'md_threshold': 0.35,
+    'min_word_threshold': 5,
+    'chunk_size': 3,
+    'chunk_semaphore_limit': 30,
+    'session_timeout': 15
+}
+
 # Global semaphore to limit concurrent Playwright instances
 # Prevents resource exhaustion and browser crashes
-playwright_semaphore = asyncio.Semaphore(10)  # Aumentado para priorizar velocidade
+playwright_semaphore = asyncio.Semaphore(_scraper_config['playwright_semaphore_limit'])
 
 # --- CIRCUIT BREAKER ---
 # Dicionário global para rastrear falhas consecutivas por domínio
 # Chave: domínio (netloc), Valor: contador de falhas
 domain_failures = {}
 # Limite de falhas para abrir o circuito
-CIRCUIT_BREAKER_THRESHOLD = 5
+CIRCUIT_BREAKER_THRESHOLD = _scraper_config['circuit_breaker_threshold']
+
+def configure_scraper_params(
+    playwright_semaphore_limit: int = 10,
+    circuit_breaker_threshold: int = 5,
+    page_timeout: int = 60000,
+    md_threshold: float = 0.35,
+    min_word_threshold: int = 5,
+    chunk_size: int = 3,
+    chunk_semaphore_limit: int = 30,
+    session_timeout: int = 15
+):
+    """
+    Configura dinamicamente os parâmetros do scraper para otimização.
+
+    Args:
+        playwright_semaphore_limit: Limite de instâncias Playwright concorrentes
+        circuit_breaker_threshold: Limite de falhas para ativar circuit breaker
+        page_timeout: Timeout da página em ms
+        md_threshold: Threshold do markdown generator
+        min_word_threshold: Threshold mínimo de palavras
+        chunk_size: Tamanho dos chunks para processamento paralelo
+        chunk_semaphore_limit: Limite do semáforo de chunks
+        session_timeout: Timeout das sessões em segundos
+    """
+    global _scraper_config, playwright_semaphore, CIRCUIT_BREAKER_THRESHOLD
+
+    # Atualizar configuração global
+    _scraper_config.update({
+        'playwright_semaphore_limit': playwright_semaphore_limit,
+        'circuit_breaker_threshold': circuit_breaker_threshold,
+        'page_timeout': page_timeout,
+        'md_threshold': md_threshold,
+        'min_word_threshold': min_word_threshold,
+        'chunk_size': chunk_size,
+        'chunk_semaphore_limit': chunk_semaphore_limit,
+        'session_timeout': session_timeout
+    })
+
+    # Recriar semáforos com novos limites
+    playwright_semaphore = asyncio.Semaphore(playwright_semaphore_limit)
+    CIRCUIT_BREAKER_THRESHOLD = circuit_breaker_threshold
+
+    # Resetar circuit breaker
+    domain_failures.clear()
+
+    logger.info(f"🔧 Scraper reconfigurado: semaphore={playwright_semaphore_limit}, "
+                f"circuit_breaker={circuit_breaker_threshold}, page_timeout={page_timeout}, "
+                f"md_threshold={md_threshold}, min_word_threshold={min_word_threshold}, "
+                f"chunk_size={chunk_size}, chunk_semaphore={chunk_semaphore_limit}, "
+                f"session_timeout={session_timeout}")
 # Tempo de reset do circuito (não implementado full, apenas reset manual ou restart)
 
 def _get_domain(url: str) -> str:
@@ -74,14 +137,15 @@ async def _playwright_scrape_with_retry(url: str, proxy: Optional[str]) -> Tuple
     # Ajustar filtro para ser menos agressivo e preservar mais conteúdo
     # threshold menor = menos agressivo (mantém mais conteúdo)
     # min_word_threshold menor = aceita textos menores
-    # ✅ CORREÇÃO: Reduzido threshold de 0.35 para 0.25 e min_word de 5 para 3
-    # para preservar conteúdo de sites SPA e estruturas não-convencionais (ex: deltaaut.com)
-    md_generator = DefaultMarkdownGenerator(content_filter=PruningContentFilter(threshold=0.25, min_word_threshold=3))
+    md_generator = DefaultMarkdownGenerator(content_filter=PruningContentFilter(
+        threshold=_scraper_config['md_threshold'],
+        min_word_threshold=_scraper_config['min_word_threshold']
+    ))
     run_config = CrawlerRunConfig(
-        cache_mode=CacheMode.BYPASS, 
-        exclude_external_images=True, 
-        markdown_generator=md_generator, 
-        page_timeout=60000  # ✅ CORREÇÃO 1: Aumentado de 30s para 60s
+        cache_mode=CacheMode.BYPASS,
+        exclude_external_images=True,
+        markdown_generator=md_generator,
+        page_timeout=_scraper_config['page_timeout']
     )
     browser_config = BrowserConfig(
         browser_type="chromium", 
@@ -95,10 +159,8 @@ async def _playwright_scrape_with_retry(url: str, proxy: Optional[str]) -> Tuple
         async with AsyncWebCrawler(config=browser_config) as crawler:
             result = await crawler.arun(url=url, config=run_config, magic=True)
             
-            # ✅ CORREÇÃO: Aumentado threshold de 200 para 500 chars
-            # Sites com pouco conteúdo cairão no fallback curl mais rapidamente
-            if not result.success or not result.markdown or len(result.markdown) < 500:
-                raise Exception("Playwright failed or content too short - triggering curl fallback")
+            if not result.success or not result.markdown or len(result.markdown) < 200:
+                raise Exception("Playwright failed or content too short")
             
             # Extrair links de Markdown E HTML para garantir cobertura total
             # Markdown falha em links de imagem (nested brackets) -> HTML resolve
@@ -215,18 +277,9 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
     )
 
     # --- 2. SCRAPE SUBPAGES (Parallel + Rotation) ---
-    # ✅ CORREÇÃO: Detectar sites SPA (sem links internos) para evitar chamada LLM desnecessária
-    if not links or len(links) == 0:
-        if len(aggregated_markdown[0]) > 500 if aggregated_markdown else False:
-            logger.info(f"[Scraper] Site SPA detectado (sem links internos). Usando apenas conteúdo da main page.")
-            target_subpages = []  # Não processar subpages - economia de tempo
-        else:
-            logger.warning(f"[Scraper] Site sem links E pouco conteúdo - possível falha de scraping")
-            target_subpages = []
-    else:
-        # Usar LLM para seleção inteligente de links (muito melhor que regras hardcoded!)
-        logger.info(f"[Scraper] Encontrados {len(links)} links. Usando LLM para selecionar os mais relevantes...")
-        target_subpages = await _select_links_with_llm(links, url, max_links=max_subpages)
+    # Usar LLM para seleção inteligente de links (muito melhor que regras hardcoded!)
+    logger.info(f"[Scraper] Encontrados {len(links)} links. Usando LLM para selecionar os mais relevantes...")
+    target_subpages = await _select_links_with_llm(links, url, max_links=max_subpages)
     
     if target_subpages:
         subpages_start = time.perf_counter()
@@ -255,7 +308,7 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
         
         # 1. Agrupar URLs em chunks
         # Reduzir tamanho do chunk para minimizar Head-of-Line Blocking (uma URL lenta travar as outras do mesmo proxy)
-        chunk_size = 3 
+        chunk_size = _scraper_config['chunk_size']
         url_chunks = [target_subpages[i:i + chunk_size] for i in range(0, len(target_subpages), chunk_size)]
         
         async def scrape_chunk(urls_chunk):
@@ -268,10 +321,10 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
                 # Timeout reduzido para ser mais agressivo (15s total para o chunk não ficar preso)
                 # O "Fail Fast" real acontece na conexão.
                 async with AsyncSession(
-                    impersonate="chrome120", 
-                    proxy=chunk_proxy, 
-                    timeout=15, # Reduzido de 35s para 15s (Ultra Aggressive per user request)
-                    verify=False 
+                    impersonate="chrome120",
+                    proxy=chunk_proxy,
+                    timeout=_scraper_config['session_timeout'],
+                    verify=False
                 ) as session:
                     
                     for sub_url in urls_chunk:
@@ -338,7 +391,7 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
         # Aumentar drasticamente o paralelismo de chunks
         # Antes: 5 chunks (25 URLs max). Agora: 30 chunks (30 * 3 = 90 URLs max)
         # Isso aproxima a performance da V2 (fire-and-forget) mantendo a estabilidade da sessão/proxy da V3
-        chunk_sem = asyncio.Semaphore(30) 
+        chunk_sem = asyncio.Semaphore(_scraper_config['chunk_semaphore_limit']) 
         
         async def scrape_chunk_wrapper(chunk):
             async with chunk_sem:
