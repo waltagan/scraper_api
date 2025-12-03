@@ -1,0 +1,162 @@
+{
+  "summary": {
+    "total_sites_processed": 15,
+    "successful_sites": 15,
+    "total_execution_time_seconds": 38.14788579940796,
+    "average_time_per_site_seconds": 2.5431923866271973,
+    "total_data_extracted_chars": 378403,
+    "timestamp": 1764746028.5059159
+  },
+  "results": [
+    {
+      "razao_social": "CONSTRUTORA D'ARAUJO LTDA",
+      "site": "http://daraujo.eng.br/home/",
+      "status": "success",
+      "execution_time": 32.61381793022156,
+      "data_size": 35489,
+      "pages_processed": 15,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "S3 DO BRASIL - SERVICOS DE MANUTENCAO AERONAUTICA LTDA",
+      "site": "http://dasbr.com.br/",
+      "status": "success",
+      "execution_time": 26.82670307159424,
+      "data_size": 36174,
+      "pages_processed": 17,
+      "error": null,
+      "pdfs_count": 5
+    },
+    {
+      "razao_social": "DAVI MECANICA DIESEL LTDA",
+      "site": "http://davimecanicadiesel.com.br/",
+      "status": "success",
+      "execution_time": 18.318251609802246,
+      "data_size": 44541,
+      "pages_processed": 15,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DAVOS IMPORTACAO E COMERCIO DE PRODUTOS QUIMICOS LTDA",
+      "site": "http://davosquimica.com.br/",
+      "status": "success",
+      "execution_time": 18.462970733642578,
+      "data_size": 6958,
+      "pages_processed": 4,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DCODER ENGENHARIA E AUTOMACAO LTDA",
+      "site": "http://dcoderautomacao.com.br/",
+      "status": "success",
+      "execution_time": 16.776132822036743,
+      "data_size": 35426,
+      "pages_processed": 10,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "D D ENGENHARIA E PROJETOS LTDA",
+      "site": "http://ddengenharia.com.br/",
+      "status": "success",
+      "execution_time": 22.66178607940674,
+      "data_size": 31326,
+      "pages_processed": 9,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DECK CONSTRUTORA E INCORPORADORA LTDA",
+      "site": "http://deckconstrutora.com.br/",
+      "status": "success",
+      "execution_time": 18.262475728988647,
+      "data_size": 236,
+      "pages_processed": 1,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DECORAH CORTINAS E PERSIANAS LTDA.",
+      "site": "http://decorah.com.br/",
+      "status": "success",
+      "execution_time": 19.599978923797607,
+      "data_size": 14918,
+      "pages_processed": 15,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DECORATIVA DE OSASCO COMERCIO DE CORTINAS, TAPETES E PISOS LAMINADOS LTDA",
+      "site": "http://decorativacortinas.com.br/",
+      "status": "success",
+      "execution_time": 19.46402406692505,
+      "data_size": 42223,
+      "pages_processed": 29,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DELCOM CONSTRUCOES E COMERCIO LTDA",
+      "site": "http://delcon.com.br/",
+      "status": "success",
+      "execution_time": 18.125560998916626,
+      "data_size": 16225,
+      "pages_processed": 9,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DELTA SOLUCOES EM AUTOMACAO LTDA",
+      "site": "http://deltaaut.com/",
+      "status": "success",
+      "execution_time": 24.472231149673462,
+      "data_size": 9717,
+      "pages_processed": 6,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DELTA ENERGIA USFV PINDAMONHANGABA SPE LTDA.",
+      "site": "http://deltaenergia.com.br/",
+      "status": "success",
+      "execution_time": 23.925394296646118,
+      "data_size": 55308,
+      "pages_processed": 22,
+      "error": null,
+      "pdfs_count": 8
+    },
+    {
+      "razao_social": "DELTARUBBER INDUSTRIA E COMERCIO DE BORRACHAS LTDA",
+      "site": "http://deltarubber.com.br/",
+      "status": "success",
+      "execution_time": 37.85688495635986,
+      "data_size": 24648,
+      "pages_processed": 12,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "DELVIDAL COMERCIO, SERVICOS E SEGURANCA ELETRONICA LTDA",
+      "site": "http://delvidal.com/",
+      "status": "success",
+      "execution_time": 26.619328022003174,
+      "data_size": 14370,
+      "pages_processed": 7,
+      "error": null,
+      "pdfs_count": 0
+    },
+    {
+      "razao_social": "SOLUM ENGENHARIA E LOGISTICA LTDA",
+      "site": "http://demolidorasolum.com.br/",
+      "status": "success",
+      "execution_time": 25.123503923416138,
+      "data_size": 10844,
+      "pages_processed": 2,
+      "error": null,
+      "pdfs_count": 3
+    }
+  ]
+}

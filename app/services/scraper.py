@@ -26,15 +26,16 @@ logger = logging.getLogger(__name__)
 
 # --- SCRAPER CONFIGURATION ---
 # Parâmetros configuráveis dinamicamente para otimização
+# Configuração otimizada para velocidade agressiva (Round 4 Benchmark)
 _scraper_config = {
-    'playwright_semaphore_limit': 10,
-    'circuit_breaker_threshold': 5,
-    'page_timeout': 60000,
-    'md_threshold': 0.35,
-    'min_word_threshold': 5,
-    'chunk_size': 3,
-    'chunk_semaphore_limit': 30,
-    'session_timeout': 15
+    'playwright_semaphore_limit': 40,
+    'circuit_breaker_threshold': 2,
+    'page_timeout': 10000,
+    'md_threshold': 0.6,
+    'min_word_threshold': 4,
+    'chunk_size': 20,
+    'chunk_semaphore_limit': 50,
+    'session_timeout': 5
 }
 
 # Global semaphore to limit concurrent Playwright instances

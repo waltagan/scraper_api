@@ -1,0 +1,132 @@
+{
+  "summary": {
+    "timestamp": 1764746551.98065,
+    "total_rounds": 5,
+    "best_round_id": 4,
+    "best_score": 76.98057400070006
+  },
+  "best_config": {
+    "playwright_semaphore_limit": 40,
+    "circuit_breaker_threshold": 2,
+    "page_timeout": 10000,
+    "md_threshold": 0.6,
+    "min_word_threshold": 4,
+    "chunk_size": 20,
+    "chunk_semaphore_limit": 50,
+    "session_timeout": 5
+  },
+  "best_metrics": {
+    "total_duration": 38.31195092201233,
+    "avg_time_per_site": 20.326223532358807,
+    "total_data_chars": 378283,
+    "success_rate": "15/15",
+    "sites_per_second": 0.3915227400070006
+  },
+  "history": [
+    {
+      "round": 1,
+      "config": {
+        "playwright_semaphore_limit": 40,
+        "circuit_breaker_threshold": 1,
+        "page_timeout": 8000,
+        "md_threshold": 0.7,
+        "min_word_threshold": 5,
+        "chunk_size": 15,
+        "chunk_semaphore_limit": 60,
+        "session_timeout": 5
+      },
+      "metrics": {
+        "total_duration": 40.607564210891724,
+        "avg_time_per_site": 20.339902750651042,
+        "total_data_chars": 360482,
+        "success_rate": "15/15",
+        "sites_per_second": 0.36938930693057215
+      },
+      "score": 72.98713069305722
+    },
+    {
+      "round": 2,
+      "config": {
+        "playwright_semaphore_limit": 60,
+        "circuit_breaker_threshold": 2,
+        "page_timeout": 10000,
+        "md_threshold": 0.7,
+        "min_word_threshold": 3,
+        "chunk_size": 20,
+        "chunk_semaphore_limit": 40,
+        "session_timeout": 8
+      },
+      "metrics": {
+        "total_duration": 42.13662600517273,
+        "avg_time_per_site": 20.656354506810505,
+        "total_data_chars": 379144,
+        "success_rate": "15/15",
+        "sites_per_second": 0.3559848384196349
+      },
+      "score": 73.51288384196349
+    },
+    {
+      "round": 3,
+      "config": {
+        "playwright_semaphore_limit": 30,
+        "circuit_breaker_threshold": 1,
+        "page_timeout": 10000,
+        "md_threshold": 0.8,
+        "min_word_threshold": 3,
+        "chunk_size": 20,
+        "chunk_semaphore_limit": 70,
+        "session_timeout": 3
+      },
+      "metrics": {
+        "total_duration": 40.25363612174988,
+        "avg_time_per_site": 20.403486410776775,
+        "total_data_chars": 377666,
+        "success_rate": "15/15",
+        "sites_per_second": 0.372637143999401
+      },
+      "score": 75.0303143999401
+    },
+    {
+      "round": 4,
+      "config": {
+        "playwright_semaphore_limit": 40,
+        "circuit_breaker_threshold": 2,
+        "page_timeout": 10000,
+        "md_threshold": 0.6,
+        "min_word_threshold": 4,
+        "chunk_size": 20,
+        "chunk_semaphore_limit": 50,
+        "session_timeout": 5
+      },
+      "metrics": {
+        "total_duration": 38.31195092201233,
+        "avg_time_per_site": 20.326223532358807,
+        "total_data_chars": 378283,
+        "success_rate": "15/15",
+        "sites_per_second": 0.3915227400070006
+      },
+      "score": 76.98057400070006
+    },
+    {
+      "round": 5,
+      "config": {
+        "playwright_semaphore_limit": 30,
+        "circuit_breaker_threshold": 2,
+        "page_timeout": 5000,
+        "md_threshold": 0.8,
+        "min_word_threshold": 5,
+        "chunk_size": 20,
+        "chunk_semaphore_limit": 40,
+        "session_timeout": 5
+      },
+      "metrics": {
+        "total_duration": 44.772379875183105,
+        "avg_time_per_site": 24.40259483655294,
+        "total_data_chars": 365699,
+        "success_rate": "15/15",
+        "sites_per_second": 0.33502798023730596
+      },
+      "score": 70.0726980237306
+    }
+  ]
+}
