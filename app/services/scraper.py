@@ -176,49 +176,33 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
                 aggregated_markdown.append(f"--- PAGE START: {url} ---\n{text}\n--- PAGE END ---\n")
                 all_pdf_links.update(pdfs)
             else:
-                # TENTATIVA FINAL: Smart URL Retry (Adicionar/Remover www e protocolo)
-                # Tentar variações: https://www., http://www., https://, http://
+                # TENTATIVA FINAL: Smart URL Retry Otimizado (Apenas 1 tentativa rápida)
+                # Tentar apenas a variação mais óbvia (www <-> non-www) e com timeout curto
                 parsed = urlparse(url)
                 domain = parsed.netloc
+                new_url = None
+                
                 if domain.startswith("www."):
-                    domain_no_www = domain[4:]
-                    variations = [
-                        f"https://{domain_no_www}",
-                        f"http://{domain_no_www}",
-                    ]
+                    new_url = f"{parsed.scheme}://{domain[4:]}"
                 else:
-                    variations = [
-                        f"https://www.{domain}",
-                        f"http://www.{domain}",
-                    ]
+                    new_url = f"{parsed.scheme}://www.{domain}"
                 
-                # Adicionar variação de protocolo se não estiver na lista
-                if parsed.scheme == "https":
-                    variations.append(f"http://{domain}")
-                else:
-                    variations.append(f"https://{domain}")
-                
-                # Remover duplicatas e a original
-                variations = [v for v in variations if v != url]
-                # Tentar apenas as 2 primeiras para não demorar muito
-                variations = variations[:2]
-                
-                success = False
-                for new_url in variations:
-                    logger.warning(f"[Main] Falha em {url}. Tentando variação: {new_url}")
+                if new_url and new_url != url:
+                    logger.warning(f"[Main] Falha em {url}. Tentando variação rápida: {new_url}")
                     try:
-                        text, pdfs, links = await _system_curl_scrape_safe(new_url, await proxy_manager.get_next_proxy())
+                        # Usar timeout bem curto (10s) para não travar o processo
+                        # Não usamos o _system_curl_scrape_safe completo para evitar retries internos dele
+                        text, pdfs, links = await _system_curl_scrape_logic(new_url, await proxy_manager.get_next_proxy())
                         if text:
                             visited_urls.append(new_url)
                             aggregated_markdown.append(f"--- PAGE START: {new_url} ---\n{text}\n--- PAGE END ---\n")
                             all_pdf_links.update(pdfs)
-                            url = new_url 
-                            success = True
-                            break
+                            url = new_url # Atualizar URL oficial para o discovery saber
                     except:
-                        continue
+                        # Se falhar rápido, desiste e retorna vazio
+                        pass
                 
-                if not success:
+                if not text:
                     return "", [], []
 
         except Exception as e:
@@ -570,22 +554,23 @@ async def _system_curl_scrape_logic(url: str, proxy: Optional[str]) -> Tuple[str
     # Adicionar Referer
     headers_args.extend(["-H", "Referer: https://www.google.com/"])
     
-    cmd = ["curl", "-L", "-k", "-s", "--max-time", "15"] # Aumentado timeout para 15s (6s era muito agressivo)
-    
-    # Tentar forçar HTTP/1.1 se falhar (alguns servidores rejeitam HTTP/2 do curl)
-    # Mas como padrão, deixamos o curl negociar.
+    # Timeout reduzido para 10s (era 15s) para falhar mais rápido
+    cmd = ["curl", "-L", "-k", "-s", "--max-time", "10"] 
     
     if proxy: cmd.extend(["-x", proxy])
     cmd.extend(headers_args)
     cmd.append(url)
     
-    res = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=20)
+    # Timeout do subprocess levemente maior que do curl
+    res = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=15)
+    
     if res.returncode != 0 or not res.stdout: 
         # Tentar uma vez sem headers complexos (modo simples) se falhar
+        # Timeout ainda mais agressivo no fallback: 8s
         logger.warning(f"Curl com headers falhou para {url}, tentando modo simples...")
-        cmd_simple = ["curl", "-L", "-k", "-s", "--max-time", "15", "-A", "Mozilla/5.0", url]
+        cmd_simple = ["curl", "-L", "-k", "-s", "--max-time", "8", "-A", "Mozilla/5.0", url]
         if proxy: cmd_simple.extend(["-x", proxy])
-        res = await asyncio.to_thread(subprocess.run, cmd_simple, capture_output=True, text=True, timeout=20)
+        res = await asyncio.to_thread(subprocess.run, cmd_simple, capture_output=True, text=True, timeout=12)
         
         if res.returncode != 0 or not res.stdout:
             raise Exception("Curl Failed")
