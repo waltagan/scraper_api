@@ -321,17 +321,17 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
                                 # Forçar fallback
                                 raise Exception("Soft 404 or empty content")
                             
-                            logger.info(f"[Sub] ✅ Success (Keep-Alive): {normalized_url} ({len(text)} chars)")
-                            _record_success(normalized_url)
-                            chunk_results.append((normalized_url, text, pdfs))
-                            continue # Sucesso, vai para próxima URL do chunk
+                                logger.info(f"[Sub] ✅ Success (Keep-Alive): {normalized_url} ({len(text)} chars)")
+                                _record_success(normalized_url)
+                                chunk_results.append((normalized_url, text, pdfs))
+                                continue # Sucesso, vai para próxima URL do chunk
                             
                         except Exception as e:
                             if "Soft 404" not in str(e):
-                                logger.warning(f"[Sub] ❌ Erro CFFI Session em {normalized_url}: {e}")
+                            logger.warning(f"[Sub] ❌ Erro CFFI Session em {normalized_url}: {e}")
                             # _record_failure já foi chamado acima ou será aqui se for erro de conexão
                             if "Soft 404" not in str(e):
-                                _record_failure(normalized_url)
+                            _record_failure(normalized_url)
                         
                         # Fallback: System Curl (Isolated)
                         try:

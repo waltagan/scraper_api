@@ -13,10 +13,14 @@ from app.services.llm import analyze_content
 from app.services.discovery import find_company_website
 from app.core.security import get_api_key
 from app.core.logging_utils import setup_logging
+from app.services.llm import start_health_monitor
 
 # Configurar Logging (JSON Structured)
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Iniciar monitor de saúde dos providers LLM
+start_health_monitor()
 
 app = FastAPI(title="B2B Flash Profiler")
 

@@ -8,6 +8,8 @@ import logging
 import json_repair
 from app.core.config import settings
 from app.schemas.profile import CompanyProfile
+from collections import defaultdict, Counter
+import threading
 
 # Configurar logger
 logger = logging.getLogger(__name__)
@@ -48,6 +50,142 @@ llm_semaphores = {
 }
 
 llm_global_semaphore = asyncio.Semaphore(_llm_config['global_semaphore_limit'])
+
+# --- LLM PERFORMANCE TRACKER ---
+class LLMPerformanceTracker:
+    """
+    Rastreia métricas de performance dos providers LLM para diagnóstico de timeouts.
+    """
+    def __init__(self):
+        self.stats = defaultdict(lambda: {
+            'requests': 0,
+            'successes': 0,
+            'timeouts': 0,
+            'errors': 0,
+            'rate_limits': 0,
+            'total_response_time': 0,
+            'last_reset': time.time(),
+            'chunk_sizes': [],
+            'waiting_times': []
+        })
+        self.lock = threading.Lock()
+
+    def record_request(self, provider_name: str, success: bool = False, timeout: bool = False,
+                      error: bool = False, rate_limit: bool = False, response_time: float = 0,
+                      chunk_size: int = 0, waiting_time: float = 0):
+        """Registra uma requisição no tracker"""
+        with self.lock:
+            stats = self.stats[provider_name]
+            stats['requests'] += 1
+            if success:
+                stats['successes'] += 1
+            if timeout:
+                stats['timeouts'] += 1
+            if error:
+                stats['errors'] += 1
+            if rate_limit:
+                stats['rate_limits'] += 1
+            if response_time > 0:
+                stats['total_response_time'] += response_time
+            if chunk_size > 0:
+                stats['chunk_sizes'].append(min(chunk_size, 100000))  # Limitar para evitar memória excessiva
+            if waiting_time > 0:
+                stats['waiting_times'].append(min(waiting_time, 300))  # Max 5 minutos
+
+    def log_summary(self, provider_name: str = None):
+        """Log resumo de performance"""
+        with self.lock:
+            providers = [provider_name] if provider_name else list(self.stats.keys())
+
+            for p_name in providers:
+                stats = self.stats[p_name]
+                if stats['requests'] == 0:
+                    continue
+
+                success_rate = (stats['successes'] / stats['requests']) * 100
+                timeout_rate = (stats['timeouts'] / stats['requests']) * 100
+                error_rate = (stats['errors'] / stats['requests']) * 100
+                rate_limit_rate = (stats['rate_limits'] / stats['requests']) * 100
+                avg_response_time = stats['total_response_time'] / max(stats['requests'], 1)
+                avg_chunk_size = sum(stats['chunk_sizes']) / max(len(stats['chunk_sizes']), 1)
+                avg_waiting_time = sum(stats['waiting_times']) / max(len(stats['waiting_times']), 1)
+
+                logger.info(f"📊 [PROVIDER_SUMMARY] {p_name} - "
+                           f"Requests: {stats['requests']}, "
+                           f"Success: {success_rate:.1f}%, "
+                           f"Timeouts: {timeout_rate:.1f}%, "
+                           f"Errors: {error_rate:.1f}%, "
+                           f"Rate Limits: {rate_limit_rate:.1f}%, "
+                           f"Avg Response: {avg_response_time:.2f}s, "
+                           f"Avg Chunk Size: {avg_chunk_size:.0f} chars, "
+                           f"Avg Wait: {avg_waiting_time:.2f}s")
+
+    def detect_timeout_patterns(self):
+        """Detecta padrões problemáticos que podem causar timeouts"""
+        with self.lock:
+            for provider_name, stats in self.stats.items():
+                if stats['requests'] < 5:  # Precisa de amostra mínima
+                    continue
+
+                timeout_rate = (stats['timeouts'] / stats['requests']) * 100
+
+                # Timeouts muito altos indicam problema sério
+                if timeout_rate > 50:
+                    logger.warning(f"🚨 [PATTERN_DETECTED] {provider_name} com {timeout_rate:.1f}% de timeouts! "
+                                  f"({stats['timeouts']}/{stats['requests']} requests)")
+
+                # Timeouts concentrados em chunks grandes
+                if stats['chunk_sizes']:
+                    large_chunks = [size for size in stats['chunk_sizes'] if size > 50000]
+                    if large_chunks and len(large_chunks) / len(stats['chunk_sizes']) > 0.8:
+                        logger.warning(f"🚨 [PATTERN_DETECTED] {provider_name} falhando principalmente "
+                                      f"em chunks grandes (>50k chars)")
+
+                # Tempos de espera muito altos
+                if stats['waiting_times']:
+                    high_waits = [wait for wait in stats['waiting_times'] if wait > 30]
+                    if high_waits and len(high_waits) / len(stats['waiting_times']) > 0.5:
+                        logger.warning(f"🚨 [PATTERN_DETECTED] {provider_name} com esperas excessivas "
+                                      f"(>30s em {len(high_waits)}/{len(stats['waiting_times'])} requests)")
+
+# Instância global do tracker
+performance_tracker = LLMPerformanceTracker()
+
+# --- PERIODIC HEALTH MONITORING ---
+async def periodic_health_monitor():
+    """
+    Monitor de saúde periódico que log métricas de performance dos providers LLM.
+    """
+    while True:
+        try:
+            await asyncio.sleep(300)  # A cada 5 minutos
+
+            logger.info("🏥 [HEALTH_CHECK] Iniciando verificação de saúde dos providers LLM")
+
+            # Log métricas de todos os providers
+            performance_tracker.log_summary()
+
+            # Verificar status dos semáforos
+            global_available = _llm_config['global_semaphore_limit'] - len(llm_global_semaphore._waiters) if hasattr(llm_global_semaphore, '_waiters') else _llm_config['global_semaphore_limit']
+            logger.info(f"🏥 [HEALTH_CHECK] Semaphore global: {global_available}/{_llm_config['global_semaphore_limit']} disponível")
+
+            for provider_name, semaphore in llm_semaphores.items():
+                provider_limit = _llm_config.get(f'{provider_name.lower().replace(" ", "_")}_semaphore_limit', 3)
+                provider_available = provider_limit - len(semaphore._waiters) if hasattr(semaphore, '_waiters') else provider_limit
+                logger.info(f"🏥 [HEALTH_CHECK] Semaphore {provider_name}: {provider_available}/{provider_limit} disponível")
+
+            # Detectar padrões problemáticos
+            performance_tracker.detect_timeout_patterns()
+
+        except Exception as e:
+            logger.error(f"❌ [HEALTH_CHECK] Erro no monitor de saúde: {e}")
+            await asyncio.sleep(60)  # Aguardar 1 minuto antes de tentar novamente
+
+# Função para iniciar o monitor (chamada na inicialização da app)
+def start_health_monitor():
+    """Inicia o monitor de saúde em background"""
+    asyncio.create_task(periodic_health_monitor())
+    logger.info("🏥 [HEALTH_CHECK] Monitor de saúde dos providers LLM iniciado")
 
 def configure_llm_params(
     global_limit: Optional[int] = None,
@@ -970,7 +1108,19 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
     Faz a chamada real ao LLM com retry automático.
     Registra tempo total de inferência do modelo.
     """
-    logger.info(f"📤 Enviando requisição para {model} (tamanho do conteúdo: {len(text_content)} chars)")
+    request_id = f"{model}_{int(time.time()*1000)}"
+    content_size = len(text_content)
+
+    logger.info(f"🚀 [LLM_REQUEST_START] {request_id} - Model: {model}, "
+               f"Content: {content_size:,} chars, "
+               f"Lines: {text_content.count(chr(10))+1}")
+
+    # 🔍 Diagnóstico de timeout - verificar condições problemáticas
+    if content_size > 100000:  # 100k chars
+        logger.warning(f"🔍 [TIMEOUT_DIAG] {request_id} - Content muito grande: {content_size:,} chars")
+    if content_size < 100:  # Muito pequeno
+        logger.warning(f"🔍 [TIMEOUT_DIAG] {request_id} - Content muito pequeno: {content_size} chars")
+
     start_ts = time.perf_counter()
     
     # Se o conteúdo for muito pequeno, logar para debug
@@ -984,7 +1134,7 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
         preview = '\n'.join(text_content.split('\n')[:15])
         logger.warning(f"📄 Preview do conteúdo ({len(text_content)} chars):\n{preview}")
     
-    # Configuração da requisição
+    # Configuração da requisição com timeout customizado
     request_params = {
         "model": model,
         "messages": [
@@ -992,10 +1142,23 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
             {"role": "user", "content": f"Analise este conteúdo e extraia os dados em Português:\n\n{text_content}"}
         ],
         "temperature": 0.0,
-        "response_format": {"type": "json_object"}
+        "response_format": {"type": "json_object"},
+        "timeout": 90.0  # Timeout específico para a API (menor que o nosso global)
     }
-    
-    response = await client.chat.completions.create(**request_params)
+
+    # 🔍 Log detalhado antes da chamada
+    logger.debug(f"🔍 [TIMEOUT_DIAG] {request_id} - Enviando request com timeout de {request_params['timeout']}s")
+
+    api_call_start = time.time()
+    try:
+        response = await client.chat.completions.create(**request_params)
+        api_duration = time.time() - api_call_start
+        logger.debug(f"🔍 [TIMEOUT_DIAG] {request_id} - API call successful em {api_duration:.2f}s")
+    except asyncio.TimeoutError:
+        api_timeout_duration = time.time() - api_call_start
+        logger.error(f"🔍 [TIMEOUT_DIAG] {request_id} - API TIMEOUT após {api_timeout_duration:.2f}s "
+                    f"(configured: {request_params['timeout']}s, exceeded by: {api_timeout_duration - request_params['timeout']:.2f}s)")
+        raise
     
     # Verificar se há conteúdo na resposta
     if not response.choices or not response.choices[0].message.content:
@@ -1050,7 +1213,7 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
         if not isinstance(data, dict):
              logger.warning(f"⚠️ JSON não é dict nem lista válida. Usando dict vazio.")
              data = {}
-
+        
         logger.debug(f"✅ JSON parseado com sucesso. Chaves principais: {list(data.keys())}")
         
         # Verificar se há dados extraídos
@@ -1103,10 +1266,14 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
         
         try:
             profile = CompanyProfile(**data)
-            logger.info(f"✅ CompanyProfile criado com sucesso a partir de {model}")
+            total_duration = time.perf_counter() - start_ts
+            logger.info(f"✅ [LLM_SUCCESS] {request_id} - CompanyProfile criado com sucesso de {model} "
+                       f"em {total_duration:.3f}s")
             return profile
         except Exception as e:
-            logger.error(f"❌ Erro ao criar CompanyProfile de {model}: {e}")
+            total_duration = time.perf_counter() - start_ts
+            logger.error(f"❌ [LLM_PROFILE_ERROR] {request_id} - Erro ao criar CompanyProfile de {model} "
+                        f"após {total_duration:.3f}s: {e}")
             logger.error(f"📋 Dados problemáticos: {json.dumps(data, indent=2, ensure_ascii=False)[:1000]}")
             raise e
         
@@ -1151,10 +1318,26 @@ async def analyze_content_with_fallback(text_content: str, provider_name: Option
     Registra tempo total da análise considerando fallback.
     """
     start_ts = time.perf_counter()
-    # Throttling global
+    request_start = time.time()
+
+    # 📊 Métricas do chunk
+    chunk_size = len(text_content)
+    logger.info(f"📊 [CHUNK_METRICS] Iniciando análise. "
+               f"Tamanho: {chunk_size:,} chars, "
+               f"Linhas: {text_content.count(chr(10))+1}")
+
+    # 🔄 Monitoramento de concorrência global
+    global_wait_start = time.time()
+    semaphore_status = "available" if not llm_global_semaphore.locked() else "waiting"
+    logger.info(f"🔄 [CONCURRENCY_GLOBAL] Semaphore status: {semaphore_status}, "
+               f"Limite: {_llm_config['global_semaphore_limit']}")
+
     if llm_global_semaphore.locked():
-         logger.warning(f"⚠️ Global LLM semaphore full ({_llm_config['global_semaphore_limit']}), waiting...")
+         logger.warning(f"⚠️ [SEMAPHORE_GLOBAL] Global LLM semaphore full ({_llm_config['global_semaphore_limit']}), aguardando...")
+
     async with llm_global_semaphore:
+        global_wait_time = time.time() - global_wait_start
+        logger.debug(f"🔄 [SEMAPHORE_GLOBAL] Entrou no semaphore global após {global_wait_time:.2f}s")
         # Se um provedor específico foi solicitado, tentar apenas ele
         if provider_name:
             providers_to_try = [p for p in AVAILABLE_PROVIDERS if p[0] == provider_name]
@@ -1164,48 +1347,95 @@ async def analyze_content_with_fallback(text_content: str, provider_name: Option
         last_error = None
         
         for name, key, base_url, model in providers_to_try:
-            # Throttling específico do provedor
+            provider_start = time.time()
+
+            # 🔄 Monitoramento de concorrência por provider
             provider_semaphore = llm_semaphores.get(name, asyncio.Semaphore(3))  # Default: 3
-            
+            provider_limit = _llm_config.get(f'{name.lower().replace(" ", "_")}_semaphore_limit', 3)
+
+            provider_wait_start = time.time()
+            semaphore_status = "available" if not provider_semaphore.locked() else "waiting"
+            logger.info(f"🔄 [CONCURRENCY_PROVIDER] {name} - Semaphore status: {semaphore_status}, "
+                       f"Limite: {provider_limit}")
+
             if provider_semaphore.locked():
-                 logger.warning(f"⚠️ {name} semaphore full, waiting...")
+                 logger.warning(f"⚠️ [SEMAPHORE_PROVIDER] {name} semaphore full ({provider_limit}), aguardando...")
+
             async with provider_semaphore:
+                provider_wait_time = time.time() - provider_wait_start
+                logger.debug(f"🔄 [SEMAPHORE_PROVIDER] Entrou no semaphore {name} após {provider_wait_time:.2f}s")
                 try:
-                    logger.info(f"Tentando análise com {name} ({model})...")
-                    
+                    logger.info(f"🚀 [LLM_ATTEMPT] Tentando análise com {name} ({model})...")
+
                     # Criar cliente para este provedor
                     client_args = {"api_key": key, "base_url": base_url}
                     provider_client = AsyncOpenAI(**client_args)
-                    
+
                     # Tentar análise
+                    llm_start = time.time()
                     profile = await _call_llm(provider_client, model, text_content)
-                    logger.info(f"✅ Análise bem-sucedida com {name}")
+                    llm_duration = time.time() - llm_start
+
+                    # Registrar sucesso no tracker
+                    performance_tracker.record_request(
+                        name, success=True, response_time=llm_duration,
+                        chunk_size=chunk_size, waiting_time=provider_wait_time
+                    )
+
+                    logger.info(f"✅ [LLM_SUCCESS] Análise bem-sucedida com {name} em {llm_duration:.2f}s")
                     return profile
-                    
+
                 except RateLimitError as e:
-                    logger.warning(f"⚠️ {name} rate limited: {e}")
+                    request_duration = time.time() - provider_start
+                    logger.warning(f"⚠️ [LLM_RATE_LIMIT] {name} rate limited após {request_duration:.2f}s: {e}")
+                    performance_tracker.record_request(name, rate_limit=True, response_time=request_duration,
+                                                     chunk_size=chunk_size, waiting_time=provider_wait_time)
                     last_error = e
                     continue  # Tentar próximo provedor
-                    
+
                 except BadRequestError as e:
-                    logger.error(f"❌ {name} bad request (provavelmente conteúdo muito grande): {e}")
+                    request_duration = time.time() - provider_start
+                    logger.error(f"❌ [LLM_BAD_REQUEST] {name} bad request após {request_duration:.2f}s "
+                               f"(conteúdo muito grande: {chunk_size:,} chars): {e}")
+                    performance_tracker.record_request(name, error=True, response_time=request_duration,
+                                                     chunk_size=chunk_size, waiting_time=provider_wait_time)
                     last_error = e
                     # Não tentar outros provedores para BadRequest, propagar o erro
                     raise e
-                    
+
+                except APITimeoutError as e:
+                    request_duration = time.time() - provider_start
+                    logger.error(f"⏰ [LLM_TIMEOUT] {name} timeout após {request_duration:.2f}s "
+                               f"(chunk: {chunk_size:,} chars, espera: {provider_wait_time:.2f}s): {e}")
+                    performance_tracker.record_request(name, timeout=True, response_time=request_duration,
+                                                     chunk_size=chunk_size, waiting_time=provider_wait_time)
+                    last_error = e
+                    continue  # Tentar próximo provedor
+
                 except Exception as e:
-                    logger.error(f"❌ {name} falhou com erro inesperado: {e}")
+                    request_duration = time.time() - provider_start
+                    logger.error(f"❌ [LLM_ERROR] {name} falhou após {request_duration:.2f}s: {type(e).__name__}: {e}")
+                    performance_tracker.record_request(name, error=True, response_time=request_duration,
+                                                     chunk_size=chunk_size, waiting_time=provider_wait_time)
                     last_error = e
                     continue  # Tentar próximo provedor
         
-    # Se chegou aqui, todos falharam
-    total_duration = time.perf_counter() - start_ts
-    error_msg = f"Todos os provedores LLM falharam. Último erro: {last_error}"
-    logger.error(f"[PERF] llm step=analyze_content_with_fallback_all_failed duration={total_duration:.3f}s")
-    
+        # Se chegou aqui, todos falharam
+        total_duration = time.perf_counter() - start_ts
+        total_wait_time = time.time() - request_start
+
+        # Detectar padrões de timeout
+        performance_tracker.detect_timeout_patterns()
+
+        error_msg = f"Todos os provedores LLM falharam. Último erro: {last_error}"
+        logger.error(f"💥 [LLM_ALL_FAILED] {error_msg}")
+        logger.error(f"[PERF] llm step=analyze_content_with_fallback_all_failed "
+                    f"duration={total_duration:.3f}s total_wait={total_wait_time:.2f}s "
+                    f"chunk_size={chunk_size:,} providers_tried={len(providers_to_try)}")
+
     # EM VEZ DE LEVANTAR EXCEÇÃO, RETORNAR PERFIL VAZIO
     # Isso permite que o fluxo continue e consolide o que foi possível extrair de outros chunks
-    logger.error(error_msg + " -> Retornando perfil vazio para este chunk.")
+    logger.error("📭 [LLM_FALLBACK] Retornando perfil vazio para este chunk devido a falhas em todos os providers")
     return CompanyProfile()
 
 async def process_chunk_with_retry(chunk: str, chunk_num: int, total_chunks: int, primary_provider: Optional[str] = None) -> Optional[CompanyProfile]:
