@@ -328,10 +328,10 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
                             
                         except Exception as e:
                             if "Soft 404" not in str(e):
-                            logger.warning(f"[Sub] ❌ Erro CFFI Session em {normalized_url}: {e}")
-                            # _record_failure já foi chamado acima ou será aqui se for erro de conexão
-                            if "Soft 404" not in str(e):
-                            _record_failure(normalized_url)
+                                logger.warning(f"[Sub] ❌ Erro CFFI Session em {normalized_url}: {e}")
+                                # _record_failure já foi chamado acima ou será aqui se for erro de conexão
+                                if "Soft 404" not in str(e):
+                                    _record_failure(normalized_url)
                         
                         # Fallback: System Curl (Isolated)
                         try:
