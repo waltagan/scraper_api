@@ -113,6 +113,29 @@ def configure_scraper_params(
                 f"session_timeout={session_timeout}")
 # Tempo de reset do circuito (não implementado full, apenas reset manual ou restart)
 
+def _is_soft_404(text: str) -> bool:
+    """
+    Detecta 'soft 404s' (páginas de erro que retornam status 200).
+    Verifica se o texto é muito curto e contém palavras-chave de erro.
+    """
+    if len(text) > 1000:
+        return False
+        
+    lower_text = text.lower()
+    error_keywords = [
+        "404 not found", "page not found", "página não encontrada", 
+        "erro 404", "não encontramos a página", "página inexistente",
+        "ops! página não encontrada", "error 404", "file not found"
+    ]
+    
+    # Se tiver muito pouco texto (< 200 chars) e qualquer menção a erro ou not found
+    if len(text) < 200 and ("found" in lower_text or "erro" in lower_text or "página" in lower_text):
+        if any(k in lower_text for k in error_keywords) or "not found" in lower_text:
+            return True
+            
+    # Se tiver as palavras-chave explícitas
+    return any(k in lower_text for k in error_keywords)
+
 def _get_domain(url: str) -> str:
     try:
         return urlparse(url).netloc
@@ -169,16 +192,20 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
             # Tentar primeiro com Curl Impersonation (mais robusto que requests simples)
             text, pdfs, links = await _cffi_scrape_safe(url, main_proxy)
             
-            if not text or len(text) < 100:
-                # Se falhar ou conteúdo muito pequeno, tentar system curl como fallback
-                logger.warning(f"[Main] Curl Impersonation falhou ou conteúdo insuficiente em {url}. Tentando System Curl.")
+            if not text or len(text) < 100 or _is_soft_404(text):
+                # Se falhar ou conteúdo muito pequeno ou soft 404, tentar system curl como fallback
+                reason = "Soft 404" if text and _is_soft_404(text) else "Conteúdo insuficiente/Falha"
+                logger.warning(f"[Main] Curl Impersonation falhou ({reason}) em {url}. Tentando System Curl.")
                 text, pdfs, links = await _system_curl_scrape_safe(url, await proxy_manager.get_next_proxy())
 
-            if text:
+            if text and not _is_soft_404(text):
                 visited_urls.append(url)
                 aggregated_markdown.append(f"--- PAGE START: {url} ---\n{text}\n--- PAGE END ---\n")
                 all_pdf_links.update(pdfs)
             else:
+                if text and _is_soft_404(text):
+                    logger.warning(f"[Main] Soft 404 detectado em {url}. Tentando fallback.")
+                
                 # TENTATIVA FINAL: Smart URL Retry Otimizado (Apenas 1 tentativa rápida)
                 # Tentar apenas a variação mais óbvia (www <-> non-www) e com timeout curto
                 parsed = urlparse(url)
@@ -269,10 +296,13 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
                     verify=False
                 ) as session:
                     
+                    # Contador de skips por circuit breaker neste chunk
+                    skipped_count = 0
+                    
                     for sub_url in urls_chunk:
                         # Verificar Circuit Breaker antes de processar
                         if _is_circuit_open(sub_url):
-                            logger.warning(f"🔌 [CircuitBreaker] Pulando {sub_url} devido a falhas excessivas no domínio")
+                            skipped_count += 1
                             chunk_results.append(None)
                             continue
 
@@ -284,41 +314,46 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
                             logger.debug(f"[Sub] Processando {normalized_url} com sessão persistente...")
                             text, pdfs, _ = await _cffi_scrape(normalized_url, proxy=None, session=session) # Proxy já na sessão
                             
-                            if text and len(text) >= 100:
-                                logger.info(f"[Sub] ✅ Success (Keep-Alive): {normalized_url} ({len(text)} chars)")
-                                _record_success(normalized_url)
-                                chunk_results.append((normalized_url, text, pdfs))
-                                continue # Sucesso, vai para próxima URL do chunk
+                            # Validação de Soft 404 e Tamanho
+                            if not text or len(text) < 100 or _is_soft_404(text):
+                                logger.warning(f"[Sub] ⚠️ Falha/404/Pequeno com CFFI Session em {normalized_url} ({len(text) if text else 0} chars). Tentando Curl Fallback...")
+                                _record_failure(normalized_url)
+                                # Forçar fallback
+                                raise Exception("Soft 404 or empty content")
                             
-                            # Se falhou ou conteúdo pequeno com a sessão atual, marcar falha
-                            # E tentar fallback isolado (Curl System)
-                            logger.warning(f"[Sub] ⚠️ Falha/Pequeno com CFFI Session em {normalized_url}. Tentando Curl Fallback...")
-                            _record_failure(normalized_url)
+                            logger.info(f"[Sub] ✅ Success (Keep-Alive): {normalized_url} ({len(text)} chars)")
+                            _record_success(normalized_url)
+                            chunk_results.append((normalized_url, text, pdfs))
+                            continue # Sucesso, vai para próxima URL do chunk
                             
                         except Exception as e:
-                            logger.warning(f"[Sub] ❌ Erro CFFI Session em {normalized_url}: {e}")
-                            _record_failure(normalized_url)
+                            if "Soft 404" not in str(e):
+                                logger.warning(f"[Sub] ❌ Erro CFFI Session em {normalized_url}: {e}")
+                            # _record_failure já foi chamado acima ou será aqui se for erro de conexão
+                            if "Soft 404" not in str(e):
+                                _record_failure(normalized_url)
                         
                         # Fallback: System Curl (Isolated)
-                        # Só tenta curl se o CFFI falhou. O Curl não usa a sessão CFFI.
-                        # Usa o mesmo proxy do chunk para aproveitar (ou tentar novo? melhor novo se o proxy for o problema)
-                        # Vamos tentar com NOVO proxy no fallback para maximizar chance
                         try:
                             fallback_proxy = await proxy_manager.get_next_proxy()
                             text, pdfs, _ = await _system_curl_scrape(normalized_url, fallback_proxy)
                             
-                            if text and len(text) >= 100:
+                            if text and len(text) >= 100 and not _is_soft_404(text):
                                 logger.info(f"[Sub] ✅ Success (Curl Fallback): {normalized_url}")
                                 _record_success(normalized_url)
                                 chunk_results.append((normalized_url, text, pdfs))
                             else:
-                                logger.warning(f"[Sub] ❌ Falha total em {normalized_url} (CFFI+Curl)")
+                                reason = "Soft 404" if text and _is_soft_404(text) else "Empty/Fail"
+                                logger.warning(f"[Sub] ❌ Falha total em {normalized_url} (CFFI+Curl) - {reason}")
                                 _record_failure(normalized_url)
                                 chunk_results.append(None)
                         except Exception as e:
                             logger.error(f"[Sub] ❌ Erro Curl Fallback em {normalized_url}: {e}")
                             _record_failure(normalized_url)
                             chunk_results.append(None)
+                    
+                    if skipped_count > 0:
+                        logger.warning(f"🔌 [CircuitBreaker] Pulou {skipped_count} URLs neste chunk devido a falhas excessivas no domínio.")
                             
             except Exception as e_session:
                 logger.error(f"[Chunk] ❌ Erro fatal na sessão do chunk (Proxy: {chunk_proxy}): {e_session}")

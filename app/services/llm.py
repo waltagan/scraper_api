@@ -885,10 +885,46 @@ def normalize_llm_response(data: Any) -> dict:
         for field in ["certifications", "awards", "partnerships", "client_list"]:
             if reputation.get(field) is None:
                 reputation[field] = []
+            elif not isinstance(reputation[field], list):
+                if isinstance(reputation[field], str):
+                    logger.warning(f"⚠️ Campo '{field}' é string, convertendo para lista...")
+                    reputation[field] = [reputation[field]]
+                else:
+                    logger.warning(f"⚠️ Campo '{field}' não é lista válida, resetando...")
+                    reputation[field] = []
         
         # Lista de CaseStudies
         if reputation.get("case_studies") is None:
             reputation["case_studies"] = []
+        elif not isinstance(reputation["case_studies"], list):
+             logger.warning(f"⚠️ case_studies não é uma lista, convertendo...")
+             reputation["case_studies"] = []
+        else:
+            # Validar CaseStudies
+            valid_cases = []
+            for case in reputation["case_studies"]:
+                if not isinstance(case, dict):
+                    continue
+                # Se title for None, tentar usar challenge ou solution como título
+                if not case.get("title"):
+                    if case.get("challenge"):
+                        case["title"] = f"Desafio: {str(case['challenge'])[:50]}..."
+                        logger.warning(f"⚠️ Case study sem título, usando challenge como título: {case['title']}")
+                    elif case.get("solution"):
+                        case["title"] = f"Solução: {str(case['solution'])[:50]}..."
+                        logger.warning(f"⚠️ Case study sem título, usando solution como título: {case['title']}")
+                    elif case.get("client_name"):
+                        case["title"] = f"Caso: {case['client_name']}"
+                        logger.warning(f"⚠️ Case study sem título, usando client_name como título: {case['title']}")
+                    else:
+                        # Se ainda assim não tiver título, mas tiver conteúdo, criar título genérico
+                        if any(v for k,v in case.items() if v):
+                            case["title"] = "Estudo de Caso (Sem Título)"
+                            logger.warning("⚠️ Case study sem título, usando título genérico")
+                        else:
+                            continue # Case study vazio ou inválido
+                valid_cases.append(case)
+            reputation["case_studies"] = valid_cases
     
     # 4. Contact
     if "contact" in data:
@@ -1042,7 +1078,12 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
                 logger.info(f"📦 Product Categories: {total_categories} categorias, {categories_with_items} com items ({total_items} items totais)")
                 if categories_with_items < total_categories:
                     empty_cats = [cat.get("category_name", "?") for cat in categories if isinstance(cat, dict) and not cat.get("items")]
-                    logger.warning(f"⚠️ {total_categories - categories_with_items} categorias SEM items: {empty_cats[:5]}")
+                    if total_categories > 0 and categories_with_items == 0:
+                        # Se todas as categorias estão vazias, é um warning forte
+                        logger.warning(f"⚠️ Todas as {total_categories} categorias encontradas estão SEM itens. O modelo identificou categorias mas não produtos específicos.")
+                    else:
+                        # Se apenas algumas estão vazias, logar como info ou debug para menos ruído
+                        logger.info(f"ℹ️ {total_categories - categories_with_items} categorias sem itens listados: {empty_cats[:5]}")
         
         if not has_data:
             logger.warning(f"⚠️ Resposta do {model} não contém dados extraídos (todos os campos estão vazios)")

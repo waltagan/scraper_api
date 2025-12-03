@@ -7,3 +7,4 @@ results/
 .DS_Store
 
 resultado.json
+logs.*.json

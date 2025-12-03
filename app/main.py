@@ -104,10 +104,16 @@ async def analyze_company(request: CompanyRequest):
     except Exception as e:
         # Errors raised inside process_analysis (like LLM failure after retries) will be caught here
         total = time.perf_counter() - start_ts
-        logger.error(f"[PERF] analyze_company failed url={url_str} total={total:.3f}s error={e}")
-        # If it's already an HTTPException, re-raise it
+        
+        # If it's already an HTTPException, handle accordingly
         if isinstance(e, HTTPException):
+            if e.status_code < 500:
+                logger.warning(f"[PERF] analyze_company finished with expected error url={url_str} total={total:.3f}s code={e.status_code} detail={e.detail}")
+            else:
+                logger.error(f"[PERF] analyze_company failed with HTTP error url={url_str} total={total:.3f}s code={e.status_code} detail={e.detail}")
             raise e
+            
+        logger.error(f"[PERF] analyze_company failed url={url_str} total={total:.3f}s error={e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 async def process_analysis(url: str) -> CompanyProfile:

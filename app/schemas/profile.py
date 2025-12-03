@@ -21,14 +21,14 @@ class TeamProfile(BaseModel):
     team_certifications: List[str] = [] # e.g., "PMP Certified", "AWS Certified"
 
 class ServiceDetail(BaseModel):
-    name: str
+    name: Optional[str] = None
     description: Optional[str] = None
     methodology: Optional[str] = None # e.g., "Agile", "Design Thinking"
     deliverables: List[str] = [] # e.g., "Relatórios", "Blueprints"
     ideal_client_profile: Optional[str] = None 
 
 class ProductCategory(BaseModel):
-    category_name: str
+    category_name: Optional[str] = None
     items: List[str] = []
 
 class Offerings(BaseModel):
@@ -43,7 +43,7 @@ class Offerings(BaseModel):
     key_differentiators: List[str] = []
 
 class CaseStudy(BaseModel):
-    title: str
+    title: Optional[str] = None
     client_name: Optional[str] = None
     industry: Optional[str] = None
     challenge: Optional[str] = None
