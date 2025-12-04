@@ -92,8 +92,8 @@ class LLMPerformanceTracker:
             stats['requests'] += 1
             if success:
                 stats['successes'] += 1
-                if chunk_size > 0:
-                    stats['chunk_sizes_success'].append(min(chunk_size, 100000))
+            if chunk_size > 0:
+                stats['chunk_sizes_success'].append(min(chunk_size, 100000))
             if timeout:
                 stats['timeouts'] += 1
                 if chunk_size > 0:
@@ -125,14 +125,17 @@ class LLMPerformanceTracker:
                 
                 # Calcular médias de tamanho de chunk separadas
                 avg_chunk_success = 0
-                if stats['chunk_sizes_success']:
-                    avg_chunk_success = sum(stats['chunk_sizes_success']) / len(stats['chunk_sizes_success'])
+                chunk_sizes_success = stats.get('chunk_sizes_success') or []
+                if chunk_sizes_success:
+                    avg_chunk_success = sum(chunk_sizes_success) / len(chunk_sizes_success)
                 
                 avg_chunk_timeout = 0
-                if stats['chunk_sizes_timeout']:
-                    avg_chunk_timeout = sum(stats['chunk_sizes_timeout']) / len(stats['chunk_sizes_timeout'])
+                chunk_sizes_timeout = stats.get('chunk_sizes_timeout') or []
+                if chunk_sizes_timeout:
+                    avg_chunk_timeout = sum(chunk_sizes_timeout) / len(chunk_sizes_timeout)
                 
-                avg_waiting_time = sum(stats['waiting_times']) / max(len(stats['waiting_times']), 1)
+                waiting_times = stats.get('waiting_times') or []
+                avg_waiting_time = sum(waiting_times) / max(len(waiting_times), 1)
 
                 logger.info(f"📊 [PROVIDER_SUMMARY] {p_name} - "
                            f"Requests: {stats['requests']} (Active: {stats['active_requests']}, Max: {stats['max_concurrency']}), "
@@ -162,22 +165,26 @@ class LLMPerformanceTracker:
                                   f"({stats['timeouts']}/{stats['requests']} requests)")
 
                 # Timeouts concentrados em chunks grandes
-                if stats['chunk_sizes_timeout']:
-                    avg_timeout_size = sum(stats['chunk_sizes_timeout']) / len(stats['chunk_sizes_timeout'])
+                chunk_sizes_timeout = stats.get('chunk_sizes_timeout') or []
+                chunk_sizes_success = stats.get('chunk_sizes_success') or []
+                
+                if chunk_sizes_timeout:
+                    avg_timeout_size = sum(chunk_sizes_timeout) / len(chunk_sizes_timeout)
                     avg_success_size = 0
-                    if stats['chunk_sizes_success']:
-                         avg_success_size = sum(stats['chunk_sizes_success']) / len(stats['chunk_sizes_success'])
+                    if chunk_sizes_success:
+                         avg_success_size = sum(chunk_sizes_success) / len(chunk_sizes_success)
                     
                     if avg_success_size > 0 and avg_timeout_size > avg_success_size * 1.5:
                          logger.warning(f"🚨 [PATTERN_DETECTED] {provider_name}: Chunks com timeout são 50% maiores "
                                        f"que os bem-sucedidos ({avg_timeout_size:.0f} vs {avg_success_size:.0f} chars)")
 
                 # Tempos de espera muito altos
-                if stats['waiting_times']:
-                    high_waits = [wait for wait in stats['waiting_times'] if wait > 30]
-                    if high_waits and len(high_waits) / len(stats['waiting_times']) > 0.5:
+                waiting_times = stats.get('waiting_times') or []
+                if waiting_times:
+                    high_waits = [wait for wait in waiting_times if wait > 30]
+                    if high_waits and len(high_waits) / len(waiting_times) > 0.5:
                         logger.warning(f"🚨 [PATTERN_DETECTED] {provider_name} com esperas excessivas "
-                                      f"(>30s em {len(high_waits)}/{len(stats['waiting_times'])} requests)")
+                                      f"(>30s em {len(high_waits)}/{len(waiting_times)} requests)")
 
 # Instância global do tracker
 performance_tracker = LLMPerformanceTracker()
@@ -188,11 +195,12 @@ async def periodic_health_monitor():
     Monitor de saúde periódico que log métricas de performance dos providers LLM.
     """
     # Aguardar inicialização completa antes de começar
-    await asyncio.sleep(60)
+    await asyncio.sleep(30)
     
     while True:
         try:
-            await asyncio.sleep(300)  # A cada 5 minutos
+            # Intervalo reduzido para 60 segundos para maior visibilidade
+            await asyncio.sleep(60)
 
             logger.info("🏥 [HEALTH_CHECK] Iniciando verificação de saúde dos providers LLM")
 
@@ -204,7 +212,11 @@ async def periodic_health_monitor():
 
             # Verificar status dos semáforos
             try:
-                global_waiters = len(llm_global_semaphore._waiters) if hasattr(llm_global_semaphore, '_waiters') and llm_global_semaphore._waiters is not None else 0
+                # Proteção extra contra NoneType error
+                global_waiters = 0
+                if hasattr(llm_global_semaphore, '_waiters') and llm_global_semaphore._waiters is not None:
+                     global_waiters = len(llm_global_semaphore._waiters)
+                
                 global_available = _llm_config['global_semaphore_limit'] - global_waiters
                 logger.info(f"🏥 [HEALTH_CHECK] Semaphore global: {global_available}/{_llm_config['global_semaphore_limit']} disponível (Waiters: {global_waiters})")
 
@@ -228,7 +240,7 @@ async def periodic_health_monitor():
 
         except Exception as e:
             logger.error(f"❌ [HEALTH_CHECK] Erro no monitor de saúde: {e}")
-            await asyncio.sleep(60)  # Aguardar 1 minuto antes de tentar novamente
+            await asyncio.sleep(30)  # Aguardar antes de tentar novamente
 
 # Função para iniciar o monitor (chamada na inicialização da app)
 def start_health_monitor():
@@ -1196,13 +1208,13 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
     }
 
     # 🔍 Log detalhado antes da chamada
-    logger.debug(f"🔍 [TIMEOUT_DIAG] {request_id} - Enviando request com timeout de {request_params['timeout']}s")
+    logger.info(f"🔍 [TIMEOUT_DIAG] {request_id} - Enviando request com timeout de {request_params['timeout']}s")
 
     api_call_start = time.time()
     try:
         response = await client.chat.completions.create(**request_params)
         api_duration = time.time() - api_call_start
-        logger.debug(f"🔍 [TIMEOUT_DIAG] {request_id} - API call successful em {api_duration:.2f}s")
+        logger.info(f"🔍 [TIMEOUT_DIAG] {request_id} - API call successful em {api_duration:.2f}s")
     except asyncio.TimeoutError:
         api_timeout_duration = time.time() - api_call_start
         logger.error(f"🔍 [TIMEOUT_DIAG] {request_id} - API TIMEOUT após {api_timeout_duration:.2f}s "
@@ -1231,8 +1243,8 @@ async def _call_llm(client: AsyncOpenAI, model: str, text_content: str) -> Compa
         logger.error(f"📊 Response completo: {response}")
         raise ValueError(error_msg)
     
-    logger.debug(f"📥 Resposta recebida de {model} (tamanho: {len(raw_content)} chars)")
-    logger.debug(f"📄 Primeiros 200 chars da resposta: {raw_content[:200]}")
+    logger.info(f"📥 Resposta recebida de {model} (tamanho: {len(raw_content)} chars)")
+    logger.info(f"📄 Primeiros 200 chars da resposta: {raw_content[:200]}")
     
     # Limpar markdown se presente
     if raw_content.startswith("```json"):
