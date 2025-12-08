@@ -354,7 +354,8 @@ async def find_company_website(
     cnpj: str,
     email: Optional[str] = None,
     municipio: Optional[str] = None,
-    cnaes: Optional[List[str]] = None
+    cnaes: Optional[List[str]] = None,
+    ctx_label: str = ""
 ) -> Optional[str]:
     """
     Orquestra a descoberta do site oficial da empresa.
@@ -375,7 +376,7 @@ async def find_company_website(
     if nf:
         q1 = f'{nf} {city} site oficial'.strip()
         queries.append(q1)
-        logger.debug(f"📝 Q1: {q1}")
+        logger.debug(f"{ctx_label}📝 Q1: {q1}")
     
     # Q2: Razão Social + Municipio (apenas se diferente do nome fantasia)
     if rs:
@@ -387,20 +388,20 @@ async def find_company_website(
     q2 = f'{clean_rs} {city} site oficial'.strip()
     if not nf or clean_rs.upper() != nf.upper():
         queries.append(q2)
-        logger.debug(f"📝 Q2: {q2}")
+        logger.debug(f"{ctx_label}📝 Q2: {q2}")
 
     # Q3: Busca por CNPJ (pode revelar site no rodapé ou página de contato)
     if cnpj:
         q3 = f'"{cnpj}" site'.strip()
         queries.append(q3)
-        logger.debug(f"📝 Q3: {q3}")
+        logger.debug(f"{ctx_label}📝 Q3: {q3}")
     
     # Se não gerou queries (input vazio), retorna
     if not queries:
-        logger.warning("⚠️ Sem Nome Fantasia ou Razão Social para busca.")
+        logger.warning(f"{ctx_label}⚠️ Sem Nome Fantasia ou Razão Social para busca.")
         return None
     
-    logger.info(f"🔍 Discovery: {len(queries)} query(s) para {nf or rs}")
+    logger.info(f"{ctx_label}🔍 Discovery: {len(queries)} query(s) para {nf or rs}")
 
     # ESTRATÉGIA EXTRA: Validação de E-mail (Apenas Log)
     # Se tiver email corporativo, logamos para debug, mas não forçamos busca específica.
@@ -411,7 +412,7 @@ async def find_company_website(
             "uol.com.br", "bol.com.br", "terra.com.br", "ig.com.br", "icloud.com", "me.com"
         ]
         if domain_part not in generic_domains and "." in domain_part:
-            logger.info(f"📧 Domínio de email disponível para validação cruzada: {domain_part}")
+            logger.info(f"{ctx_label}📧 Domínio de email disponível para validação cruzada: {domain_part}")
 
     # Executar buscas (sequencial para evitar rate limit agressivo)
     all_results = []
@@ -433,14 +434,14 @@ async def find_company_website(
                 seen_links.add(link)
     
     if filtered_count > 0:
-        logger.debug(f"🚫 {filtered_count} resultados filtrados (blacklist)")
+        logger.debug(f"{ctx_label}🚫 {filtered_count} resultados filtrados (blacklist)")
     
     if not all_results:
-        logger.warning("⚠️ Nenhum resultado encontrado no Google após múltiplas buscas.")
+        logger.warning(f"{ctx_label}⚠️ Nenhum resultado encontrado no Google após múltiplas buscas.")
         return None
         
     # Logar resultados consolidados para debug
-    logger.info(f"🔍 Resultados consolidados enviados para IA ({len(all_results)} itens)")
+    logger.info(f"{ctx_label}🔍 Resultados consolidados enviados para IA ({len(all_results)} itens)")
     logger.debug(json.dumps(all_results, indent=2, ensure_ascii=False))
 
     # 3. Analisar com LLM (com load balancing e retry)
@@ -469,13 +470,13 @@ async def find_company_website(
         selected_provider = health_monitor.get_best_provider(available) or (available[0] if available else None)
         
         if not selected_provider:
-            logger.error(f"❌ Nenhum provider LLM disponível")
+            logger.error(f"{ctx_label}❌ Nenhum provider LLM disponível")
             continue
         
         # Calcular backoff para retry (0 na primeira tentativa)
         if attempt > 0:
             backoff = min(DISCOVERY_BACKOFF_BASE ** attempt + random.uniform(0, 1), DISCOVERY_BACKOFF_MAX)
-            logger.debug(f"🔄 Discovery retry {attempt + 1}/{DISCOVERY_MAX_RETRIES} após {backoff:.1f}s")
+            logger.debug(f"{ctx_label}🔄 Discovery retry {attempt + 1}/{DISCOVERY_MAX_RETRIES} após {backoff:.1f}s")
             await asyncio.sleep(backoff)
         
         try:
@@ -490,11 +491,12 @@ async def find_company_website(
                 provider=selected_provider,
                 messages=messages,
                 timeout=DISCOVERY_TIMEOUT,
-                        response_format={"type": "json_object"}
-                )
+                response_format={"type": "json_object"},
+                ctx_label=ctx_label
+            )
             
             duration = asyncio.get_event_loop().time() - start_time
-            logger.info(f"🧠 Decisão do LLM ({selected_provider}): {content}")
+            logger.info(f"{ctx_label}🧠 Decisão do LLM ({selected_provider}): {content}")
             
             # Registrar sucesso
             health_monitor.record_success(selected_provider, latency_ms)
@@ -520,13 +522,13 @@ async def find_company_website(
             if data.get("site_oficial") == "sim" and data.get("site") and data.get("site") != "nao_encontrado":
                 return data.get("site")
             else:
-                logger.debug(f"Site não encontrado. Justificativa: {data.get('justificativa')}")
+                logger.debug(f"{ctx_label}Site não encontrado. Justificativa: {data.get('justificativa')}")
                 return None
             
         except asyncio.TimeoutError:
             duration = (asyncio.get_event_loop().time() - start_time) * 1000 if 'start_time' in dir() else DISCOVERY_TIMEOUT * 1000
             health_monitor.record_failure(selected_provider, FailureType.TIMEOUT, duration)
-            logger.warning(f"⚠️ Timeout na análise do LLM ({selected_provider}) para descoberta de site ({DISCOVERY_TIMEOUT}s). "
+            logger.warning(f"{ctx_label}⚠️ Timeout na análise do LLM ({selected_provider}) para descoberta de site ({DISCOVERY_TIMEOUT}s). "
                           f"Tentativa {attempt + 1}/{DISCOVERY_MAX_RETRIES}")
             last_error = "timeout"
             continue  # Tentar novamente com outro provedor
@@ -534,12 +536,12 @@ async def find_company_website(
         except Exception as e:
             duration = (asyncio.get_event_loop().time() - start_time) * 1000 if 'start_time' in dir() else 0
             health_monitor.record_failure(selected_provider, FailureType.ERROR, duration)
-            logger.warning(f"⚠️ Erro na análise do LLM ({selected_provider}): {e}. "
+            logger.warning(f"{ctx_label}⚠️ Erro na análise do LLM ({selected_provider}): {e}. "
                           f"Tentativa {attempt + 1}/{DISCOVERY_MAX_RETRIES}")
             last_error = str(e)
             continue  # Tentar novamente com outro provedor
     
     # Todas as tentativas falharam
-    logger.error(f"❌ Erro na análise do LLM para descoberta de site após {DISCOVERY_MAX_RETRIES} tentativas. "
+    logger.error(f"{ctx_label}❌ Erro na análise do LLM para descoberta de site após {DISCOVERY_MAX_RETRIES} tentativas. "
                 f"Último erro: {last_error}")
     return None

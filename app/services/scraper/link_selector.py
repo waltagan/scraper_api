@@ -99,7 +99,8 @@ def prioritize_links(links: Set[str], base_url: str) -> List[str]:
 async def select_links_with_llm(
     links: Set[str], 
     base_url: str, 
-    max_links: int = 30
+    max_links: int = 30,
+    ctx_label: str = ""
 ) -> List[str]:
     """
     Usa LLM para selecionar links mais relevantes para construção de perfil.
@@ -108,6 +109,7 @@ async def select_links_with_llm(
         links: Conjunto de links encontrados na página
         base_url: URL base do site
         max_links: Número máximo de links a retornar
+        ctx_label: Label de contexto para logs
     
     Returns:
         Lista de links selecionados pelo LLM
@@ -120,7 +122,7 @@ async def select_links_with_llm(
     # Filtrar links não-HTML
     filtered_links = filter_non_html_links(links)
     logger.info(
-        f"Filtrados {len(links) - len(filtered_links)} links não-HTML. "
+        f"{ctx_label}Filtrados {len(links) - len(filtered_links)} links não-HTML. "
         f"Restam {len(filtered_links)} links válidos."
     )
     
@@ -130,7 +132,7 @@ async def select_links_with_llm(
     # Se poucos links, retornar todos
     if len(filtered_links) <= max_links:
         duration = time.perf_counter() - start_ts
-        logger.info(f"[PERF] select_links_llm duration={duration:.3f}s strategy=short_circuit")
+        logger.info(f"{ctx_label}[PERF] select_links_llm duration={duration:.3f}s strategy=short_circuit")
         return list(filtered_links)
     
     # Importar dependências de LLM
@@ -198,7 +200,7 @@ Responda APENAS com um JSON array contendo os números dos links selecionados (e
                 else:
                     selected_indices = []
         except:
-            logger.warning("LLM não retornou JSON válido, usando fallback")
+            logger.warning(f"{ctx_label}LLM não retornou JSON válido, usando fallback")
             return prioritize_links(filtered_links, base_url)[:max_links]
         
         sorted_links = sorted(filtered_links)
@@ -213,14 +215,14 @@ Responda APENAS com um JSON array contendo os números dos links selecionados (e
         
         # Se LLM retornou lista vazia, mas tínhamos links válidos, usar fallback heurístico
         if not selected_urls and filtered_links:
-            logger.warning("LLM retornou lista vazia de links, usando fallback heurístico para garantir navegação")
+            logger.warning(f"{ctx_label}LLM retornou lista vazia de links, usando fallback heurístico para garantir navegação")
             return prioritize_links(filtered_links, base_url)[:max_links]
 
         duration = time.perf_counter() - start_ts
-        logger.info(f"[PERF] select_links_llm duration={duration:.3f}s selected={len(selected_urls)} strategy=llm")
+        logger.info(f"{ctx_label}[PERF] select_links_llm duration={duration:.3f}s selected={len(selected_urls)} strategy=llm")
         return selected_urls[:max_links]
         
     except Exception as e:
-        logger.error(f"Erro ao usar LLM para selecionar links: {e}")
+        logger.error(f"{ctx_label}Erro ao usar LLM para selecionar links: {e}")
         return prioritize_links(filtered_links, base_url)[:max_links]
 

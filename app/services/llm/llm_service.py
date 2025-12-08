@@ -42,33 +42,35 @@ class LLMService:
             priorities=provider_manager.provider_priorities
         )
     
-    async def analyze(self, content: str) -> CompanyProfile:
+    async def analyze(self, content: str, ctx_label: str = "") -> CompanyProfile:
         """
         Analisa conteúdo e extrai perfil da empresa.
         
         Args:
             content: Texto para análise
+            ctx_label: Label de contexto para logs
         
         Returns:
             CompanyProfile com dados extraídos
         """
         start_time = time.perf_counter()
         tokens = estimate_tokens(content)
-        logger.info(f"LLMService: Analisando {tokens:,} tokens estimados")
+        logger.info(f"{ctx_label}LLMService: Analisando {tokens:,} tokens estimados")
         
         # Chunking
         chunks = chunk_content(content, llm_config.max_chunk_tokens)
-        logger.info(f"LLMService: {len(chunks)} chunks gerados")
+        logger.info(f"{ctx_label}LLMService: {len(chunks)} chunks gerados")
         
         if len(chunks) == 1:
-            return await self._process_single_chunk(chunks[0], start_time)
+            return await self._process_single_chunk(chunks[0], start_time, ctx_label)
         
-        return await self._process_multiple_chunks(chunks, start_time)
+        return await self._process_multiple_chunks(chunks, start_time, ctx_label)
     
     async def _process_single_chunk(
         self,
         chunk: str,
-        start_time: float
+        start_time: float,
+        ctx_label: str = ""
     ) -> CompanyProfile:
         """Processa chunk único com fallback entre providers."""
         providers_tried = []
@@ -80,42 +82,43 @@ class LLMService:
             )
             
             if not selection:
-                logger.error("LLMService: Nenhum provider disponível")
+                logger.error(f"{ctx_label}LLMService: Nenhum provider disponível")
                 break
             
             provider = selection.provider
             providers_tried.append(provider)
             
             try:
-                profile = await self._call_provider(provider, chunk)
+                profile = await self._call_provider(provider, chunk, ctx_label)
                 
                 duration = time.perf_counter() - start_time
-                logger.info(f"LLMService: Sucesso com {provider} em {duration:.2f}s")
+                logger.info(f"{ctx_label}LLMService: Sucesso com {provider} em {duration:.2f}s")
                 
                 return profile
             
             except ProviderBadRequestError:
-                logger.error(f"LLMService: BadRequest com {provider}, abortando")
+                logger.error(f"{ctx_label}LLMService: BadRequest com {provider}, abortando")
                 break
             
             except (ProviderRateLimitError, ProviderTimeoutError, ProviderError) as e:
-                logger.warning(f"LLMService: {provider} falhou: {type(e).__name__}")
+                logger.warning(f"{ctx_label}LLMService: {provider} falhou: {type(e).__name__}")
                 continue
         
         duration = time.perf_counter() - start_time
-        logger.error(f"LLMService: Todos providers falharam em {duration:.2f}s")
+        logger.error(f"{ctx_label}LLMService: Todos providers falharam em {duration:.2f}s")
         return CompanyProfile()
     
     async def _process_multiple_chunks(
         self,
         chunks: List[str],
-        start_time: float
+        start_time: float,
+        ctx_label: str = ""
     ) -> CompanyProfile:
         """Processa múltiplos chunks em paralelo."""
         providers = self.provider_manager.available_providers
         
         logger.info(
-            f"LLMService: Processando {len(chunks)} chunks com "
+            f"{ctx_label}LLMService: Processando {len(chunks)} chunks com "
             f"{len(providers)} providers"
         )
         
@@ -124,7 +127,7 @@ class LLMService:
         for i, chunk in enumerate(chunks):
             provider_idx = i % len(providers)
             provider = providers[provider_idx]
-            tasks.append(self._process_chunk_with_fallback(chunk, i + 1, len(chunks), provider))
+            tasks.append(self._process_chunk_with_fallback(chunk, i + 1, len(chunks), provider, ctx_label))
         
         # Executar em paralelo com timeout global
         try:
@@ -133,28 +136,28 @@ class LLMService:
                 timeout=240.0
             )
         except asyncio.TimeoutError:
-            logger.error("LLMService: Timeout global (240s)")
+            logger.error(f"{ctx_label}LLMService: Timeout global (240s)")
             results = []
         
         # Filtrar resultados válidos
         valid_profiles = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(f"LLMService: Chunk {i+1} falhou: {result}")
+                logger.error(f"{ctx_label}LLMService: Chunk {i+1} falhou: {result}")
             elif result is not None:
                 valid_profiles.append(result)
         
         if not valid_profiles:
             duration = time.perf_counter() - start_time
-            logger.error(f"LLMService: Todos chunks falharam em {duration:.2f}s")
+            logger.error(f"{ctx_label}LLMService: Todos chunks falharam em {duration:.2f}s")
             return CompanyProfile()
         
         # Consolidar resultados
-        logger.info(f"LLMService: Consolidando {len(valid_profiles)} perfis")
+        logger.info(f"{ctx_label}LLMService: Consolidando {len(valid_profiles)} perfis")
         final_profile = merge_profiles(valid_profiles)
         
         duration = time.perf_counter() - start_time
-        logger.info(f"LLMService: Concluído em {duration:.2f}s")
+        logger.info(f"{ctx_label}LLMService: Concluído em {duration:.2f}s")
         
         return final_profile
     
@@ -163,7 +166,8 @@ class LLMService:
         chunk: str,
         chunk_num: int,
         total_chunks: int,
-        primary_provider: str
+        primary_provider: str,
+        ctx_label: str = ""
     ) -> Optional[CompanyProfile]:
         """Processa chunk com fallback entre providers."""
         providers_order = [primary_provider] + [
@@ -173,32 +177,33 @@ class LLMService:
         
         for provider in providers_order:
             try:
-                logger.debug(f"LLMService: Chunk {chunk_num}/{total_chunks} -> {provider}")
-                profile = await self._call_provider(provider, chunk)
-                logger.info(f"LLMService: Chunk {chunk_num}/{total_chunks} OK com {provider}")
+                logger.debug(f"{ctx_label}LLMService: Chunk {chunk_num}/{total_chunks} -> {provider}")
+                profile = await self._call_provider(provider, chunk, ctx_label)
+                logger.info(f"{ctx_label}LLMService: Chunk {chunk_num}/{total_chunks} OK com {provider}")
                 return profile
             
             except ProviderBadRequestError:
-                logger.error(f"LLMService: Chunk {chunk_num} BadRequest, abortando")
+                logger.error(f"{ctx_label}LLMService: Chunk {chunk_num} BadRequest, abortando")
                 return None
             
             except Exception as e:
                 logger.warning(
-                    f"LLMService: Chunk {chunk_num} falhou com {provider}: "
+                    f"{ctx_label}LLMService: Chunk {chunk_num} falhou com {provider}: "
                     f"{type(e).__name__}"
                 )
                 continue
         
-        logger.error(f"LLMService: Chunk {chunk_num}/{total_chunks} falhou em todos providers")
+        logger.error(f"{ctx_label}LLMService: Chunk {chunk_num}/{total_chunks} falhou em todos providers")
         return None
     
-    async def _call_provider(self, provider: str, content: str) -> CompanyProfile:
+    async def _call_provider(self, provider: str, content: str, ctx_label: str = "") -> CompanyProfile:
         """
         Faz chamada ao provider e processa resposta.
         
         Args:
             provider: Nome do provider
             content: Conteúdo para análise
+            ctx_label: Label de contexto para logs
         
         Returns:
             CompanyProfile
@@ -215,7 +220,8 @@ class LLMService:
             response_content, latency_ms = await self.provider_manager.call(
                 provider=provider,
                 messages=messages,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                ctx_label=ctx_label
             )
             
             # Registrar sucesso
@@ -326,10 +332,10 @@ def get_llm_service() -> LLMService:
     return _llm_service
 
 
-async def analyze_content(text_content: str) -> CompanyProfile:
+async def analyze_content(text_content: str, ctx_label: str = "") -> CompanyProfile:
     """
     Função de conveniência para análise de conteúdo.
     Mantém compatibilidade com código existente.
     """
     service = get_llm_service()
-    return await service.analyze(text_content)
+    return await service.analyze(text_content, ctx_label=ctx_label)

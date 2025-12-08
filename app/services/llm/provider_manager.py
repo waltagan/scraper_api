@@ -182,7 +182,8 @@ class ProviderManager:
         messages: List[dict],
         timeout: float = None,
         temperature: float = 0.0,
-        response_format: dict = None
+        response_format: dict = None,
+        ctx_label: str = ""
     ) -> Tuple[str, float]:
         """
         Faz chamada a um provider.
@@ -193,6 +194,7 @@ class ProviderManager:
             timeout: Timeout opcional (usa padrão do provider se None)
             temperature: Temperatura da geração
             response_format: Formato de resposta (ex: {"type": "json_object"})
+            ctx_label: Label de contexto para logs
         
         Returns:
             Tuple de (response_content, latency_ms)
@@ -246,27 +248,27 @@ class ProviderManager:
             
             except RateLimitError as e:
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                logger.warning(f"ProviderManager: {provider} RATE_LIMIT após {latency_ms:.0f}ms")
+                logger.warning(f"{ctx_label}ProviderManager: {provider} RATE_LIMIT após {latency_ms:.0f}ms")
                 raise ProviderRateLimitError(str(e))
             
             except APITimeoutError as e:
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                logger.warning(f"ProviderManager: {provider} TIMEOUT após {latency_ms:.0f}ms")
+                logger.warning(f"{ctx_label}ProviderManager: {provider} TIMEOUT após {latency_ms:.0f}ms")
                 raise ProviderTimeoutError(str(e))
             
             except BadRequestError as e:
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                logger.error(f"ProviderManager: {provider} BAD_REQUEST: {e}")
+                logger.error(f"{ctx_label}ProviderManager: {provider} BAD_REQUEST: {e}")
                 raise ProviderBadRequestError(str(e))
             
             except asyncio.TimeoutError:
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                logger.warning(f"ProviderManager: {provider} ASYNC_TIMEOUT após {latency_ms:.0f}ms")
+                logger.warning(f"{ctx_label}ProviderManager: {provider} ASYNC_TIMEOUT após {latency_ms:.0f}ms")
                 raise ProviderTimeoutError("Async timeout")
             
             except Exception as e:
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                logger.error(f"ProviderManager: {provider} ERROR: {type(e).__name__}: {e}")
+                logger.error(f"{ctx_label}ProviderManager: {provider} ERROR: {type(e).__name__}: {e}")
                 raise ProviderError(str(e))
     
     async def call_with_retry(

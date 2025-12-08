@@ -172,7 +172,7 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "") -> 
     
     # 2. ANALISAR SITE
     analysis_start = time.perf_counter()
-    site_profile = await site_analyzer.analyze(url)
+    site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
     analysis_time_ms = (time.perf_counter() - analysis_start) * 1000
     
     # 3. SELECIONAR ESTRATÉGIAS (priorizar conhecimento prévio)
@@ -227,7 +227,7 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "") -> 
     # 6. SELECIONAR SUBPÁGINAS RELEVANTES
     # Sempre buscar subpáginas relevantes para compor perfil completo
     target_subpages = await select_links_with_llm(
-        set(main_page.links), url, max_links=max_subpages
+        set(main_page.links), url, max_links=max_subpages, ctx_label=ctx_label
     )
     
     # 7. SCRAPE SUBPAGES

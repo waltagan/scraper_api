@@ -55,17 +55,18 @@ class SiteAnalyzer:
         self.timeout = timeout
         self.probe_attempts = probe_attempts  # Reduzido de 3 para 1 para performance
     
-    async def analyze(self, url: str) -> SiteProfile:
+    async def analyze(self, url: str, ctx_label: str = "") -> SiteProfile:
         """
         Analisa site e retorna perfil completo com recomendações.
         
         Args:
             url: URL do site para analisar
+            ctx_label: Label de contexto para logs
         
         Returns:
             SiteProfile com informações e recomendações
         """
-        logger.info(f"🔍 Analisando site: {url}")
+        logger.info(f"{ctx_label}🔍 Analisando site: {url}")
         
         profile = SiteProfile(url=url)
         
@@ -105,13 +106,13 @@ class SiteAnalyzer:
             profile.best_strategy = self._select_best_strategy(profile)
             
             logger.info(
-                f"✅ Análise completa: tipo={profile.site_type.value}, "
+                f"{ctx_label}✅ Análise completa: tipo={profile.site_type.value}, "
                 f"proteção={profile.protection_type.value}, "
                 f"estratégia={profile.best_strategy.value}"
             )
             
         except Exception as e:
-            logger.error(f"❌ Erro ao analisar {url}: {e}")
+            logger.error(f"{ctx_label}❌ Erro ao analisar {url}: {e}")
             profile.error_message = str(e)
             profile.best_strategy = ScrapingStrategy.ROBUST
         

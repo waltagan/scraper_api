@@ -76,14 +76,15 @@ async def analyze_company(request: CompanyRequest):
                     detail="Deve fornecer URL ou dados da empresa (razao_social, nome_fantasia, cnpj)"
                 )
             
-            logger.info(f"{ctx_label} [DISCOVERY] Iniciando busca")
+            logger.info(f"{ctx_label}[DISCOVERY] Iniciando busca")
             found_url = await find_company_website(
                 request.razao_social or "",
                 request.nome_fantasia or "",
                 request.cnpj or "",
                 email=request.email,
                 municipio=request.municipio,
-                cnaes=request.cnaes
+                cnaes=request.cnaes,
+                ctx_label=ctx_label
             )
             
             if not found_url:
@@ -153,7 +154,7 @@ async def process_analysis(url: str, ctx_label: str = "") -> CompanyProfile:
 
     # 3. LLM Analysis
     llm_start = time.perf_counter()
-    profile = await analyze_content(combined_text)
+    profile = await analyze_content(combined_text, ctx_label=ctx_label)
     llm_duration = time.perf_counter() - llm_start
     logger.info(
         f"{ctx_label} [PERF] process_analysis step=llm_analysis url={url} "
