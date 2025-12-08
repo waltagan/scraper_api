@@ -59,7 +59,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def analyze_company(request: CompanyRequest):
     """
     Analyzes a company. Accepts URL directly OR company details (razao_social, nome_fantasia, cnpj) to find the website automatically.
-    Enforces a 300-second hard timeout.
+    Enforces a 240-second hard timeout.
     """
     start_ts = time.perf_counter()
     url_str = str(request.url) if request.url else None
@@ -94,7 +94,7 @@ async def analyze_company(request: CompanyRequest):
 
         # Wrap the orchestration in a task to enforce timeout
         logger.info(f"[PERF] analyze_company start url={url_str}")
-        result = await asyncio.wait_for(process_analysis(url_str), timeout=300.0)
+        result = await asyncio.wait_for(process_analysis(url_str), timeout=240.0)
         
         # Add discovery source metadata if discovered
         if not request.url and url_str:
@@ -108,7 +108,7 @@ async def analyze_company(request: CompanyRequest):
     except asyncio.TimeoutError:
         total = time.perf_counter() - start_ts
         logger.error(f"[PERF] analyze_company timeout url={url_str} total={total:.3f}s")
-        raise HTTPException(status_code=504, detail="Analysis timed out (exceeded 300s)")
+        raise HTTPException(status_code=504, detail="Analysis timed out (exceeded 240s)")
     except Exception as e:
         # Errors raised inside process_analysis (like LLM failure after retries) will be caught here
         total = time.perf_counter() - start_ts

@@ -77,9 +77,9 @@ class ProviderManager:
         
         # Converter RPM para concorrência máxima razoável
         # max_concurrent = (RPM * safety_margin) / 60 * avg_request_time_seconds
-        # Assumindo ~5s por request, max_concurrent = RPM * 0.8 / 12
-        gemini_concurrent = int(gemini_rpm * safety_margin / 12)  # ~666 para 10K RPM
-        openai_concurrent = int(openai_rpm * safety_margin / 12)  # ~333 para 5K RPM
+        # Configuração de produção: mínimo 300 para alta carga
+        gemini_concurrent = max(300, int(gemini_rpm * safety_margin / 12))  # mínimo 300
+        openai_concurrent = max(300, int(openai_rpm * safety_margin / 12))  # mínimo 300
         
         logger.info(f"LLM Limits: Gemini RPM={gemini_rpm}, concurrent={gemini_concurrent}")
         logger.info(f"LLM Limits: OpenAI RPM={openai_rpm}, concurrent={openai_concurrent}")
@@ -106,7 +106,7 @@ class ProviderManager:
                 api_key=settings.OPENROUTER_API_KEY or "",
                 base_url=settings.OPENROUTER_BASE_URL,
                 model=settings.OPENROUTER_MODEL,
-                max_concurrent=200,  # Fallback robusto
+                max_concurrent=300,  # Fallback robusto - alta concorrência
                 priority=10
             ),
         ]

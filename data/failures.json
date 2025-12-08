@@ -14126,5 +14126,909 @@
     "retry_count": 0,
     "error_message": "No content",
     "duration_ms": 92594.81258317828
+  },
+  {
+    "timestamp": "2025-12-08T17:17:37.394980",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.hidrauflex.com/",
+    "domain": "www.hidrauflex.com",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.hidrauflex.com/ respondeu",
+    "duration_ms": 1130.855165887624
+  },
+  {
+    "timestamp": "2025-12-08T17:17:46.504431",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://www.cmsprojetos.com.br/",
+    "domain": "www.cmsprojetos.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 9706.184042152017
+  },
+  {
+    "timestamp": "2025-12-08T17:17:47.163548",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://cdclinicadermatologica.com.br/",
+    "domain": "cdclinicadermatologica.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://cdclinicadermatologica.com.br/ respondeu",
+    "duration_ms": 5804.409165866673
+  },
+  {
+    "timestamp": "2025-12-08T17:18:01.862784",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.eletromotores.com.br/",
+    "domain": "www.eletromotores.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 25387.57483381778
+  },
+  {
+    "timestamp": "2025-12-08T17:18:12.751573",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.livta.com.br/",
+    "domain": "www.livta.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 34436.14212470129
+  },
+  {
+    "timestamp": "2025-12-08T17:18:14.963388",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://leocar.com.br/",
+    "domain": "leocar.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 39072.453916072845
+  },
+  {
+    "timestamp": "2025-12-08T17:18:15.445874",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://gragro.com.br/",
+    "domain": "gragro.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 38559.90970879793
+  },
+  {
+    "timestamp": "2025-12-08T17:18:49.627755",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.belerique.com.br/",
+    "domain": "www.belerique.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.belerique.com.br/ respondeu",
+    "duration_ms": 2310.052459128201
+  },
+  {
+    "timestamp": "2025-12-08T17:19:09.208071",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://theraenergy.com/",
+    "domain": "theraenergy.com",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://theraenergy.com/ respondeu",
+    "duration_ms": 10041.216332931072
+  },
+  {
+    "timestamp": "2025-12-08T17:19:44.195756",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://ecoventuresbrasil.com/",
+    "domain": "ecoventuresbrasil.com",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://ecoventuresbrasil.com/ respondeu",
+    "duration_ms": 81351.52816586196
+  },
+  {
+    "timestamp": "2025-12-08T17:19:46.489499",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://autosales.com.br/",
+    "domain": "autosales.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 49644.727166276425
+  },
+  {
+    "timestamp": "2025-12-08T17:19:59.371114",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://verticeoficial.com.br/produtos/",
+    "domain": "verticeoficial.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 5206.233333796263
+  },
+  {
+    "timestamp": "2025-12-08T17:20:01.170641",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://www.cnutra.com.br/",
+    "domain": "www.cnutra.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 6417.998041026294
+  },
+  {
+    "timestamp": "2025-12-08T17:20:08.175265",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://columbiaengenharia.com/",
+    "domain": "columbiaengenharia.com",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "aggressive",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 13673.810207750648
+  },
+  {
+    "timestamp": "2025-12-08T17:20:59.554942",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.jmtratores.com.br/",
+    "domain": "www.jmtratores.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 44376.12129142508
+  },
+  {
+    "timestamp": "2025-12-08T17:21:18.879072",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.teanalitica.com.br/",
+    "domain": "www.teanalitica.com.br",
+    "context": {
+      "site_type": "spa"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 17403.453750070184
+  },
+  {
+    "timestamp": "2025-12-08T17:21:35.026264",
+    "module": "llm",
+    "error_type": "llm_provider_error",
+    "url": "OpenRouter",
+    "domain": "OpenRouter",
+    "context": {
+      "provider": "OpenRouter"
+    },
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Error code: 404 - {'error': {'message': 'No endpoints found for google/gemini-pro-1.5.', 'code': 404}, 'user_id': 'user_2vS1iXumY7jO3PNPRLEq6vqyHhk'}",
+    "duration_ms": 0.0
+  },
+  {
+    "timestamp": "2025-12-08T17:21:35.430237",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://www.reobotepersianas.com.br/",
+    "domain": "www.reobotepersianas.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 25270.19379194826
+  },
+  {
+    "timestamp": "2025-12-08T17:21:47.661158",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.costadistribuidora.com.br/",
+    "domain": "www.costadistribuidora.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 37246.97187496349
+  },
+  {
+    "timestamp": "2025-12-08T17:21:56.469993",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.grandcorp.com.br/",
+    "domain": "www.grandcorp.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.grandcorp.com.br/ respondeu",
+    "duration_ms": 15292.292166966945
+  },
+  {
+    "timestamp": "2025-12-08T17:22:25.652863",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://gtm.net.br/",
+    "domain": "gtm.net.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://gtm.net.br/ respondeu",
+    "duration_ms": 7070.396665949374
+  },
+  {
+    "timestamp": "2025-12-08T17:22:33.310933",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://paranadrill.com.br/",
+    "domain": "paranadrill.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 5111.4082504063845
+  },
+  {
+    "timestamp": "2025-12-08T17:22:38.646005",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://vhlperfuracao.com.br/",
+    "domain": "vhlperfuracao.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 10452.476541977376
+  },
+  {
+    "timestamp": "2025-12-08T17:22:40.305492",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.groupblackhills.com.br/",
+    "domain": "www.groupblackhills.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 10033.55941735208
+  },
+  {
+    "timestamp": "2025-12-08T17:23:09.175091",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.tecleimports.com.br/",
+    "domain": "www.tecleimports.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 50599.74483400583
+  },
+  {
+    "timestamp": "2025-12-08T17:23:30.834083",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "http://www.gessosouza.com.br/",
+    "domain": "www.gessosouza.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de http://www.gessosouza.com.br/ respondeu",
+    "duration_ms": 102753.16583318636
+  },
+  {
+    "timestamp": "2025-12-08T17:23:43.182727",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.suprinte.com.br/",
+    "domain": "www.suprinte.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.suprinte.com.br/ respondeu",
+    "duration_ms": 56174.49962487444
+  },
+  {
+    "timestamp": "2025-12-08T17:23:52.606981",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://goldentech.ind.br/",
+    "domain": "goldentech.ind.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 36801.46500002593
+  },
+  {
+    "timestamp": "2025-12-08T17:23:53.320061",
+    "module": "llm",
+    "error_type": "llm_provider_error",
+    "url": "OpenRouter",
+    "domain": "OpenRouter",
+    "context": {
+      "provider": "OpenRouter"
+    },
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Error code: 404 - {'error': {'message': 'No endpoints found for google/gemini-pro-1.5.', 'code': 404}, 'user_id': 'user_2vS1iXumY7jO3PNPRLEq6vqyHhk'}",
+    "duration_ms": 0.0
+  },
+  {
+    "timestamp": "2025-12-08T17:24:02.669127",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://circuitengenharia.com.br/",
+    "domain": "circuitengenharia.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://circuitengenharia.com.br/ respondeu",
+    "duration_ms": 5502.435333095491
+  },
+  {
+    "timestamp": "2025-12-08T17:24:11.360966",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://agrovalente.com/",
+    "domain": "agrovalente.com",
+    "context": {
+      "site_type": "unknown"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 46675.00570835546
+  },
+  {
+    "timestamp": "2025-12-08T17:24:25.573066",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://clarityengenharia.com.br/",
+    "domain": "clarityengenharia.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://clarityengenharia.com.br/ respondeu",
+    "duration_ms": 17837.495125364512
+  },
+  {
+    "timestamp": "2025-12-08T17:24:27.914478",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://plastinobre.com/",
+    "domain": "plastinobre.com",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 74660.12920811772
+  },
+  {
+    "timestamp": "2025-12-08T17:24:38.010899",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://mayronschoperia.com.br/",
+    "domain": "mayronschoperia.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 111016.87791664153
+  },
+  {
+    "timestamp": "2025-12-08T17:25:03.607456",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.henriquemotos.com.br/",
+    "domain": "www.henriquemotos.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.henriquemotos.com.br/ respondeu",
+    "duration_ms": 103461.45724970847
+  },
+  {
+    "timestamp": "2025-12-08T17:25:13.167756",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.amorsaude.com/",
+    "domain": "www.amorsaude.com",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 36787.11270773783
+  },
+  {
+    "timestamp": "2025-12-08T17:25:15.771766",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.uroclinmacaerj.com.br/?r=4705748903304",
+    "domain": "www.uroclinmacaerj.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.uroclinmacaerj.com.br/?r=4705748903304 respondeu",
+    "duration_ms": 148.89449998736382
+  },
+  {
+    "timestamp": "2025-12-08T17:28:07.697841",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.belerique.com.br/",
+    "domain": "www.belerique.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.belerique.com.br/ respondeu",
+    "duration_ms": 7838.21937488392
+  },
+  {
+    "timestamp": "2025-12-08T17:28:09.479452",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "http://construtorajrc.com.br/index.html",
+    "domain": "construtorajrc.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de http://construtorajrc.com.br/index.html respondeu",
+    "duration_ms": 11220.695624593645
+  },
+  {
+    "timestamp": "2025-12-08T17:28:12.236793",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://celestinofood.com/",
+    "domain": "celestinofood.com",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://celestinofood.com/ respondeu",
+    "duration_ms": 7949.077874887735
+  },
+  {
+    "timestamp": "2025-12-08T17:28:30.364053",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://goldentech.ind.br/",
+    "domain": "goldentech.ind.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 33911.08954232186
+  },
+  {
+    "timestamp": "2025-12-08T17:28:31.425775",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.packpet.com.br/",
+    "domain": "www.packpet.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.packpet.com.br/ respondeu",
+    "duration_ms": 34997.731166891754
+  },
+  {
+    "timestamp": "2025-12-08T17:28:51.675102",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.uroclinmacaerj.com.br/?r=4705748903304",
+    "domain": "www.uroclinmacaerj.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.uroclinmacaerj.com.br/?r=4705748903304 respondeu",
+    "duration_ms": 25457.27083319798
+  },
+  {
+    "timestamp": "2025-12-08T17:28:51.701564",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.suprinte.com.br/",
+    "domain": "www.suprinte.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.suprinte.com.br/ respondeu",
+    "duration_ms": 51581.51183323935
+  },
+  {
+    "timestamp": "2025-12-08T17:29:07.661780",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://www.cnutra.com.br/",
+    "domain": "www.cnutra.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 59197.69104197621
+  },
+  {
+    "timestamp": "2025-12-08T17:29:09.947579",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.tecleimports.com.br/",
+    "domain": "www.tecleimports.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 71378.74287506565
+  },
+  {
+    "timestamp": "2025-12-08T17:29:10.098698",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://columbiaengenharia.com/",
+    "domain": "columbiaengenharia.com",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "aggressive",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 68184.77058270946
+  },
+  {
+    "timestamp": "2025-12-08T17:29:13.487148",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.grandcorp.com.br/cadastro",
+    "domain": "www.grandcorp.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.grandcorp.com.br/cadastro respondeu",
+    "duration_ms": 42034.40483380109
+  },
+  {
+    "timestamp": "2025-12-08T17:29:17.133621",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.amorsaude.com/",
+    "domain": "www.amorsaude.com",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 61699.19295795262
+  },
+  {
+    "timestamp": "2025-12-08T17:29:19.431942",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://www.reobotepersianas.com.br/",
+    "domain": "www.reobotepersianas.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 75410.64545838162
+  },
+  {
+    "timestamp": "2025-12-08T17:29:19.729531",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://circuitengenharia.com.br/",
+    "domain": "circuitengenharia.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://circuitengenharia.com.br/ respondeu",
+    "duration_ms": 11015.034958254546
+  },
+  {
+    "timestamp": "2025-12-08T17:29:21.361642",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://www.autosales.com.br/",
+    "domain": "www.autosales.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 66526.96841722354
+  },
+  {
+    "timestamp": "2025-12-08T17:29:44.664187",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.costadistribuidora.com.br/",
+    "domain": "www.costadistribuidora.com.br",
+    "context": {
+      "site_type": "unknown"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 81772.0554578118
+  },
+  {
+    "timestamp": "2025-12-08T17:29:46.597933",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://clarityengenharia.com.br/",
+    "domain": "clarityengenharia.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://clarityengenharia.com.br/ respondeu",
+    "duration_ms": 29937.739624641836
+  },
+  {
+    "timestamp": "2025-12-08T17:29:58.179156",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://vhlperfuracao.com.br/",
+    "domain": "vhlperfuracao.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 47886.259582825005
+  },
+  {
+    "timestamp": "2025-12-08T17:29:59.548765",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.eletromotores.com.br/",
+    "domain": "www.eletromotores.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 96659.37204100192
+  },
+  {
+    "timestamp": "2025-12-08T17:30:02.132189",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://leocar.com.br/",
+    "domain": "leocar.com.br",
+    "context": {
+      "site_type": "unknown"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 99243.85779211298
+  },
+  {
+    "timestamp": "2025-12-08T17:30:02.582353",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.groupblackhills.com.br/",
+    "domain": "www.groupblackhills.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 45921.96183372289
+  },
+  {
+    "timestamp": "2025-12-08T17:30:08.132672",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://paranadrill.com.br/",
+    "domain": "paranadrill.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 23915.450708009303
+  },
+  {
+    "timestamp": "2025-12-08T17:30:21.867327",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.henriquemotos.com.br/",
+    "domain": "www.henriquemotos.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.henriquemotos.com.br/ respondeu",
+    "duration_ms": 113671.41962517053
+  },
+  {
+    "timestamp": "2025-12-08T17:30:32.746197",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://agrovalente.com/index.php?route=information/information&information_id=4",
+    "domain": "agrovalente.com",
+    "context": {
+      "site_type": "unknown"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 127211.73345763236
+  },
+  {
+    "timestamp": "2025-12-08T17:30:35.842044",
+    "module": "llm",
+    "error_type": "llm_provider_error",
+    "url": "OpenRouter",
+    "domain": "OpenRouter",
+    "context": {
+      "provider": "OpenRouter"
+    },
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Error code: 404 - {'error': {'message': 'No endpoints found for google/gemini-pro-1.5.', 'code': 404}, 'user_id': 'user_2vS1iXumY7jO3PNPRLEq6vqyHhk'}",
+    "duration_ms": 0.0
+  },
+  {
+    "timestamp": "2025-12-08T17:30:36.242353",
+    "module": "llm",
+    "error_type": "llm_provider_error",
+    "url": "OpenRouter",
+    "domain": "OpenRouter",
+    "context": {
+      "provider": "OpenRouter"
+    },
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Error code: 404 - {'error': {'message': 'No endpoints found for google/gemini-pro-1.5.', 'code': 404}, 'user_id': 'user_2vS1iXumY7jO3PNPRLEq6vqyHhk'}",
+    "duration_ms": 0.0
+  },
+  {
+    "timestamp": "2025-12-08T17:30:36.266491",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.teanalitica.com.br/",
+    "domain": "www.teanalitica.com.br",
+    "context": {
+      "site_type": "unknown"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 70094.22537498176
+  },
+  {
+    "timestamp": "2025-12-08T17:30:36.304425",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.multplast.ind.br/",
+    "domain": "www.multplast.ind.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 28412.680624984205
+  },
+  {
+    "timestamp": "2025-12-08T17:30:36.547972",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "https://www.livta.com.br/",
+    "domain": "www.livta.com.br",
+    "context": {
+      "site_type": "unknown"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 29106.101334095
+  },
+  {
+    "timestamp": "2025-12-08T17:30:37.933727",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://www.vmpbrasil.com.br/",
+    "domain": "www.vmpbrasil.com.br",
+    "context": {
+      "site_type": "unknown"
+    },
+    "strategy_used": "robust",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 72194.66641684994
+  },
+  {
+    "timestamp": "2025-12-08T17:30:40.093889",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "https://www.dmservice.ind.br/",
+    "domain": "www.dmservice.ind.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "Nenhuma variação de https://www.dmservice.ind.br/ respondeu",
+    "duration_ms": 144015.39254188538
   }
 ]

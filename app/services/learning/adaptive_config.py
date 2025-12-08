@@ -27,8 +27,8 @@ class AdaptiveState:
     circuit_breaker_threshold: int = 5
     
     # Configurações do LLM
-    llm_max_concurrent: int = 50
-    llm_timeout: int = 60
+    llm_max_concurrent: int = 300
+    llm_timeout: int = 240
     llm_chunk_tokens: int = 500000
     
     # Estatísticas de aprendizado
