@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Busca Fornecedor - Documentação do Sistema</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">🔍</span>
+                <span class="logo-text">Busca Fornecedor</span>
+            </div>
+            <span class="version">v2.0</span>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Visão Geral</div>
+            <a href="#overview" class="nav-link active">
+                <span class="nav-icon">📊</span> Overview
+            </a>
+            <a href="#architecture" class="nav-link">
+                <span class="nav-icon">🏗️</span> Arquitetura
+            </a>
+            <a href="#flow" class="nav-link">
+                <span class="nav-icon">🔄</span> Fluxo do Sistema
+            </a>
+            <a href="flow-diagram.html" class="nav-link" style="background: rgba(139, 92, 246, 0.1); border-left: 3px solid #8b5cf6;">
+                <span class="nav-icon">📐</span> Diagrama Completo
+            </a>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Etapas</div>
+            <a href="#discovery" class="nav-link">
+                <span class="nav-icon">🔎</span> Discovery
+            </a>
+            <a href="#scrape" class="nav-link">
+                <span class="nav-icon">🌐</span> Scrape
+            </a>
+            <a href="#profile" class="nav-link">
+                <span class="nav-icon">🤖</span> Profile (LLM)
+            </a>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Configuração</div>
+            <a href="#config" class="nav-link">
+                <span class="nav-icon">⚙️</span> Parâmetros
+            </a>
+            <a href="#api" class="nav-link">
+                <span class="nav-icon">🔌</span> API Reference
+            </a>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Métricas</div>
+            <a href="#metrics" class="nav-link">
+                <span class="nav-icon">📈</span> Performance
+            </a>
+            <a href="#errors" class="nav-link">
+                <span class="nav-icon">⚠️</span> Erros Comuns
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="header">
+            <button class="menu-toggle" id="menuToggle">☰</button>
+            <div class="header-title">
+                <h1>Sistema de Construção de Perfis B2B</h1>
+                <p>Documentação Técnica Completa</p>
+            </div>
+            <div class="header-actions">
+                <span class="status-badge success">Produção</span>
+            </div>
+        </header>
+
+        <!-- Overview Section -->
+        <section id="overview" class="section">
+            <div class="section-header">
+                <h2>📊 Visão Geral</h2>
+                <p>Sistema para construção automática de perfis de empresas B2B brasileiras</p>
+            </div>
+            
+            <div class="cards-grid">
+                <div class="card highlight">
+                    <div class="card-icon">🎯</div>
+                    <div class="card-content">
+                        <h3>Objetivo</h3>
+                        <p>Construir perfis completos de empresas em até <strong>90 segundos</strong></p>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">📈</div>
+                    <div class="card-content">
+                        <h3>Taxa de Sucesso</h3>
+                        <p class="metric">~80%</p>
+                        <span class="metric-label">das empresas com site</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">⚡</div>
+                    <div class="card-content">
+                        <h3>Throughput</h3>
+                        <p class="metric">155/min</p>
+                        <span class="metric-label">empresas processadas</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">💾</div>
+                    <div class="card-content">
+                        <h3>Uso de RAM</h3>
+                        <p class="metric">~3.5GB</p>
+                        <span class="metric-label">300 empresas paralelas</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Architecture Section -->
+        <section id="architecture" class="section">
+            <div class="section-header">
+                <h2>🏗️ Arquitetura</h2>
+                <p>Visão de alto nível dos componentes do sistema</p>
+            </div>
+            
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="layer-title">API Layer</div>
+                    <div class="arch-components">
+                        <div class="arch-component">FastAPI</div>
+                        <div class="arch-component">Rate Limiter</div>
+                        <div class="arch-component">Auth</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <div class="layer-title">Service Layer</div>
+                    <div class="arch-components">
+                        <div class="arch-component discovery">Discovery Service</div>
+                        <div class="arch-component scrape">Scraper Service</div>
+                        <div class="arch-component profile">LLM Service</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <div class="layer-title">Infrastructure</div>
+                    <div class="arch-components">
+                        <div class="arch-component">Proxy Manager</div>
+                        <div class="arch-component">Circuit Breaker</div>
+                        <div class="arch-component">Learning Engine</div>
+                    </div>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <div class="layer-title">External Services</div>
+                    <div class="arch-components external">
+                        <div class="arch-component">Serper API</div>
+                        <div class="arch-component">Google Gemini</div>
+                        <div class="arch-component">OpenAI</div>
+                        <div class="arch-component">WebShare Proxies</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Flow Section - Interactive Visualization -->
+        <section id="flow" class="section">
+            <div class="section-header">
+                <h2>🔄 Fluxo do Sistema</h2>
+                <p>Clique nas etapas para ver detalhes • Arraste para explorar</p>
+                <a href="flow-diagram.html" style="display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 12px 24px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%); border: 1px solid rgba(139, 92, 246, 0.4); border-radius: 8px; color: #f9fafb; text-decoration: none; font-weight: 500; transition: all 0.2s;">
+                    <span>📐</span> Ver Diagrama Ultra-Detalhado
+                    <span style="font-size: 12px; opacity: 0.7;">→</span>
+                </a>
+            </div>
+            
+            <div class="flow-container" id="flowContainer">
+                <!-- Input -->
+                <div class="flow-node input-node" data-stage="input">
+                    <div class="node-icon">📥</div>
+                    <div class="node-title">Input</div>
+                    <div class="node-subtitle">Dados da Empresa</div>
+                </div>
+                
+                <div class="flow-connector"></div>
+                
+                <!-- Stage 1: Discovery -->
+                <div class="flow-stage discovery-stage" id="discoveryStage">
+                    <div class="stage-header" onclick="toggleStage('discovery')">
+                        <div class="stage-number">1</div>
+                        <div class="stage-info">
+                            <h3>Discovery</h3>
+                            <span class="stage-time">~8s</span>
+                        </div>
+                        <div class="stage-toggle">▼</div>
+                    </div>
+                    <div class="stage-content" id="discoveryContent">
+                        <div class="substeps">
+                            <div class="substep" data-substep="search">
+                                <div class="substep-icon">🔍</div>
+                                <div class="substep-info">
+                                    <strong>1.1 Busca Google</strong>
+                                    <p>Serper API - até 3 queries</p>
+                                </div>
+                                <div class="substep-time">~2s</div>
+                            </div>
+                            <div class="substep" data-substep="filter">
+                                <div class="substep-icon">🚫</div>
+                                <div class="substep-info">
+                                    <strong>1.2 Filtro Blacklist</strong>
+                                    <p>Remove diretórios, redes sociais</p>
+                                </div>
+                                <div class="substep-time">~10ms</div>
+                            </div>
+                            <div class="substep" data-substep="llm-analysis">
+                                <div class="substep-icon">🤖</div>
+                                <div class="substep-info">
+                                    <strong>1.3 Análise LLM</strong>
+                                    <p>Identifica site oficial</p>
+                                </div>
+                                <div class="substep-time">~5s</div>
+                            </div>
+                        </div>
+                        <div class="stage-params">
+                            <div class="param-title">Parâmetros</div>
+                            <div class="param-grid">
+                                <div class="param">
+                                    <span class="param-name">DISCOVERY_TIMEOUT</span>
+                                    <span class="param-value">60s</span>
+                                </div>
+                                <div class="param">
+                                    <span class="param-name">MAX_RETRIES</span>
+                                    <span class="param-value">3</span>
+                                </div>
+                                <div class="param">
+                                    <span class="param-name">SERPER_RATE_LIMIT</span>
+                                    <span class="param-value">240/s</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stage-notes">
+                            <div class="note info">
+                                <strong>📝 Nota:</strong> Taxa de sucesso ~95%. Falhas geralmente são empresas sem presença online.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-connector"></div>
+
+                <!-- Stage 2: Scrape -->
+                <div class="flow-stage scrape-stage" id="scrapeStage">
+                    <div class="stage-header" onclick="toggleStage('scrape')">
+                        <div class="stage-number">2</div>
+                        <div class="stage-info">
+                            <h3>Scrape</h3>
+                            <span class="stage-time">~45s</span>
+                        </div>
+                        <div class="stage-toggle">▼</div>
+                    </div>
+                    <div class="stage-content" id="scrapeContent">
+                        <div class="substeps">
+                            <div class="substep">
+                                <div class="substep-icon">🎯</div>
+                                <div class="substep-info">
+                                    <strong>2.1 Probe URL</strong>
+                                    <p>Testa http/https, www/sem-www</p>
+                                </div>
+                                <div class="substep-time">~2s</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">🔬</div>
+                                <div class="substep-info">
+                                    <strong>2.2 Análise do Site</strong>
+                                    <p>Detecta tipo (static/SPA) e proteções</p>
+                                </div>
+                                <div class="substep-time">~3s</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">📋</div>
+                                <div class="substep-info">
+                                    <strong>2.3 Seleção de Estratégia</strong>
+                                    <p>FAST → STANDARD → ROBUST → AGGRESSIVE</p>
+                                </div>
+                                <div class="substep-time">~1ms</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">📄</div>
+                                <div class="substep-info">
+                                    <strong>2.4 Scrape Main Page</strong>
+                                    <p>curl_cffi com fallback</p>
+                                </div>
+                                <div class="substep-time">~5s</div>
+                            </div>
+                            <div class="substep rescue-substep">
+                                <div class="substep-icon">🆘</div>
+                                <div class="substep-info">
+                                    <strong>2.4.1 RESCUE (se &lt;500 chars)</strong>
+                                    <p>Tenta 3 subpages antes de desistir</p>
+                                </div>
+                                <div class="substep-time">~10s</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">🔗</div>
+                                <div class="substep-info">
+                                    <strong>2.5 Seleção de Links</strong>
+                                    <p>LLM escolhe até 30 links relevantes</p>
+                                </div>
+                                <div class="substep-time">~2s</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">📚</div>
+                                <div class="substep-info">
+                                    <strong>2.6 Scrape Subpages</strong>
+                                    <p>Paralelo com proxy rotation</p>
+                                </div>
+                                <div class="substep-time">~30s</div>
+                            </div>
+                        </div>
+                        <div class="stage-params">
+                            <div class="param-title">Parâmetros</div>
+                            <div class="param-grid">
+                                <div class="param">
+                                    <span class="param-name">MIN_CONTENT_LENGTH</span>
+                                    <span class="param-value">500 chars</span>
+                                </div>
+                                <div class="param">
+                                    <span class="param-name">MAX_SUBPAGES</span>
+                                    <span class="param-value">30</span>
+                                </div>
+                                <div class="param">
+                                    <span class="param-name">CHUNK_SIZE</span>
+                                    <span class="param-value">10</span>
+                                </div>
+                                <div class="param">
+                                    <span class="param-name">RESCUE_LIMIT</span>
+                                    <span class="param-value">3 páginas</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stage-notes">
+                            <div class="note warning">
+                                <strong>⚠️ Limitação:</strong> Sites SPA que requerem JavaScript têm extração limitada (sem browser headless por restrição de RAM).
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-connector"></div>
+
+                <!-- Stage 3: Profile -->
+                <div class="flow-stage profile-stage" id="profileStage">
+                    <div class="stage-header" onclick="toggleStage('profile')">
+                        <div class="stage-number">3</div>
+                        <div class="stage-info">
+                            <h3>Profile (LLM)</h3>
+                            <span class="stage-time">~12s</span>
+                        </div>
+                        <div class="stage-toggle">▼</div>
+                    </div>
+                    <div class="stage-content" id="profileContent">
+                        <div class="substeps">
+                            <div class="substep">
+                                <div class="substep-icon">✂️</div>
+                                <div class="substep-info">
+                                    <strong>3.1 Chunking</strong>
+                                    <p>Divide conteúdo em chunks de ~8k tokens</p>
+                                </div>
+                                <div class="substep-time">~100ms</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">🤖</div>
+                                <div class="substep-info">
+                                    <strong>3.2 Processamento LLM</strong>
+                                    <p>Gemini/OpenAI com fallback</p>
+                                </div>
+                                <div class="substep-time">~10s</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">🔀</div>
+                                <div class="substep-info">
+                                    <strong>3.3 Merge de Perfis</strong>
+                                    <p>Consolida chunks em perfil único</p>
+                                </div>
+                                <div class="substep-time">~100ms</div>
+                            </div>
+                            <div class="substep">
+                                <div class="substep-icon">✅</div>
+                                <div class="substep-info">
+                                    <strong>3.4 Normalização</strong>
+                                    <p>Valida e normaliza JSON</p>
+                                </div>
+                                <div class="substep-time">~50ms</div>
+                            </div>
+                        </div>
+                        <div class="stage-params">
+                            <div class="param-title">Parâmetros</div>
+                            <div class="param-grid">
+                                <div class="param">
+                                    <span class="param-name">MAX_CHUNK_TOKENS</span>
+                                    <span class="param-value">8000</span>
+                                </div>
+                                <div class="param">
+                                    <span class="param-name">LLM_TIMEOUT</span>
+                                    <span class="param-value">120s</span>
+                                </div>
+                                <div class="param">
+                                    <span class="param-name">PROVIDERS</span>
+                                    <span class="param-value">Gemini, OpenAI</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stage-notes">
+                            <div class="note success">
+                                <strong>✅ Resultado:</strong> CompanyProfile com identity, classification, offerings, reputation e contact.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-connector"></div>
+
+                <!-- Output -->
+                <div class="flow-node output-node">
+                    <div class="node-icon">📤</div>
+                    <div class="node-title">Output</div>
+                    <div class="node-subtitle">CompanyProfile JSON</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detailed Discovery Section -->
+        <section id="discovery" class="section">
+            <div class="section-header">
+                <h2>🔎 Etapa 1: Discovery</h2>
+                <p>Descoberta do site oficial da empresa</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-block">
+                    <h3>Objetivo</h3>
+                    <p>Encontrar o site oficial da empresa a partir dos dados cadastrais (Nome Fantasia, Razão Social, CNPJ, Município).</p>
+                </div>
+                
+                <div class="detail-block">
+                    <h3>Processo</h3>
+                    <ol class="process-list">
+                        <li>
+                            <strong>Geração de Queries</strong>
+                            <p>Gera até 3 queries otimizadas para busca:</p>
+                            <code>Q1: "{nome_fantasia} {cidade} site oficial"</code>
+                            <code>Q2: "{razao_social} {cidade} site oficial"</code>
+                            <code>Q3: "{cnpj} site"</code>
+                        </li>
+                        <li>
+                            <strong>Busca via Serper API</strong>
+                            <p>Executa buscas no Google com rate limit de 240 queries/segundo.</p>
+                        </li>
+                        <li>
+                            <strong>Filtro de Blacklist</strong>
+                            <p>Remove resultados de domínios não-oficiais:</p>
+                            <ul class="blacklist">
+                                <li>Diretórios: econodata, cnpj.biz, jusbrasil</li>
+                                <li>Redes sociais: facebook, instagram, linkedin</li>
+                                <li>Marketplaces: mercadolivre, shopee, olx</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Análise LLM</strong>
+                            <p>LLM analisa resultados e identifica o site oficial baseado em:</p>
+                            <ul>
+                                <li>Match do nome no domínio</li>
+                                <li>Contexto do snippet</li>
+                                <li>Tipo de site (comercial vs diretório)</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+                
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">95%</div>
+                        <div class="metric-label">Taxa de Sucesso</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">~8s</div>
+                        <div class="metric-label">Tempo Médio</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">3</div>
+                        <div class="metric-label">Max Retries</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detailed Scrape Section -->
+        <section id="scrape" class="section">
+            <div class="section-header">
+                <h2>🌐 Etapa 2: Scrape</h2>
+                <p>Extração de conteúdo do site</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-block">
+                    <h3>Estratégias de Scraping</h3>
+                    <div class="strategies-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Estratégia</th>
+                                    <th>Timeout</th>
+                                    <th>Proxy</th>
+                                    <th>User-Agent</th>
+                                    <th>Uso</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="strategy-fast">
+                                    <td><strong>FAST</strong></td>
+                                    <td>10s</td>
+                                    <td>Não</td>
+                                    <td>Fixo</td>
+                                    <td>Sites simples, sem proteção</td>
+                                </tr>
+                                <tr class="strategy-standard">
+                                    <td><strong>STANDARD</strong></td>
+                                    <td>15s</td>
+                                    <td>Sim</td>
+                                    <td>Fixo</td>
+                                    <td>Sites com rate limit leve</td>
+                                </tr>
+                                <tr class="strategy-robust">
+                                    <td><strong>ROBUST</strong></td>
+                                    <td>20s</td>
+                                    <td>Sim</td>
+                                    <td>Rotação</td>
+                                    <td>Sites com proteção moderada</td>
+                                </tr>
+                                <tr class="strategy-aggressive">
+                                    <td><strong>AGGRESSIVE</strong></td>
+                                    <td>30s</td>
+                                    <td>Rotação</td>
+                                    <td>Rotação</td>
+                                    <td>Sites com proteção forte</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="detail-block">
+                    <h3>Sistema RESCUE (v2.1)</h3>
+                    <div class="note info">
+                        <p>Quando a main page tem menos de 500 caracteres mas possui links, o sistema tenta acessar até 3 subpages para verificar se há conteúdo útil.</p>
+                    </div>
+                    <div class="rescue-flow">
+                        <div class="rescue-step">
+                            <span class="step-num">1</span>
+                            <p>Main page &lt; 500 chars?</p>
+                        </div>
+                        <div class="rescue-arrow">→</div>
+                        <div class="rescue-step">
+                            <span class="step-num">2</span>
+                            <p>Tem links?</p>
+                        </div>
+                        <div class="rescue-arrow">→</div>
+                        <div class="rescue-step">
+                            <span class="step-num">3</span>
+                            <p>Prioriza links (sobre, produtos)</p>
+                        </div>
+                        <div class="rescue-arrow">→</div>
+                        <div class="rescue-step">
+                            <span class="step-num">4</span>
+                            <p>Acessa até 3 subpages</p>
+                        </div>
+                        <div class="rescue-arrow">→</div>
+                        <div class="rescue-step success">
+                            <span class="step-num">5</span>
+                            <p>Combina conteúdo</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="detail-block">
+                    <h3>Tipos de Site Detectados</h3>
+                    <div class="site-types">
+                        <div class="site-type">
+                            <div class="type-icon">📄</div>
+                            <div class="type-name">STATIC</div>
+                            <div class="type-desc">HTML renderizado no servidor</div>
+                        </div>
+                        <div class="site-type">
+                            <div class="type-icon">⚡</div>
+                            <div class="type-name">SPA</div>
+                            <div class="type-desc">Requer JavaScript (extração limitada)</div>
+                        </div>
+                        <div class="site-type">
+                            <div class="type-icon">🔀</div>
+                            <div class="type-name">HYBRID</div>
+                            <div class="type-desc">Parcialmente dinâmico</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="detail-block">
+                    <h3>Proteções Detectadas</h3>
+                    <div class="protections">
+                        <span class="protection cloudflare">Cloudflare</span>
+                        <span class="protection waf">WAF</span>
+                        <span class="protection captcha">CAPTCHA</span>
+                        <span class="protection ratelimit">Rate Limit</span>
+                        <span class="protection botdetect">Bot Detection</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detailed Profile Section -->
+        <section id="profile" class="section">
+            <div class="section-header">
+                <h2>🤖 Etapa 3: Profile (LLM)</h2>
+                <p>Análise de conteúdo e extração de perfil estruturado</p>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-block">
+                    <h3>Estrutura do CompanyProfile</h3>
+                    <div class="schema-viewer">
+                        <div class="schema-section">
+                            <div class="schema-header" onclick="toggleSchema('identity')">
+                                <span class="schema-icon">🏢</span>
+                                <span class="schema-name">identity</span>
+                                <span class="schema-toggle">▼</span>
+                            </div>
+                            <div class="schema-content" id="schemaIdentity">
+                                <div class="schema-field">
+                                    <span class="field-name">company_name</span>
+                                    <span class="field-type">string</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">cnpj</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">tagline</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">description</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">founding_year</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="schema-section">
+                            <div class="schema-header" onclick="toggleSchema('classification')">
+                                <span class="schema-icon">📊</span>
+                                <span class="schema-name">classification</span>
+                                <span class="schema-toggle">▼</span>
+                            </div>
+                            <div class="schema-content" id="schemaClassification">
+                                <div class="schema-field">
+                                    <span class="field-name">industry</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">business_model</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">target_audience</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="schema-section">
+                            <div class="schema-header" onclick="toggleSchema('offerings')">
+                                <span class="schema-icon">📦</span>
+                                <span class="schema-name">offerings</span>
+                                <span class="schema-toggle">▼</span>
+                            </div>
+                            <div class="schema-content" id="schemaOfferings">
+                                <div class="schema-field">
+                                    <span class="field-name">products</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">services</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">key_differentiators</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="schema-section">
+                            <div class="schema-header" onclick="toggleSchema('reputation')">
+                                <span class="schema-icon">🏆</span>
+                                <span class="schema-name">reputation</span>
+                                <span class="schema-toggle">▼</span>
+                            </div>
+                            <div class="schema-content" id="schemaReputation">
+                                <div class="schema-field">
+                                    <span class="field-name">certifications</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">awards</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">partnerships</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">client_list</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="schema-section">
+                            <div class="schema-header" onclick="toggleSchema('contact')">
+                                <span class="schema-icon">📞</span>
+                                <span class="schema-name">contact</span>
+                                <span class="schema-toggle">▼</span>
+                            </div>
+                            <div class="schema-content" id="schemaContact">
+                                <div class="schema-field">
+                                    <span class="field-name">emails</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">phones</span>
+                                    <span class="field-type">string[]</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">website_url</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                                <div class="schema-field">
+                                    <span class="field-name">headquarters_address</span>
+                                    <span class="field-type">string?</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="detail-block">
+                    <h3>Providers LLM</h3>
+                    <div class="providers-grid">
+                        <div class="provider-card primary">
+                            <div class="provider-logo">🔷</div>
+                            <div class="provider-name">Google Gemini</div>
+                            <div class="provider-model">gemini-2.0-flash</div>
+                            <div class="provider-stats">
+                                <span>RPM: 10,000</span>
+                                <span>Concurrent: 666</span>
+                            </div>
+                        </div>
+                        <div class="provider-card">
+                            <div class="provider-logo">🟢</div>
+                            <div class="provider-name">OpenAI</div>
+                            <div class="provider-model">gpt-4.1-nano</div>
+                            <div class="provider-stats">
+                                <span>RPM: 5,000</span>
+                                <span>Concurrent: 333</span>
+                            </div>
+                        </div>
+                        <div class="provider-card">
+                            <div class="provider-logo">🔴</div>
+                            <div class="provider-name">OpenRouter</div>
+                            <div class="provider-model">gemini-pro-1.5</div>
+                            <div class="provider-stats">
+                                <span>Fallback</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Config Section -->
+        <section id="config" class="section">
+            <div class="section-header">
+                <h2>⚙️ Configuração</h2>
+                <p>Variáveis de ambiente e parâmetros do sistema</p>
+            </div>
+            
+            <div class="config-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Variável</th>
+                            <th>Descrição</th>
+                            <th>Default</th>
+                            <th>Obrigatório</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>SERPER_API_KEY</code></td>
+                            <td>API key do Serper.dev para buscas Google</td>
+                            <td>-</td>
+                            <td>✅ Sim</td>
+                        </tr>
+                        <tr>
+                            <td><code>GEMINI_API_KEY</code></td>
+                            <td>API key do Google Gemini</td>
+                            <td>-</td>
+                            <td>✅ Sim</td>
+                        </tr>
+                        <tr>
+                            <td><code>OPENAI_API_KEY</code></td>
+                            <td>API key da OpenAI</td>
+                            <td>-</td>
+                            <td>⚪ Fallback</td>
+                        </tr>
+                        <tr>
+                            <td><code>WEBSHARE_API_KEY</code></td>
+                            <td>API key do WebShare para proxies</td>
+                            <td>-</td>
+                            <td>⚪ Opcional</td>
+                        </tr>
+                        <tr>
+                            <td><code>API_KEY</code></td>
+                            <td>Chave de autenticação da API</td>
+                            <td>-</td>
+                            <td>✅ Sim</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- API Reference -->
+        <section id="api" class="section">
+            <div class="section-header">
+                <h2>🔌 API Reference</h2>
+                <p>Endpoints disponíveis</p>
+            </div>
+            
+            <div class="api-endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="path">/analyze</span>
+                </div>
+                <div class="endpoint-desc">Analisa uma empresa e retorna o perfil completo</div>
+                <div class="endpoint-body">
+                    <h4>Request Body</h4>
+                    <pre><code>{
+  "razao_social": "EMPRESA LTDA",
+  "nome_fantasia": "EMPRESA",
+  "cnpj": "12345678000199",
+  "municipio": "São Paulo",
+  "uf": "SP"
+}</code></pre>
+                </div>
+                <div class="endpoint-response">
+                    <h4>Response</h4>
+                    <pre><code>{
+  "success": true,
+  "site_url": "https://empresa.com.br",
+  "profile": {
+    "identity": { ... },
+    "classification": { ... },
+    "offerings": { ... },
+    "reputation": { ... },
+    "contact": { ... }
+  },
+  "processing_time_ms": 45000
+}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Metrics Section -->
+        <section id="metrics" class="section">
+            <div class="section-header">
+                <h2>📈 Métricas de Performance</h2>
+                <p>Resultados do último stress test (300 empresas)</p>
+            </div>
+            
+            <div class="metrics-dashboard">
+                <div class="metric-large">
+                    <div class="metric-value success">79.7%</div>
+                    <div class="metric-label">Taxa de Sucesso Global</div>
+                </div>
+                <div class="metrics-breakdown">
+                    <div class="breakdown-item">
+                        <div class="breakdown-label">Discovery</div>
+                        <div class="breakdown-bar">
+                            <div class="bar-fill" style="width: 93.7%"></div>
+                        </div>
+                        <div class="breakdown-value">93.7%</div>
+                    </div>
+                    <div class="breakdown-item">
+                        <div class="breakdown-label">Scrape</div>
+                        <div class="breakdown-bar">
+                            <div class="bar-fill warning" style="width: 74.7%"></div>
+                        </div>
+                        <div class="breakdown-value">74.7%</div>
+                    </div>
+                    <div class="breakdown-item">
+                        <div class="breakdown-label">Profile</div>
+                        <div class="breakdown-bar">
+                            <div class="bar-fill" style="width: 74.7%"></div>
+                        </div>
+                        <div class="breakdown-value">74.7%</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="time-breakdown">
+                <h3>Distribuição de Tempo</h3>
+                <div class="time-chart">
+                    <div class="time-bar discovery" style="width: 23.5%">
+                        <span>Discovery 23.5%</span>
+                    </div>
+                    <div class="time-bar scrape" style="width: 60.2%">
+                        <span>Scrape 60.2%</span>
+                    </div>
+                    <div class="time-bar profile" style="width: 16.3%">
+                        <span>Profile 16.3%</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Errors Section -->
+        <section id="errors" class="section">
+            <div class="section-header">
+                <h2>⚠️ Erros Comuns</h2>
+                <p>Principais causas de falha e como mitigá-las</p>
+            </div>
+            
+            <div class="errors-list">
+                <div class="error-item">
+                    <div class="error-header">
+                        <span class="error-count">57x</span>
+                        <span class="error-name">Conteúdo Insuficiente (Scrape)</span>
+                    </div>
+                    <div class="error-desc">
+                        <p><strong>Causa:</strong> Site SPA que requer JavaScript ou main page com apenas navegação.</p>
+                        <p><strong>Mitigação:</strong> Sistema RESCUE tenta 3 subpages antes de desistir.</p>
+                    </div>
+                </div>
+                <div class="error-item">
+                    <div class="error-header">
+                        <span class="error-count">19x</span>
+                        <span class="error-name">Site Não Encontrado (Discovery)</span>
+                    </div>
+                    <div class="error-desc">
+                        <p><strong>Causa:</strong> Empresa sem presença online ou nome muito genérico.</p>
+                        <p><strong>Mitigação:</strong> Múltiplas queries com variações do nome.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Busca Fornecedor v2.0 • Documentação gerada em Dezembro 2025</p>
+        </footer>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

@@ -160,6 +160,7 @@ class ScrapeDetailedResult:
     
     # Resultado geral
     success: bool = False
+    content: str = ""  # NOVO: Salvar conteúdo para LLM
     content_length: int = 0
     pages_scraped: int = 0
     documents_found: int = 0
@@ -208,6 +209,7 @@ class ScrapeDetailedResult:
             "url": self.url,
             "empresa": self.empresa,
             "success": self.success,
+            "content": self.content, # NOVO
             "content_length": self.content_length,
             "pages_scraped": self.pages_scraped,
             "documents_found": self.documents_found,
@@ -998,6 +1000,7 @@ class ScraperDetailedTest:
             
             all_docs = main_docs | subpage_docs
             
+            result.content = all_content # NOVO
             result.content_length = len(all_content)
             result.pages_scraped = 1 + len(subpage_contents)
             result.documents_found = len(all_docs)
@@ -1501,13 +1504,38 @@ async def run_scraper_test(
     concurrent: int = 10,
     timeout: float = 120.0,
     max_subpages: int = 30,
-    discovery_report: str = None
+    discovery_report: str = None,
+    # Novos parâmetros de calibração
+    chunk_size: int = 10,
+    fast_internal: int = 6,
+    domain_limit: int = 2,
+    proxy_latency: int = 200,
+    slow_cap: int = 3,
+    slow_timeout: int = 8,
+    fast_timeout: int = 15,
+    probe_threshold: int = 8000,
+    main_threshold: int = 12000
 ):
     """Executa teste de scraping."""
     # Resetar circuit breaker antes do teste
     from app.services.scraper import reset_circuit_breaker
+    from app.services.scraper.constants import scraper_config
+    
+    # Aplicar configurações de calibração
+    scraper_config.update(
+        chunk_size=chunk_size,
+        fast_chunk_internal_limit=fast_internal,
+        per_domain_limit=domain_limit,
+        proxy_max_latency_ms=proxy_latency,
+        slow_subpage_cap=slow_cap,
+        slow_per_request_timeout=slow_timeout,
+        fast_per_request_timeout=fast_timeout,
+        slow_probe_threshold_ms=probe_threshold,
+        slow_main_threshold_ms=main_threshold
+    )
+    
     reset_circuit_breaker()
-    logger.info("🔄 Circuit breaker resetado antes do teste")
+    logger.info(f"🔄 Config: chunk={chunk_size} fast={fast_internal} dom={domain_limit} lat={proxy_latency} cap={slow_cap} to_slow={slow_timeout} to_fast={fast_timeout} th_probe={probe_threshold} th_main={main_threshold}")
     
     test = ScraperDetailedTest(
         discovery_report=discovery_report,
@@ -1523,26 +1551,95 @@ if __name__ == "__main__":
     print("=" * 80)
     print("TESTE ULTRA DETALHADO DE SCRAPING v2.0")
     print("=" * 80)
-    print("• Métricas de PROXY: latência, falhas, rotação")
-    print("• Métricas de REDE: TTFB, download time")
-    print("• Métricas de LLM: tempo de resposta")
-    print("• Métricas de VARIABILIDADE: desvio padrão")
-    print("• Diagnóstico de INCONSISTÊNCIAS")
-    print("=" * 80)
     
-    # Parâmetros
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 30
-    concurrent = int(sys.argv[2]) if len(sys.argv) > 2 else 15
-    timeout = float(sys.argv[3]) if len(sys.argv) > 3 else 120.0
-    max_subpages = int(sys.argv[4]) if len(sys.argv) > 4 else 20
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("n", type=int, nargs="?", default=30)
+    parser.add_argument("concurrent", type=int, nargs="?", default=15)
+    parser.add_argument("timeout", type=float, nargs="?", default=120.0)
+    parser.add_argument("max_subpages", type=int, nargs="?", default=20)
+    # Parametros extras
+    parser.add_argument("--chunk", type=int, default=10)
+    parser.add_argument("--fast", type=int, default=6)
+    parser.add_argument("--domain", type=int, default=2)
+    parser.add_argument("--lat", type=int, default=200)
+    parser.add_argument("--cap", type=int, default=3)
+    parser.add_argument("--slow_to", type=int, default=8)
+    parser.add_argument("--fast_to", type=int, default=15)
+    parser.add_argument("--probe_th", type=int, default=8000)
+    parser.add_argument("--main_th", type=int, default=12000)
     
-    print(f"\nParâmetros:")
-    print(f"  - URLs: {n}")
-    print(f"  - Concorrência: {concurrent}")
-    print(f"  - Timeout: {timeout}s")
-    print(f"  - Max Subpages: {max_subpages}")
-    print()
+    parser.add_argument("--hybrid", action="store_true", help="Executa modo híbrido (Fast + Retry)")
     
-    asyncio.run(run_scraper_test(n, concurrent, timeout, max_subpages))
+    args = parser.parse_args()
+    
+    print(f"Parâmetros base: n={args.n} c={args.concurrent} t={args.timeout} sub={args.max_subpages}")
+    
+    # Modo Híbrido (Fast Path + Retry Path)
+    if hasattr(args, 'hybrid') and args.hybrid:
+        print("🚀 MODO HÍBRIDO ATIVADO: Fast Track + Retry Track")
+        from app.services.scraper.constants import scraper_config, FAST_TRACK_CONFIG, RETRY_TRACK_CONFIG
+        
+        # 1. Fast Track (Usando Config R7/SpeedCombo2 do constants)
+        print("\n--- ⚡ FAST TRACK (Otimizado) ---")
+        scraper_config.update(**FAST_TRACK_CONFIG)
+        
+        # Resetar antes de começar
+        from app.services.scraper import reset_circuit_breaker
+        reset_circuit_breaker()
+        
+        fast_metrics = asyncio.run(run_scraper_test(
+            n=args.n, 
+            concurrent=FAST_TRACK_CONFIG.get('site_semaphore_limit', 60), 
+            timeout=FAST_TRACK_CONFIG.get('page_timeout', 35000) / 1000, 
+            max_subpages=args.max_subpages
+        ))
+        
+        failed_count = fast_metrics.total - fast_metrics.success
+        
+        if failed_count > 0:
+            print(f"\n--- 🐢 RETRY TRACK ({failed_count} sites) ---")
+            # Configuração Robusta para Retry
+            scraper_config.update(**RETRY_TRACK_CONFIG)
+            
+            # Resetar para retry
+            reset_circuit_breaker()
+            
+            # Executar retry (simulado nos próximos N sites pois não temos fila real aqui)
+            retry_metrics = asyncio.run(run_scraper_test(
+                n=failed_count, 
+                concurrent=RETRY_TRACK_CONFIG.get('site_semaphore_limit', 5), 
+                timeout=RETRY_TRACK_CONFIG.get('page_timeout', 120000) / 1000, 
+                max_subpages=args.max_subpages
+            ))
+            
+            print("\n" + "="*80)
+            print("📊 RESULTADO FINAL HÍBRIDO (SIMULADO)")
+            print("="*80)
+            # Assumindo que a taxa de sucesso do Retry Track se aplicaria aos que falharam
+            recovered = retry_metrics.success
+            total_success = fast_metrics.success + recovered
+            final_rate = (total_success / args.n) * 100
+            
+            print(f"Sucesso Fast: {fast_metrics.success}/{args.n}")
+            print(f"Recuperados : {recovered}/{failed_count}")
+            print(f"Sucesso Final: {total_success}/{args.n} ({final_rate:.1f}%)")
+        else:
+            print("🎉 Sucesso total no Fast Track!")
+            
+        sys.exit(0)
+    
+    asyncio.run(run_scraper_test(
+        args.n, args.concurrent, args.timeout, args.max_subpages,
+        chunk_size=args.chunk,
+        fast_internal=args.fast,
+        domain_limit=args.domain,
+        proxy_latency=args.lat,
+        slow_cap=args.cap,
+        slow_timeout=args.slow_to,
+        fast_timeout=args.fast_to,
+        probe_threshold=args.probe_th,
+        main_threshold=args.main_th
+    ))
 
 

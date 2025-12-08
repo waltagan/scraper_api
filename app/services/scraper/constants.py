@@ -19,29 +19,53 @@ DEFAULT_HEADERS = {
     "Cache-Control": "max-age=0"
 }
 
-# Configuração padrão do scraper
-DEFAULT_CONFIG = {
-    'site_semaphore_limit': 100,
+# Perfil R7 (SpeedCombo2) - Fast Track Otimizado
+FAST_TRACK_CONFIG = {
+    'site_semaphore_limit': 60,
     'circuit_breaker_threshold': 5,
-    'page_timeout': 10000,
-    'md_threshold': 0.6,
-    'min_word_threshold': 4,
-    'chunk_size': 10,
-    'chunk_semaphore_limit': 100,
-    'session_timeout': 15,
-    # Novos ajustes dinâmicos para lidar com sites lentos
-    'slow_probe_threshold_ms': 8000,
-    'slow_main_threshold_ms': 12000,
-    'slow_subpage_cap': 3,          # reduzido
-    'slow_per_request_timeout': 8,   # reduzido
-    'fast_per_request_timeout': 12,  # mais curto para reduzir ocupação de slot
-    'fast_chunk_internal_limit': 6,  # reduzido para aliviar proxies
+    'page_timeout': 35000,
+    'md_threshold': 0.3,         # Reduzido para aceitar conteúdo mais simples
+    'min_word_threshold': 2,     # Reduzido para aceitar páginas com menos texto
+    'chunk_size': 15,
+    'chunk_semaphore_limit': 60,
+    'session_timeout': 8,        # Reduzido para falhar rápido na conexão
+    'slow_probe_threshold_ms': 5000,
+    'slow_main_threshold_ms': 8000,
+    'slow_subpage_cap': 2,       # Cap agressivo se detectado lento no fast track
+    'slow_per_request_timeout': 8,
+    'fast_per_request_timeout': 12,
+    'fast_chunk_internal_limit': 10,
     'slow_chunk_internal_limit': 2,
     'slow_chunk_semaphore_limit': 4,
-    # Controle de saúde de proxies e concorrência por domínio
-    'proxy_max_latency_ms': 200,     # mais rigoroso
+    'proxy_max_latency_ms': 250,
     'proxy_max_failures': 2,
-    'per_domain_limit': 2           # menos requisições simultâneas por host
+    'per_domain_limit': 4
+}
+
+# Configuração padrão = Fast Track
+DEFAULT_CONFIG = FAST_TRACK_CONFIG.copy()
+
+# Perfil Robusto - Retry Track
+RETRY_TRACK_CONFIG = {
+    'site_semaphore_limit': 5,
+    'circuit_breaker_threshold': 10,
+    'page_timeout': 120000,
+    'md_threshold': 0.6,
+    'min_word_threshold': 4,
+    'chunk_size': 5,
+    'chunk_semaphore_limit': 5,
+    'session_timeout': 30,
+    'slow_probe_threshold_ms': 15000,
+    'slow_main_threshold_ms': 20000,
+    'slow_subpage_cap': 10,      # Mais permissivo no retry track
+    'slow_per_request_timeout': 20,
+    'fast_per_request_timeout': 20,
+    'fast_chunk_internal_limit': 4,
+    'slow_chunk_internal_limit': 2,
+    'slow_chunk_semaphore_limit': 2,
+    'proxy_max_latency_ms': 400,
+    'proxy_max_failures': 5,
+    'per_domain_limit': 1
 }
 
 # Extensões de documentos (para identificar, não processar)
@@ -98,59 +122,79 @@ class ScraperConfig:
     
     @property
     def site_semaphore_limit(self) -> int:
-        return self._config['site_semaphore_limit']
+        return self._config.get('site_semaphore_limit', 60)
     
     @property
     def circuit_breaker_threshold(self) -> int:
-        return self._config['circuit_breaker_threshold']
+        return self._config.get('circuit_breaker_threshold', 5)
     
     @property
     def session_timeout(self) -> int:
-        return self._config['session_timeout']
+        return self._config.get('session_timeout', 15)
     
     @property
     def chunk_size(self) -> int:
-        return self._config['chunk_size']
+        return self._config.get('chunk_size', 10)
     
     @property
     def chunk_semaphore_limit(self) -> int:
-        return self._config['chunk_semaphore_limit']
+        return self._config.get('chunk_semaphore_limit', 60)
     
     @property
     def slow_probe_threshold_ms(self) -> int:
-        return self._config['slow_probe_threshold_ms']
+        return self._config.get('slow_probe_threshold_ms', 5000)
     
     @property
     def slow_main_threshold_ms(self) -> int:
-        return self._config['slow_main_threshold_ms']
+        return self._config.get('slow_main_threshold_ms', 8000)
     
     @property
     def slow_subpage_cap(self) -> int:
-        return self._config['slow_subpage_cap']
+        return self._config.get('slow_subpage_cap', 2)
     
     @property
     def slow_per_request_timeout(self) -> int:
-        return self._config['slow_per_request_timeout']
+        return self._config.get('slow_per_request_timeout', 8)
     
     @property
     def fast_per_request_timeout(self) -> int:
-        return self._config['fast_per_request_timeout']
+        return self._config.get('fast_per_request_timeout', 12)
     
     @property
     def fast_chunk_internal_limit(self) -> int:
-        return self._config['fast_chunk_internal_limit']
+        return self._config.get('fast_chunk_internal_limit', 10)
     
     @property
     def slow_chunk_internal_limit(self) -> int:
-        return self._config['slow_chunk_internal_limit']
+        return self._config.get('slow_chunk_internal_limit', 2)
     
     @property
     def slow_chunk_semaphore_limit(self) -> int:
-        return self._config['slow_chunk_semaphore_limit']
+        return self._config.get('slow_chunk_semaphore_limit', 4)
+    
+    @property
+    def proxy_max_latency_ms(self) -> int:
+        return self._config.get('proxy_max_latency_ms', 250)
+        
+    @property
+    def proxy_max_failures(self) -> int:
+        return self._config.get('proxy_max_failures', 2)
+        
+    @property
+    def per_domain_limit(self) -> int:
+        return self._config.get('per_domain_limit', 4)
     
     @property
     def site_semaphore(self) -> asyncio.Semaphore:
         return self._site_semaphore
+    
+    @property
+    def md_threshold(self) -> float:
+        return self._config.get('md_threshold', 0.6)
+        
+    @property
+    def min_word_threshold(self) -> int:
+        return self._config.get('min_word_threshold', 4)
     
     def update(self, **kwargs):
         """Atualiza configurações dinamicamente."""
@@ -158,10 +202,10 @@ class ScraperConfig:
             if key in self._config:
                 self._config[key] = value
         
+        # Recriar semáforo se limite mudar
         if 'site_semaphore_limit' in kwargs:
             self._site_semaphore = asyncio.Semaphore(kwargs['site_semaphore_limit'])
 
 
 # Instância global de configuração
 scraper_config = ScraperConfig()
-

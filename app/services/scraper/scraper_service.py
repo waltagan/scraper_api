@@ -25,7 +25,7 @@ from app.services.learning import (
 from .models import (
     SiteProfile, ScrapedContent, ScrapedPage, ScrapingStrategy
 )
-from .constants import scraper_config, DEFAULT_HEADERS
+from .constants import scraper_config, DEFAULT_HEADERS, FAST_TRACK_CONFIG, RETRY_TRACK_CONFIG
 from .circuit_breaker import record_failure, record_success, is_circuit_open
 from .http_client import cffi_scrape, cffi_scrape_safe, system_curl_scrape
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
@@ -278,6 +278,87 @@ async def scrape_url(url: str, max_subpages: int = 100) -> Tuple[str, List[str],
     return content.aggregated_content, content.all_document_links, content.visited_urls
 
 
+async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[Tuple[str, List[str], List[str]]]:
+    """
+    Processa um lote de URLs usando a estratégia Híbrida (Fast Path + Retry Path).
+    
+    Fase 1 (Fast Track): Processa todas URLs com timeout curto e alta concorrência.
+    Fase 2 (Retry Track): Reprocessa falhas com timeout longo e limites estritos.
+    """
+    logger.info(f"🚀 Iniciando scrape híbrido para {len(urls)} URLs")
+    results = {}
+    failed_urls = []
+    
+    # --- FASE 1: FAST TRACK ---
+    logger.info("⚡ FAST TRACK: Iniciando processamento rápido...")
+    scraper_config.update(**FAST_TRACK_CONFIG)
+    
+    # Usar concorrência alta para Fast Track (ex: 60)
+    fast_sem = asyncio.Semaphore(60)
+    fast_timeout = 35.0
+    
+    async def fast_scrape(url):
+        async with fast_sem:
+            try:
+                # Envolver scrape_url com timeout curto
+                return await asyncio.wait_for(scrape_url(url, max_subpages), timeout=fast_timeout)
+            except Exception as e:
+                return e
+
+    tasks = [fast_scrape(url) for url in urls]
+    fast_results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    for url, res in zip(urls, fast_results):
+        # Verificar se houve sucesso (conteúdo retornado)
+        if isinstance(res, Exception) or not res or (isinstance(res, tuple) and not res[0]):
+            failed_urls.append(url)
+        else:
+            results[url] = res
+            
+    logger.info(f"⚡ FAST TRACK Concluído: {len(results)} sucessos, {len(failed_urls)} falhas")
+    
+    if not failed_urls:
+        return [results.get(url, ("", [], [])) for url in urls]
+    
+    # --- FASE 2: RETRY TRACK ---
+    logger.info(f"🐢 RETRY TRACK: Reprocessando {len(failed_urls)} falhas...")
+    scraper_config.update(**RETRY_TRACK_CONFIG)
+    
+    # Resetar circuit breaker para dar nova chance
+    from .circuit_breaker import _domain_failures
+    _domain_failures.clear()
+    
+    # Usar concorrência baixa para Retry Track (ex: 5)
+    retry_sem = asyncio.Semaphore(5)
+    retry_timeout = 120.0
+    
+    async def retry_scrape(url):
+        async with retry_sem:
+            try:
+                return await asyncio.wait_for(scrape_url(url, max_subpages), timeout=retry_timeout)
+            except Exception as e:
+                logger.error(f"❌ Falha final no Retry Track para {url}: {e}")
+                return ("", [], [])
+
+    retry_tasks = [retry_scrape(url) for url in failed_urls]
+    retry_results = await asyncio.gather(*retry_tasks, return_exceptions=True)
+    
+    success_retry = 0
+    for url, res in zip(failed_urls, retry_results):
+        if isinstance(res, Exception):
+            results[url] = ("", [], [])
+        else:
+            results[url] = res
+            if res and res[0]:
+                success_retry += 1
+    
+    logger.info(f"🐢 RETRY TRACK Concluído: {success_retry}/{len(failed_urls)} recuperados")
+    
+    # Ordenar resultados na ordem original
+    final_output = [results.get(url, ("", [], [])) for url in urls]
+    return final_output
+
+
 def _classify_error(error_message: str) -> FailureType:
     """Classifica uma mensagem de erro em um tipo de falha."""
     if not error_message:
@@ -315,13 +396,21 @@ async def _scrape_main_page(
     """
     Faz scrape da main page com fallback entre estratégias.
     Conteúdo < 500 chars é considerado insuficiente e tenta estratégia ROBUST.
+    
+    MELHORIA v2.1: Se main page tem < 500 chars mas tem links, tenta acessar
+    até 3 subpages para verificar se o site tem conteúdo útil.
     """
     main_start = time.perf_counter()
     MIN_CONTENT_LENGTH = 500  # Mínimo de caracteres para considerar sucesso
+    RESCUE_SUBPAGES_LIMIT = 3  # Quantas subpages tentar quando main page é insuficiente
     
     # Garantir que ROBUST está nas estratégias (para retry de conteúdo insuficiente)
     if ScrapingStrategy.ROBUST not in strategies:
         strategies = list(strategies) + [ScrapingStrategy.ROBUST]
+    
+    # Guardar o melhor resultado parcial (para rescue)
+    best_partial_page = None
+    best_partial_content_len = 0
     
     for strategy in strategies:
         config = strategy_selector.get_strategy_config(strategy)
@@ -335,6 +424,11 @@ async def _scrape_main_page(
                 content_len = len(page.content) if page.content else 0
                 
                 if content_len < MIN_CONTENT_LENGTH:
+                    # Guardar o melhor resultado parcial
+                    if content_len > best_partial_content_len:
+                        best_partial_page = page
+                        best_partial_content_len = content_len
+                    
                     logger.warning(
                         f"⚠️ Conteúdo insuficiente ({content_len} chars < {MIN_CONTENT_LENGTH}) "
                         f"com {strategy.value}, tentando próxima estratégia..."
@@ -366,7 +460,112 @@ async def _scrape_main_page(
             logger.warning(f"⚠️ Estratégia {strategy.value} falhou: {e}")
             continue
     
+    # === RESCUE: Tentar subpages se main page tem pouco conteúdo mas tem links ===
+    if best_partial_page and best_partial_page.links:
+        rescued_page = await _rescue_with_subpages(
+            best_partial_page, 
+            strategies[0] if strategies else ScrapingStrategy.FAST,
+            RESCUE_SUBPAGES_LIMIT,
+            MIN_CONTENT_LENGTH
+        )
+        if rescued_page:
+            rescued_page.response_time_ms = (time.perf_counter() - main_start) * 1000
+            return rescued_page
+    
     logger.error(f"❌ Todas estratégias falharam para {url}")
+    return None
+
+
+async def _rescue_with_subpages(
+    partial_page: ScrapedPage,
+    strategy: ScrapingStrategy,
+    max_subpages: int,
+    min_content_length: int
+) -> Optional[ScrapedPage]:
+    """
+    Tenta resgatar um site com main page insuficiente acessando subpages.
+    
+    Se alguma subpage tiver conteúdo suficiente, combina com a main page
+    e retorna sucesso.
+    """
+    from .link_selector import prioritize_links, filter_non_html_links
+    
+    links = partial_page.links or []
+    if not links:
+        return None
+    
+    # Filtrar e priorizar links
+    filtered_links = filter_non_html_links(set(links))
+    if not filtered_links:
+        return None
+    
+    # Priorizar links importantes (sobre, produtos, serviços, contato)
+    prioritized = prioritize_links(filtered_links, partial_page.url)[:max_subpages]
+    
+    if not prioritized:
+        return None
+    
+    logger.info(
+        f"🔄 RESCUE: Main page tem {len(partial_page.content or '')} chars, "
+        f"tentando {len(prioritized)} subpages..."
+    )
+    
+    config = strategy_selector.get_strategy_config(strategy)
+    rescued_content = partial_page.content or ""
+    rescued_links = set(links)
+    rescued_docs = set(partial_page.document_links or [])
+    subpages_with_content = 0
+    
+    for sub_url in prioritized:
+        try:
+            normalized_url = normalize_url(sub_url)
+            text, docs, sub_links = await asyncio.wait_for(
+                cffi_scrape_safe(normalized_url, None),
+                timeout=config["timeout"]
+            )
+            
+            if text and len(text) >= 100 and not is_soft_404(text):
+                rescued_content += f"\n\n{text}"
+                rescued_links.update(sub_links or [])
+                rescued_docs.update(docs or [])
+                subpages_with_content += 1
+                
+                logger.info(f"   ✅ Subpage OK: {sub_url[:50]} ({len(text)} chars)")
+                
+                # Se já temos conteúdo suficiente, podemos parar
+                if len(rescued_content) >= min_content_length:
+                    break
+            else:
+                logger.debug(f"   ⚠️ Subpage vazia: {sub_url[:50]}")
+                
+        except asyncio.TimeoutError:
+            logger.debug(f"   ⏱️ Subpage timeout: {sub_url[:50]}")
+        except Exception as e:
+            logger.debug(f"   ❌ Subpage erro: {sub_url[:50]} - {e}")
+    
+    # Verificar se conseguimos conteúdo suficiente
+    total_content_len = len(rescued_content)
+    
+    if total_content_len >= min_content_length:
+        logger.info(
+            f"✅ RESCUE bem-sucedido: {total_content_len} chars "
+            f"(main + {subpages_with_content} subpages)"
+        )
+        
+        # Criar página combinada
+        return ScrapedPage(
+            url=partial_page.url,
+            content=rescued_content,
+            links=list(rescued_links),
+            document_links=list(rescued_docs),
+            status_code=200,
+            strategy_used=partial_page.strategy_used,
+            error=None
+        )
+    
+    logger.warning(
+        f"⚠️ RESCUE falhou: apenas {total_content_len} chars após tentar {len(prioritized)} subpages"
+    )
     return None
 
 
@@ -530,26 +729,26 @@ async def _scrape_chunk_adaptive(
             async with domain_sem:
                 individual_proxy = await _get_healthy_proxy()
                 
-                if HAS_CURL_CFFI and AsyncSession:
-                    try:
-                        async with AsyncSession(
-                            impersonate="chrome120",
-                            proxy=individual_proxy,
-                            timeout=effective_timeout,
-                            verify=False
-                        ) as session:
-                            return await _scrape_single_subpage(
-                                url, session, config, effective_timeout
-                            )
-                    except Exception:
-                        # Fallback para system_curl
-                        return await _scrape_single_subpage_fallback(
-                            url, individual_proxy, effective_timeout
+            if HAS_CURL_CFFI and AsyncSession:
+                try:
+                    async with AsyncSession(
+                        impersonate="chrome120",
+                        proxy=individual_proxy,
+                        timeout=effective_timeout,
+                        verify=False
+                    ) as session:
+                        return await _scrape_single_subpage(
+                            url, session, config, effective_timeout
                         )
-                else:
+                except Exception:
+                    # Fallback para system_curl
                     return await _scrape_single_subpage_fallback(
                         url, individual_proxy, effective_timeout
                     )
+            else:
+                return await _scrape_single_subpage_fallback(
+                    url, individual_proxy, effective_timeout
+                )
     
     # Processar todas URLs em paralelo, cada uma com seu proxy
     tasks = [scrape_with_individual_proxy(url) for url in urls_to_process]
@@ -560,7 +759,7 @@ async def _scrape_chunk_adaptive(
     for url, result in zip(urls_to_process, results):
         if isinstance(result, Exception):
             chunk_results.append(ScrapedPage(url=url, content="", error=str(result)))
-        else:
+    else:
             chunk_results.append(result)
     
     return circuit_open_results + chunk_results

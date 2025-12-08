@@ -101,6 +101,14 @@ class ProviderManager:
                 max_concurrent=openai_concurrent,
                 priority=50
             ),
+            ProviderConfig(
+                name="OpenRouter",
+                api_key=settings.OPENROUTER_API_KEY or "",
+                base_url=settings.OPENROUTER_BASE_URL,
+                model=settings.OPENROUTER_MODEL,
+                max_concurrent=200,  # Fallback robusto
+                priority=10
+            ),
         ]
         
         for config in default_providers:

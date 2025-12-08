@@ -1,0 +1,2334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagrama de Fluxo Ultra-Detalhado - Busca Fornecedor</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-tertiary: #1f2937;
+            --bg-card: #1a1f2e;
+            --bg-node: #252d3d;
+            
+            --accent-input: #06b6d4;
+            --accent-discovery: #3b82f6;
+            --accent-scrape: #10b981;
+            --accent-profile: #8b5cf6;
+            --accent-output: #f59e0b;
+            --accent-error: #ef4444;
+            --accent-decision: #ec4899;
+            --accent-check: #14b8a6;
+            --accent-loop: #f97316;
+            
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            
+            --border-color: #374151;
+            --connector-color: #4b5563;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 60px;
+            background: rgba(10, 14, 23, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 100;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 16px; }
+
+        .back-btn {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        .back-btn:hover { background: var(--bg-node); color: var(--text-primary); }
+
+        .header h1 { font-size: 18px; font-weight: 600; }
+
+        .header-controls { display: flex; gap: 8px; }
+
+        .zoom-btn {
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .zoom-btn:hover { background: var(--bg-node); color: var(--text-primary); }
+
+        .zoom-level {
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .diagram-container {
+            margin-top: 60px;
+            padding: 40px;
+            min-height: calc(100vh - 60px);
+            overflow: auto;
+        }
+
+        .diagram-wrapper {
+            transform-origin: top left;
+            transition: transform 0.3s ease;
+        }
+
+        /* Legend */
+        .legend {
+            position: fixed;
+            bottom: 20px; left: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 50;
+            max-width: 200px;
+        }
+
+        .legend-title {
+            font-size: 11px; font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .legend-items { display: flex; flex-direction: column; gap: 6px; }
+
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+
+        .legend-shape { width: 16px; height: 12px; border-radius: 3px; }
+
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            padding-bottom: 100px;
+        }
+
+        /* Nodes */
+        .node {
+            position: relative;
+            background: var(--bg-node);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 20px;
+            min-width: 260px;
+            max-width: 380px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .node:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+        .node.expanded { max-width: 550px; }
+
+        /* Node Types */
+        .node.input-node { border-color: var(--accent-input); background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, var(--bg-node) 100%); }
+        .node.process-node { border-color: var(--accent-discovery); background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, var(--bg-node) 100%); }
+        .node.scrape-node { border-color: var(--accent-scrape); background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, var(--bg-node) 100%); }
+        .node.profile-node { border-color: var(--accent-profile); background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, var(--bg-node) 100%); }
+        .node.decision-node { border-color: var(--accent-decision); background: linear-gradient(135deg, rgba(236, 72, 153, 0.15) 0%, var(--bg-node) 100%); }
+        .node.output-node { border-color: var(--accent-output); background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, var(--bg-node) 100%); }
+        .node.error-node { border-color: var(--accent-error); background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, var(--bg-node) 100%); }
+        .node.check-node { border-color: var(--accent-check); background: linear-gradient(135deg, rgba(20, 184, 166, 0.15) 0%, var(--bg-node) 100%); }
+        .node.loop-node { border-color: var(--accent-loop); background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, var(--bg-node) 100%); }
+
+        /* Mini nodes for sub-sub-steps */
+        .node.mini {
+            min-width: 200px;
+            max-width: 280px;
+            padding: 8px 14px;
+        }
+
+        .node.mini .node-title { font-size: 12px; }
+        .node.mini .node-id { font-size: 8px; }
+
+        .node-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .node-icon { font-size: 20px; }
+        .node.mini .node-icon { font-size: 16px; }
+
+        .node-id {
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 2px 5px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            color: var(--text-muted);
+        }
+
+        .node-title { flex: 1; font-size: 13px; font-weight: 600; }
+
+        .node-toggle {
+            font-size: 10px;
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+
+        .node.expanded .node-toggle { transform: rotate(180deg); }
+
+        .node-subtitle {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .node-objective {
+            font-size: 10px;
+            color: var(--text-muted);
+            padding: 6px 10px;
+            background: var(--bg-secondary);
+            border-radius: 5px;
+            border-left: 2px solid var(--accent-discovery);
+            margin-top: 8px;
+        }
+
+        /* Expandable Details */
+        .node-details {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .node.expanded .node-details { display: block; animation: fadeIn 0.3s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .detail-section { margin-bottom: 10px; }
+        .detail-section:last-child { margin-bottom: 0; }
+
+        .detail-label {
+            font-size: 9px; font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            font-size: 10px;
+        }
+
+        .detail-key {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .detail-value {
+            font-weight: 500;
+            color: var(--accent-scrape);
+        }
+
+        .detail-note {
+            padding: 6px 8px;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 5px;
+            font-size: 10px;
+            color: var(--accent-output);
+        }
+
+        .detail-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+        }
+
+        .detail-tag {
+            padding: 3px 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Connectors */
+        .connector {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .connector-line {
+            width: 2px;
+            height: 20px;
+            background: var(--connector-color);
+        }
+
+        .connector-arrow {
+            width: 0; height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid var(--connector-color);
+        }
+
+        .connector-label {
+            font-size: 9px;
+            color: var(--text-muted);
+            background: var(--bg-primary);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        /* Branch */
+        .branch-container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+
+        .branch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .branch-label {
+            font-size: 10px;
+            padding: 3px 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            margin-bottom: 6px;
+        }
+
+        .branch-label.yes { color: var(--accent-scrape); border-color: var(--accent-scrape); }
+        .branch-label.no { color: var(--accent-error); border-color: var(--accent-error); }
+        .branch-label.loop { color: var(--accent-loop); border-color: var(--accent-loop); }
+
+        /* Stage Groups */
+        .stage-group {
+            background: var(--bg-secondary);
+            border: 1px dashed var(--border-color);
+            border-radius: 14px;
+            padding: 20px;
+            margin: 16px 0;
+        }
+
+        .stage-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stage-number {
+            width: 28px; height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .stage-number.discovery { background: var(--accent-discovery); }
+        .stage-number.scrape { background: var(--accent-scrape); }
+        .stage-number.profile { background: var(--accent-profile); }
+
+        .stage-title { font-size: 14px; font-weight: 600; }
+
+        .stage-time {
+            margin-left: auto;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+            padding: 3px 10px;
+            background: var(--bg-tertiary);
+            border-radius: 15px;
+        }
+
+        .stage-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Sub-stage groups */
+        .substage-group {
+            background: rgba(16, 185, 129, 0.05);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 10px;
+            padding: 16px;
+            margin: 8px 0;
+            width: 100%;
+        }
+
+        .substage-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed rgba(16, 185, 129, 0.3);
+        }
+
+        .substage-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-scrape);
+        }
+
+        .substage-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Parallel container */
+        .parallel-box {
+            display: flex;
+            gap: 16px;
+            padding: 12px;
+            background: rgba(249, 115, 22, 0.05);
+            border: 1px dashed rgba(249, 115, 22, 0.3);
+            border-radius: 8px;
+            margin: 8px 0;
+        }
+
+        .parallel-label {
+            position: absolute;
+            top: -10px;
+            left: 12px;
+            font-size: 9px;
+            padding: 2px 8px;
+            background: var(--accent-loop);
+            color: white;
+            border-radius: 10px;
+        }
+
+        /* Info box */
+        .info-box {
+            position: fixed;
+            bottom: 20px; right: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            max-width: 280px;
+            z-index: 50;
+        }
+
+        .info-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        .info-content { font-size: 11px; color: var(--text-secondary); }
+
+        @media (max-width: 768px) {
+            .legend, .info-box { display: none; }
+            .node { min-width: 220px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="back-btn">← Voltar</a>
+            <h1>📐 Diagrama de Fluxo Ultra-Detalhado</h1>
+        </div>
+        <div class="header-controls">
+            <button class="zoom-btn" onclick="zoomOut()">−</button>
+            <span class="zoom-level" id="zoomLevel">100%</span>
+            <button class="zoom-btn" onclick="zoomIn()">+</button>
+            <button class="zoom-btn" onclick="resetZoom()">⟲</button>
+        </div>
+    </header>
+
+    <div class="diagram-container">
+        <div class="diagram-wrapper" id="diagramWrapper">
+            <div class="flow-diagram">
+                
+                <!-- ========== INPUT ========== -->
+                <div class="node input-node" onclick="toggleNode(this)">
+                    <div class="node-header">
+                        <span class="node-icon">📥</span>
+                        <span class="node-id">INPUT</span>
+                        <span class="node-title">Dados da Empresa</span>
+                        <span class="node-toggle">▼</span>
+                    </div>
+                    <div class="node-subtitle">razao_social, nome_fantasia, cnpj, municipio, uf</div>
+                    <div class="node-details">
+                        <div class="detail-section">
+                            <div class="detail-label">Validações</div>
+                            <div class="detail-list">
+                                <span class="detail-tag">CNPJ válido</span>
+                                <span class="detail-tag">UF válida</span>
+                                <span class="detail-tag">Nome não vazio</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                <!-- ========== STAGE 1: DISCOVERY (Resumido) ========== -->
+                <div class="stage-group" style="opacity: 0.7;">
+                    <div class="stage-header">
+                        <span class="stage-number discovery">1</span>
+                        <span class="stage-title">DISCOVERY</span>
+                        <span class="stage-time">~8s</span>
+                    </div>
+                    <div class="stage-content">
+                        <div class="node process-node mini">
+                            <div class="node-header">
+                                <span class="node-icon">🔍</span>
+                                <span class="node-title">Busca Google + Análise LLM</span>
+                            </div>
+                            <div class="node-subtitle">Serper API → Blacklist Filter → LLM Selection</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                <!-- ========== STAGE 2: SCRAPE (ULTRA DETALHADO) ========== -->
+                <div class="stage-group">
+                    <div class="stage-header">
+                        <span class="stage-number scrape">2</span>
+                        <span class="stage-title">SCRAPE - DETALHAMENTO COMPLETO</span>
+                        <span class="stage-time">~45s | 75% sucesso</span>
+                    </div>
+                    
+                    <div class="stage-content">
+
+                        <!-- ===== 2.0 CONHECIMENTO PRÉVIO ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>📚</span>
+                                <span class="substage-title">2.0 Consulta Conhecimento Prévio</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🧠</span>
+                                        <span class="node-id">2.0.1</span>
+                                        <span class="node-title">Site Knowledge Lookup</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Verifica se domínio já foi processado</div>
+                                    <div class="node-objective">🎯 Reutilizar estratégia que funcionou anteriormente</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Dados Consultados</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">best_strategy</span><span class="detail-value">string</span></div>
+                                                <div class="detail-item"><span class="detail-key">protection_type</span><span class="detail-value">enum</span></div>
+                                                <div class="detail-item"><span class="detail-key">success_rate</span><span class="detail-value">float</span></div>
+                                                <div class="detail-item"><span class="detail-key">avg_response_ms</span><span class="detail-value">number</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Arquivo</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">data/site_knowledge.json</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node decision-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">2.0.2</span>
+                                        <span class="node-title">Site Conhecido?</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Condição</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">total_attempts > 0</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node check-node mini">
+                                            <div class="node-header">
+                                                <span class="node-icon">✅</span>
+                                                <span class="node-title">Usar estratégia conhecida</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node check-node mini" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🌍</span>
+                                                <span class="node-title">Adaptive Config Global</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-note">Usa padrões globais aprendidos de outros sites similares</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 2.1 URL PROBING ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>🎯</span>
+                                <span class="substage-title">2.1 URL Probing</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔗</span>
+                                        <span class="node-id">2.1.1</span>
+                                        <span class="node-title">Normalização de URL</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Adiciona protocolo se ausente</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Transformação</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">domain.com → https://domain.com</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🧪</span>
+                                        <span class="node-id">2.1.2</span>
+                                        <span class="node-title">Teste URL Original</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Tenta URL original primeiro (otimização)</div>
+                                    <div class="node-objective">🎯 Evitar probe desnecessário se URL funciona</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Configurações</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">TIMEOUT</span><span class="detail-value">10s</span></div>
+                                                <div class="detail-item"><span class="detail-key">METHOD</span><span class="detail-value">HEAD/GET</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node decision-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">2.1.3</span>
+                                        <span class="node-title">Status < 400?</span>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node loop-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🔄</span>
+                                                <span class="node-id">2.1.4</span>
+                                                <span class="node-title">Gerar Variações</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Testa 4 variações em paralelo</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Variações</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">https://www.domain.com</span>
+                                                        <span class="detail-tag">https://domain.com</span>
+                                                        <span class="detail-tag">http://www.domain.com</span>
+                                                        <span class="detail-tag">http://domain.com</span>
+                                                    </div>
+                                                </div>
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Config</div>
+                                                    <div class="detail-grid">
+                                                        <div class="detail-item"><span class="detail-key">MAX_CONCURRENT</span><span class="detail-value">4</span></div>
+                                                        <div class="detail-item"><span class="detail-key">TIMEOUT</span><span class="detail-value">10s</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                        <div class="node decision-node mini">
+                                            <div class="node-header">
+                                                <span class="node-icon">❓</span>
+                                                <span class="node-title">Alguma OK?</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="branch-container">
+                                            <div class="branch">
+                                                <span class="branch-label no">NÃO</span>
+                                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                                <div class="node error-node mini">
+                                                    <div class="node-header">
+                                                        <span class="node-icon">❌</span>
+                                                        <span class="node-title">URLNotReachable</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="branch">
+                                                <span class="branch-label yes">SIM</span>
+                                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                                <div class="node check-node mini">
+                                                    <div class="node-header">
+                                                        <span class="node-icon">✅</span>
+                                                        <span class="node-title">Selecionar mais rápida</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:80px"></div><div class="connector-arrow"></div></div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">💾</span>
+                                        <span class="node-id">2.1.5</span>
+                                        <span class="node-title">Cache URL Válida</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Armazena para requisições futuras</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-note">Cache em memória evita re-probe do mesmo domínio</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 2.2 SITE ANALYSIS ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>🔬</span>
+                                <span class="substage-title">2.2 Análise do Site</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📡</span>
+                                        <span class="node-id">2.2.1</span>
+                                        <span class="node-title">Probe HTTP</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">GET request com curl_cffi</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Dados Coletados</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">response_time_ms</span><span class="detail-value">number</span></div>
+                                                <div class="detail-item"><span class="detail-key">status_code</span><span class="detail-value">number</span></div>
+                                                <div class="detail-item"><span class="detail-key">headers</span><span class="detail-value">dict</span></div>
+                                                <div class="detail-item"><span class="detail-key">content_length</span><span class="detail-value">number</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Config</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">TIMEOUT</span><span class="detail-value">10s</span></div>
+                                                <div class="detail-item"><span class="detail-key">IMPERSONATE</span><span class="detail-value">chrome120</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🛡️</span>
+                                        <span class="node-id">2.2.2</span>
+                                        <span class="node-title">Detecção de Proteção</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Analisa headers e body para identificar WAF/Cloudflare</div>
+                                    <div class="node-objective">🎯 Escolher estratégia adequada para bypass</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Assinaturas Cloudflare</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">cf-browser-verification</span>
+                                                <span class="detail-tag">cf_chl_opt</span>
+                                                <span class="detail-tag">just a moment</span>
+                                                <span class="detail-tag">ray id:</span>
+                                                <span class="detail-tag">cf-ray header</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Assinaturas WAF</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">access denied</span>
+                                                <span class="detail-tag">403 forbidden</span>
+                                                <span class="detail-tag">blocked by security</span>
+                                                <span class="detail-tag">x-waf-* headers</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Outras Proteções</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">CAPTCHA: recaptcha, hcaptcha</span>
+                                                <span class="detail-tag">RATE_LIMIT: too many requests</span>
+                                                <span class="detail-tag">BOT_DETECT: suspicious activity</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📊</span>
+                                        <span class="node-id">2.2.3</span>
+                                        <span class="node-title">Detecção Tipo de Site</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Identifica se é SPA, Static ou Hybrid</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Assinaturas SPA</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">react</span>
+                                                <span class="detail-tag">__next</span>
+                                                <span class="detail-tag">__nuxt</span>
+                                                <span class="detail-tag">ng-app</span>
+                                                <span class="detail-tag">vue-</span>
+                                                <span class="detail-tag">ember</span>
+                                                <span class="detail-tag">bundle.js</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Conteúdo Mínimo (indica SPA)</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">&lt;div id="root"&gt;&lt;/div&gt;</span>
+                                                <span class="detail-tag">&lt;div id="app"&gt;&lt;/div&gt;</span>
+                                                <span class="detail-tag">loading...</span>
+                                                <span class="detail-tag">javascript required</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Output</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">site_type</span><span class="detail-value">STATIC/SPA/HYBRID</span></div>
+                                                <div class="detail-item"><span class="detail-key">requires_js</span><span class="detail-value">boolean</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 2.3 STRATEGY SELECTION ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>📋</span>
+                                <span class="substage-title">2.3 Seleção de Estratégia</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🎚️</span>
+                                        <span class="node-id">2.3.1</span>
+                                        <span class="node-title">Strategy Selector</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Combina proteção + tipo para ordenar estratégias</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Matriz Proteção → Estratégias</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">NONE</span><span class="detail-value">FAST→STD→ROB</span></div>
+                                                <div class="detail-item"><span class="detail-key">CLOUDFLARE</span><span class="detail-value">AGG→ROB→STD</span></div>
+                                                <div class="detail-item"><span class="detail-key">WAF</span><span class="detail-value">ROB→AGG→STD</span></div>
+                                                <div class="detail-item"><span class="detail-key">CAPTCHA</span><span class="detail-value">AGG→ROB</span></div>
+                                                <div class="detail-item"><span class="detail-key">RATE_LIMIT</span><span class="detail-value">STD→ROB</span></div>
+                                                <div class="detail-item"><span class="detail-key">BOT_DETECT</span><span class="detail-value">AGG→ROB→STD</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Matriz Tipo → Estratégias</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">STATIC</span><span class="detail-value">FAST→STD→ROB</span></div>
+                                                <div class="detail-item"><span class="detail-key">SPA</span><span class="detail-value">ROB→AGG→STD</span></div>
+                                                <div class="detail-item"><span class="detail-key">HYBRID</span><span class="detail-value">STD→ROB→AGG</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔀</span>
+                                        <span class="node-id">2.3.2</span>
+                                        <span class="node-title">Priorizar Conhecimento</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Se conhecimento prévio existe, move para início</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-note">Estratégia que funcionou antes é tentada primeiro</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 2.4 MAIN PAGE SCRAPE ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>📄</span>
+                                <span class="substage-title">2.4 Scrape Main Page (Loop de Estratégias)</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node loop-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔁</span>
+                                        <span class="node-id">2.4.0</span>
+                                        <span class="node-title">FOR strategy IN strategies</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Tenta cada estratégia até sucesso</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Ordem de Tentativa</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">1. Estratégia conhecida (se houver)</span>
+                                                <span class="detail-tag">2. Estratégias por proteção</span>
+                                                <span class="detail-tag">3. Estratégias por tipo</span>
+                                                <span class="detail-tag">4. ROBUST (sempre como fallback)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <!-- Strategy Config -->
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">⚙️</span>
+                                        <span class="node-id">2.4.1</span>
+                                        <span class="node-title">Get Strategy Config</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Obtém configurações da estratégia atual</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Configurações por Estratégia</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">FAST</span><span class="detail-value">10s, no proxy</span></div>
+                                                <div class="detail-item"><span class="detail-key">STANDARD</span><span class="detail-value">15s, proxy</span></div>
+                                                <div class="detail-item"><span class="detail-key">ROBUST</span><span class="detail-value">20s, UA rotate</span></div>
+                                                <div class="detail-item"><span class="detail-key">AGGRESSIVE</span><span class="detail-value">30s, full rotate</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <!-- Proxy Check -->
+                                <div class="node decision-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">2.4.2</span>
+                                        <span class="node-title">Precisa Proxy?</span>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node scrape-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🌐</span>
+                                                <span class="node-id">2.4.2a</span>
+                                                <span class="node-title">Get Healthy Proxy</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Obtém proxy saudável do pool</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Checagens</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">1. Não está em quarentena?</span>
+                                                        <span class="detail-tag">2. Teste latência TCP</span>
+                                                        <span class="detail-tag">3. Latência < MAX_LATENCY?</span>
+                                                    </div>
+                                                </div>
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Config</div>
+                                                    <div class="detail-grid">
+                                                        <div class="detail-item"><span class="detail-key">MAX_ATTEMPTS</span><span class="detail-value">3</span></div>
+                                                        <div class="detail-item"><span class="detail-key">MAX_LATENCY</span><span class="detail-value">2000ms</span></div>
+                                                        <div class="detail-item"><span class="detail-key">QUARANTINE</span><span class="detail-value">300s</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:60px"></div><div class="connector-arrow"></div></div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                <!-- Execute Scrape -->
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🚀</span>
+                                        <span class="node-id">2.4.3</span>
+                                        <span class="node-title">Execute cffi_scrape_safe</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Requisição HTTP com curl_cffi</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Processo</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">1. AsyncSession(impersonate=chrome120)</span>
+                                                <span class="detail-tag">2. GET request com headers</span>
+                                                <span class="detail-tag">3. Parse HTML com BeautifulSoup</span>
+                                                <span class="detail-tag">4. Extrair texto (remove scripts/styles)</span>
+                                                <span class="detail-tag">5. Extrair links (hrefs)</span>
+                                                <span class="detail-tag">6. Extrair docs (PDF, DOC links)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <!-- Success Check -->
+                                <div class="node decision-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">2.4.4</span>
+                                        <span class="node-title">Requisição OK?</span>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node check-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🔍</span>
+                                                <span class="node-title">Detectar Proteção Bloqueante</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Ação se Cloudflare</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">Aguardar delay_seconds</span>
+                                                        <span class="detail-tag">Tentar próxima estratégia</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node loop-node mini">
+                                            <div class="node-header">
+                                                <span class="node-icon">🔄</span>
+                                                <span class="node-title">Próxima estratégia</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        
+                                        <!-- Content Length Check -->
+                                        <div class="node decision-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">❓</span>
+                                                <span class="node-id">2.4.5</span>
+                                                <span class="node-title">Conteúdo >= 500 chars?</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Threshold</div>
+                                                    <div class="detail-grid">
+                                                        <div class="detail-item"><span class="detail-key">MIN_CONTENT_LENGTH</span><span class="detail-value">500</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="branch-container">
+                                            <div class="branch">
+                                                <span class="branch-label no">NÃO</span>
+                                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                                <div class="node check-node mini" onclick="toggleNode(this)">
+                                                    <div class="node-header">
+                                                        <span class="node-icon">💾</span>
+                                                        <span class="node-title">Guardar melhor parcial</span>
+                                                        <span class="node-toggle">▼</span>
+                                                    </div>
+                                                    <div class="node-details">
+                                                        <div class="detail-section">
+                                                            <div class="detail-note">Se esse é o melhor resultado até agora, salvar para RESCUE</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                                <div class="node loop-node mini">
+                                                    <div class="node-header">
+                                                        <span class="node-icon">🔄</span>
+                                                        <span class="node-title">Próxima estratégia</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="branch">
+                                                <span class="branch-label yes">SIM</span>
+                                                <div class="connector"><div class="connector-line" style="height:60px"></div><div class="connector-arrow"></div></div>
+                                                <div class="node check-node">
+                                                    <div class="node-header">
+                                                        <span class="node-icon">✅</span>
+                                                        <span class="node-title">Main Page OK!</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                                <!-- RESCUE System -->
+                                <div class="node output-node" onclick="toggleNode(this)" style="border-width: 3px;">
+                                    <div class="node-header">
+                                        <span class="node-icon">🆘</span>
+                                        <span class="node-id">2.4.6</span>
+                                        <span class="node-title">RESCUE System (se todas falharam)</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Tenta resgatar site via subpages</div>
+                                    <div class="node-objective">🎯 Recuperar sites com main page minimalista mas links úteis</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Condições para RESCUE</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">best_partial_page existe</span>
+                                                <span class="detail-tag">best_partial_page.links > 0</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Processo</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">1. filter_non_html_links()</span>
+                                                <span class="detail-tag">2. prioritize_links(sobre, produtos, serviços)</span>
+                                                <span class="detail-tag">3. Pegar top 3 links</span>
+                                                <span class="detail-tag">4. Scrape cada link</span>
+                                                <span class="detail-tag">5. Combinar conteúdo se >= 500</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Config</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">RESCUE_LIMIT</span><span class="detail-value">3 páginas</span></div>
+                                                <div class="detail-item"><span class="detail-key">MIN_SUBPAGE</span><span class="detail-value">100 chars</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 2.5 LINK SELECTION ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>🔗</span>
+                                <span class="substage-title">2.5 Seleção de Links (LLM)</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🧹</span>
+                                        <span class="node-id">2.5.1</span>
+                                        <span class="node-title">Filtrar Links</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Remove links inválidos e externos</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Filtros Aplicados</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">Remover âncoras (#)</span>
+                                                <span class="detail-tag">Remover externos</span>
+                                                <span class="detail-tag">Remover arquivos (jpg, png, pdf...)</span>
+                                                <span class="detail-tag">Remover login/admin</span>
+                                                <span class="detail-tag">Normalizar URLs</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🤖</span>
+                                        <span class="node-id">2.5.2</span>
+                                        <span class="node-title">LLM Link Selection</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">LLM escolhe links mais relevantes</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Critérios de Prioridade</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">1. Sobre / Quem Somos</span>
+                                                <span class="detail-tag">2. Produtos / Serviços</span>
+                                                <span class="detail-tag">3. Contato</span>
+                                                <span class="detail-tag">4. Clientes / Portfólio</span>
+                                                <span class="detail-tag">5. Certificações / Qualidade</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Config</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">MAX_LINKS</span><span class="detail-value">30</span></div>
+                                                <div class="detail-item"><span class="detail-key">SLOW_MODE_CAP</span><span class="detail-value">10</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 2.6 SUBPAGES SCRAPE ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>📚</span>
+                                <span class="substage-title">2.6 Scrape Subpages (Paralelo)</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">✂️</span>
+                                        <span class="node-id">2.6.1</span>
+                                        <span class="node-title">Dividir em Chunks</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Agrupa links para processamento</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Config</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">CHUNK_SIZE</span><span class="detail-value">10</span></div>
+                                                <div class="detail-item"><span class="detail-key">MAX_CONCURRENT</span><span class="detail-value">15</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node loop-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔁</span>
+                                        <span class="node-id">2.6.2</span>
+                                        <span class="node-title">FOR chunk IN chunks</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Processa chunks sequencialmente</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Por Chunk</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">1. Obter novo proxy (rotation)</span>
+                                                <span class="detail-tag">2. asyncio.gather() paralelo</span>
+                                                <span class="detail-tag">3. Coletar resultados</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">⚡</span>
+                                        <span class="node-id">2.6.3</span>
+                                        <span class="node-title">Scrape Paralelo (asyncio.gather)</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Cada URL do chunk em paralelo</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Por URL</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">1. Domain semaphore (limita por host)</span>
+                                                <span class="detail-tag">2. cffi_scrape_safe(url, proxy)</span>
+                                                <span class="detail-tag">3. is_soft_404() check</span>
+                                                <span class="detail-tag">4. Filtrar conteúdo vazio</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Config</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">PER_DOMAIN_LIMIT</span><span class="detail-value">3 concurrent</span></div>
+                                                <div class="detail-item"><span class="detail-key">TIMEOUT</span><span class="detail-value">15s/25s</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🧪</span>
+                                        <span class="node-id">2.6.4</span>
+                                        <span class="node-title">Filtrar Soft 404</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Remove páginas de erro disfarçadas</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Assinaturas Soft 404</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">página não encontrada</span>
+                                                <span class="detail-tag">page not found</span>
+                                                <span class="detail-tag">404 error</span>
+                                                <span class="detail-tag">conteúdo não existe</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 2.7 CONSOLIDATION ===== -->
+                        <div class="substage-group">
+                            <div class="substage-header">
+                                <span>📦</span>
+                                <span class="substage-title">2.7 Consolidação e Learning</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node scrape-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔀</span>
+                                        <span class="node-id">2.7.1</span>
+                                        <span class="node-title">Consolidar Conteúdo</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Junta main + subpages</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Output</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">content</span><span class="detail-value">string (all text)</span></div>
+                                                <div class="detail-item"><span class="detail-key">documents</span><span class="detail-value">list[url]</span></div>
+                                                <div class="detail-item"><span class="detail-key">visited_urls</span><span class="detail-value">list[url]</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📝</span>
+                                        <span class="node-id">2.7.2</span>
+                                        <span class="node-title">Registrar Aprendizado</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Salva resultado para próximas execuções</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Dados Salvos</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">strategy_used</span><span class="detail-value">string</span></div>
+                                                <div class="detail-item"><span class="detail-key">protection_type</span><span class="detail-value">string</span></div>
+                                                <div class="detail-item"><span class="detail-key">success</span><span class="detail-value">boolean</span></div>
+                                                <div class="detail-item"><span class="detail-key">response_time</span><span class="detail-value">number</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Arquivos</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">data/site_knowledge.json</span>
+                                                <span class="detail-tag">data/failures.json</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                <!-- ========== STAGE 3: PROFILE (ULTRA DETALHADO) ========== -->
+                <div class="stage-group">
+                    <div class="stage-header">
+                        <span class="stage-number profile">3</span>
+                        <span class="stage-title">PROFILE (LLM) - DETALHAMENTO COMPLETO</span>
+                        <span class="stage-time">~12s | 99% sucesso</span>
+                    </div>
+                    
+                    <div class="stage-content">
+
+                        <!-- ===== 3.1 TOKEN ESTIMATION ===== -->
+                        <div class="substage-group" style="background: rgba(139, 92, 246, 0.05); border-color: rgba(139, 92, 246, 0.2);">
+                            <div class="substage-header">
+                                <span>🔢</span>
+                                <span class="substage-title" style="color: var(--accent-profile);">3.1 Estimativa de Tokens</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📏</span>
+                                        <span class="node-id">3.1.1</span>
+                                        <span class="node-title">estimate_tokens()</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Calcula tokens aproximados do conteúdo</div>
+                                    <div class="node-objective">🎯 Determinar se conteúdo cabe em um chunk</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Fórmula</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">tokens = len(text) / CHARS_PER_TOKEN</span>
+                                                <span class="detail-tag">+ SYSTEM_PROMPT_OVERHEAD</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Configurações</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">CHARS_PER_TOKEN</span><span class="detail-value">3</span></div>
+                                                <div class="detail-item"><span class="detail-key">PROMPT_OVERHEAD</span><span class="detail-value">2500</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-note">Aproximação para português (mais caracteres/token que inglês)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 3.2 CHUNKING ===== -->
+                        <div class="substage-group" style="background: rgba(139, 92, 246, 0.05); border-color: rgba(139, 92, 246, 0.2);">
+                            <div class="substage-header">
+                                <span>✂️</span>
+                                <span class="substage-title" style="color: var(--accent-profile);">3.2 Chunking (Divisão de Conteúdo)</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📄</span>
+                                        <span class="node-id">3.2.1</span>
+                                        <span class="node-title">Identificar Páginas</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Separa conteúdo por marcador de página</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Marcador</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">split("--- PAGE START:")</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-note">Cada subpágina do scrape vem com marcador próprio</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node loop-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔁</span>
+                                        <span class="node-id">3.2.2</span>
+                                        <span class="node-title">FOR page IN pages</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Processa cada página individualmente</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Objetivo</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">Estimar tokens de cada página</span>
+                                                <span class="detail-tag">Dividir páginas muito grandes</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node decision-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">3.2.3</span>
+                                        <span class="node-title">page_tokens > MAX_CHUNK?</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Threshold</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">MAX_CHUNK_TOKENS</span><span class="detail-value">800,000</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        
+                                        <!-- Large Page Split -->
+                                        <div class="node output-node" onclick="toggleNode(this)" style="border-width: 3px;">
+                                            <div class="node-header">
+                                                <span class="node-icon">⚠️</span>
+                                                <span class="node-id">3.2.4</span>
+                                                <span class="node-title">_split_large_page()</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">DIVIDE PÁGINA EM MÚLTIPLOS CHUNKS</div>
+                                            <div class="node-objective">🎯 Página única pode virar 2+ chunks!</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Hierarquia de Divisão</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">1. Tenta dividir por PARÁGRAFOS (\n\n)</span>
+                                                        <span class="detail-tag">2. Se não der, divide por LINHAS (\n)</span>
+                                                        <span class="detail-tag">3. Se linha > limite, TRUNCA</span>
+                                                    </div>
+                                                </div>
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Config</div>
+                                                    <div class="detail-grid">
+                                                        <div class="detail-item"><span class="detail-key">SAFE_MAX</span><span class="detail-value">80% do limite</span></div>
+                                                        <div class="detail-item"><span class="detail-key">MAX_CHARS</span><span class="detail-value">tokens × 2.5</span></div>
+                                                    </div>
+                                                </div>
+                                                <div class="detail-section">
+                                                    <div class="detail-note">⚠️ UMA subpágina pode gerar MÚLTIPLOS chunks se for muito grande!</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:80px"></div><div class="connector-arrow"></div></div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📦</span>
+                                        <span class="node-id">3.2.5</span>
+                                        <span class="node-title">Agrupamento Inteligente</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Agrupa páginas pequenas em chunks maiores</div>
+                                    <div class="node-objective">🎯 Otimizar uso do contexto do LLM</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Algoritmo</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">1. current_group = ""</span>
+                                                <span class="detail-tag">2. FOR page IN raw_pages:</span>
+                                                <span class="detail-tag">3.   SE current + page > TARGET:</span>
+                                                <span class="detail-tag">4.     SALVA current_group</span>
+                                                <span class="detail-tag">5.   SENÃO: AGRUPA</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Config</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">GROUP_TARGET</span><span class="detail-value">20,000 tokens</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-note">Múltiplas páginas pequenas podem ser agrupadas em 1 chunk</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📊</span>
+                                        <span class="node-id">3.2.6</span>
+                                        <span class="node-title">Log: N chunks de M páginas</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Exemplo</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">"Consolidado: 3 chunks de 15 páginas"</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 3.3 PROVIDER SELECTION ===== -->
+                        <div class="substage-group" style="background: rgba(139, 92, 246, 0.05); border-color: rgba(139, 92, 246, 0.2);">
+                            <div class="substage-header">
+                                <span>🎛️</span>
+                                <span class="substage-title" style="color: var(--accent-profile);">3.3 Seleção de Provider</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node decision-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">3.3.1</span>
+                                        <span class="node-title">len(chunks) == 1?</span>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node profile-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🎯</span>
+                                                <span class="node-id">3.3.2a</span>
+                                                <span class="node-title">Single Chunk Mode</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Processamento sequencial com fallback</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Processo</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">1. queue_manager.get_best_provider()</span>
+                                                        <span class="detail-tag">2. Tenta provider</span>
+                                                        <span class="detail-tag">3. Se falhar, próximo provider</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO (múltiplos)</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node profile-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">⚡</span>
+                                                <span class="node-id">3.3.2b</span>
+                                                <span class="node-title">Multi Chunk Mode</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Processamento paralelo distribuído</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Distribuição</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">chunk[i] → provider[i % len(providers)]</span>
+                                                    </div>
+                                                </div>
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Exemplo</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">3 chunks, 2 providers:</span>
+                                                        <span class="detail-tag">chunk 0 → Gemini</span>
+                                                        <span class="detail-tag">chunk 1 → OpenAI</span>
+                                                        <span class="detail-tag">chunk 2 → Gemini</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🏥</span>
+                                        <span class="node-id">3.3.3</span>
+                                        <span class="node-title">Health Monitor Check</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Verifica saúde dos providers</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Métricas Monitoradas</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">health_score</span><span class="detail-value">0-100</span></div>
+                                                <div class="detail-item"><span class="detail-key">error_rate</span><span class="detail-value">%</span></div>
+                                                <div class="detail-item"><span class="detail-key">avg_latency</span><span class="detail-value">ms</span></div>
+                                                <div class="detail-item"><span class="detail-key">active_requests</span><span class="detail-value">count</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Providers</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">Google Gemini (gemini-2.0-flash)</span>
+                                                <span class="detail-tag">OpenAI (gpt-4.1-nano)</span>
+                                                <span class="detail-tag">OpenRouter (fallback)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 3.4 LLM PROCESSING ===== -->
+                        <div class="substage-group" style="background: rgba(139, 92, 246, 0.05); border-color: rgba(139, 92, 246, 0.2);">
+                            <div class="substage-header">
+                                <span>🤖</span>
+                                <span class="substage-title" style="color: var(--accent-profile);">3.4 Processamento LLM</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node loop-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔁</span>
+                                        <span class="node-id">3.4.1</span>
+                                        <span class="node-title">asyncio.gather(*tasks)</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Executa todos chunks em paralelo</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Config</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">GLOBAL_TIMEOUT</span><span class="detail-value">240s</span></div>
+                                                <div class="detail-item"><span class="detail-key">return_exceptions</span><span class="detail-value">True</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📝</span>
+                                        <span class="node-id">3.4.2</span>
+                                        <span class="node-title">Montar Mensagens</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Prepara prompt para o LLM</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Estrutura</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">messages[0] = SYSTEM_PROMPT</span>
+                                                <span class="detail-tag">messages[1] = "Analise: {content}"</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">SYSTEM_PROMPT inclui</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">Schema JSON completo</span>
+                                                <span class="detail-tag">Instruções de extração</span>
+                                                <span class="detail-tag">Regras de produtos vs serviços</span>
+                                                <span class="detail-tag">Idioma: PT-BR</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🚀</span>
+                                        <span class="node-id">3.4.3</span>
+                                        <span class="node-title">_call_provider()</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Chamada HTTP ao provider LLM</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Request</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">response_format</span><span class="detail-value">json_object</span></div>
+                                                <div class="detail-item"><span class="detail-key">temperature</span><span class="detail-value">0.1</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node decision-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">3.4.4</span>
+                                        <span class="node-title">Resposta OK?</span>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node error-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">⚠️</span>
+                                                <span class="node-title">Classificar Erro</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Tipos de Erro</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">RATE_LIMIT → retry com backoff</span>
+                                                        <span class="detail-tag">TIMEOUT → tentar outro provider</span>
+                                                        <span class="detail-tag">BAD_REQUEST → abortar</span>
+                                                        <span class="detail-tag">ERROR → tentar outro provider</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node loop-node mini">
+                                            <div class="node-header">
+                                                <span class="node-icon">🔄</span>
+                                                <span class="node-title">Fallback: próximo provider</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:60px"></div><div class="connector-arrow"></div></div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📈</span>
+                                        <span class="node-id">3.4.5</span>
+                                        <span class="node-title">health_monitor.record_success()</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Atualiza métricas do provider</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Dados Registrados</div>
+                                            <div class="detail-grid">
+                                                <div class="detail-item"><span class="detail-key">latency_ms</span><span class="detail-value">number</span></div>
+                                                <div class="detail-item"><span class="detail-key">success</span><span class="detail-value">true</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 3.5 RESPONSE PARSING ===== -->
+                        <div class="substage-group" style="background: rgba(139, 92, 246, 0.05); border-color: rgba(139, 92, 246, 0.2);">
+                            <div class="substage-header">
+                                <span>🔍</span>
+                                <span class="substage-title" style="color: var(--accent-profile);">3.5 Parse da Resposta</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🧹</span>
+                                        <span class="node-id">3.5.1</span>
+                                        <span class="node-title">Limpar Markdown</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Remove blocos de código se houver</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Remoções</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">Remover "```json" do início</span>
+                                                <span class="detail-tag">Remover "```" do início/fim</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">📋</span>
+                                        <span class="node-id">3.5.2</span>
+                                        <span class="node-title">json.loads()</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Parse JSON padrão</div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node decision-node">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">3.5.3</span>
+                                        <span class="node-title">JSON válido?</span>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node output-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🔧</span>
+                                                <span class="node-id">3.5.4</span>
+                                                <span class="node-title">json_repair.loads()</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Tenta reparar JSON malformado</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-note">Biblioteca json_repair corrige problemas comuns como vírgulas extras, aspas faltantes</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:50px"></div><div class="connector-arrow"></div></div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🔀</span>
+                                        <span class="node-id">3.5.5</span>
+                                        <span class="node-title">normalize_llm_response()</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Normaliza estrutura para CompanyProfile</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Normalizações</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">Array → dict (extrai [0])</span>
+                                                <span class="detail-tag">None → [] (listas)</span>
+                                                <span class="detail-tag">None → {} (seções)</span>
+                                                <span class="detail-tag">Valida product_categories</span>
+                                                <span class="detail-tag">Valida service_details</span>
+                                                <span class="detail-tag">Gera titles p/ case_studies</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">✅</span>
+                                        <span class="node-id">3.5.6</span>
+                                        <span class="node-title">CompanyProfile(**data)</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Valida com Pydantic</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-note">Pydantic valida tipos e estrutura do JSON</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 3.6 PROFILE MERGE ===== -->
+                        <div class="substage-group" style="background: rgba(139, 92, 246, 0.05); border-color: rgba(139, 92, 246, 0.2);">
+                            <div class="substage-header">
+                                <span>🔀</span>
+                                <span class="substage-title" style="color: var(--accent-profile);">3.6 Merge de Perfis (se múltiplos chunks)</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node decision-node">
+                                    <div class="node-header">
+                                        <span class="node-icon">❓</span>
+                                        <span class="node-id">3.6.1</span>
+                                        <span class="node-title">len(valid_profiles) > 1?</span>
+                                    </div>
+                                </div>
+
+                                <div class="branch-container">
+                                    <div class="branch">
+                                        <span class="branch-label no">NÃO</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        <div class="node check-node mini">
+                                            <div class="node-header">
+                                                <span class="node-icon">✅</span>
+                                                <span class="node-title">Retorna perfil único</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="branch">
+                                        <span class="branch-label yes">SIM</span>
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+                                        
+                                        <div class="node profile-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">📊</span>
+                                                <span class="node-id">3.6.2</span>
+                                                <span class="node-title">_score_completeness()</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Calcula score de cada perfil</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Cálculo de Score</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">+N por item em lista</span>
+                                                        <span class="detail-tag">+len/10 por texto</span>
+                                                        <span class="detail-tag">+1 por campo preenchido</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                        <div class="node profile-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">📌</span>
+                                                <span class="node-id">3.6.3</span>
+                                                <span class="node-title">Seleciona Base (maior score)</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Perfil mais completo é a base</div>
+                                        </div>
+
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                        <div class="node loop-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🔁</span>
+                                                <span class="node-id">3.6.4</span>
+                                                <span class="node-title">FOR profile IN outros</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Mergeia cada perfil na base</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Funções de Merge</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">_merge_simple_sections()</span>
+                                                        <span class="detail-tag">_merge_offerings()</span>
+                                                        <span class="detail-tag">_merge_reputation()</span>
+                                                        <span class="detail-tag">_merge_sources()</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                        <div class="node profile-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">🔗</span>
+                                                <span class="node-id">3.6.5</span>
+                                                <span class="node-title">Merge de Listas</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">União sem duplicatas</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Campos</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">products: set union</span>
+                                                        <span class="detail-tag">services: set union</span>
+                                                        <span class="detail-tag">certifications: set union</span>
+                                                        <span class="detail-tag">client_list: set union</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="connector"><div class="connector-line" style="height:10px"></div><div class="connector-arrow"></div></div>
+
+                                        <div class="node profile-node" onclick="toggleNode(this)">
+                                            <div class="node-header">
+                                                <span class="node-icon">📝</span>
+                                                <span class="node-id">3.6.6</span>
+                                                <span class="node-title">Merge de Textos</span>
+                                                <span class="node-toggle">▼</span>
+                                            </div>
+                                            <div class="node-subtitle">Concatena textos complementares</div>
+                                            <div class="node-details">
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Lógica</div>
+                                                    <div class="detail-list">
+                                                        <span class="detail-tag">SE textos complementares:</span>
+                                                        <span class="detail-tag">  → concatena com ". "</span>
+                                                        <span class="detail-tag">SENÃO:</span>
+                                                        <span class="detail-tag">  → mantém o mais longo</span>
+                                                    </div>
+                                                </div>
+                                                <div class="detail-section">
+                                                    <div class="detail-label">Threshold</div>
+                                                    <div class="detail-grid">
+                                                        <div class="detail-item"><span class="detail-key">SIMILARITY</span><span class="detail-value">< 0.3</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                        <!-- ===== 3.7 CLEANUP ===== -->
+                        <div class="substage-group" style="background: rgba(139, 92, 246, 0.05); border-color: rgba(139, 92, 246, 0.2);">
+                            <div class="substage-header">
+                                <span>🧹</span>
+                                <span class="substage-title" style="color: var(--accent-profile);">3.7 Limpeza e Validação Final</span>
+                            </div>
+                            <div class="substage-content">
+                                <div class="node profile-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">🗑️</span>
+                                        <span class="node-id">3.7.1</span>
+                                        <span class="node-title">_clean_merged_profile()</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">Remove dados inválidos</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-label">Limpezas</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">Remove strings vazias de listas</span>
+                                                <span class="detail-tag">Remove categorias genéricas</span>
+                                                <span class="detail-tag">Remove serviços sem nome</span>
+                                                <span class="detail-tag">Remove case studies sem título</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-section">
+                                            <div class="detail-label">Categorias Inválidas</div>
+                                            <div class="detail-list">
+                                                <span class="detail-tag">"outras categorias"</span>
+                                                <span class="detail-tag">"marcas"</span>
+                                                <span class="detail-tag">"geral"</span>
+                                                <span class="detail-tag">"diversos"</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="connector"><div class="connector-line" style="height:15px"></div><div class="connector-arrow"></div></div>
+
+                                <div class="node check-node" onclick="toggleNode(this)">
+                                    <div class="node-header">
+                                        <span class="node-icon">✅</span>
+                                        <span class="node-id">3.7.2</span>
+                                        <span class="node-title">Validação Pydantic Final</span>
+                                        <span class="node-toggle">▼</span>
+                                    </div>
+                                    <div class="node-subtitle">CompanyProfile(**merged)</div>
+                                    <div class="node-details">
+                                        <div class="detail-section">
+                                            <div class="detail-note">Garante que o resultado final é válido</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+                <!-- ========== OUTPUT ========== -->
+                <div class="node output-node" onclick="toggleNode(this)">
+                    <div class="node-header">
+                        <span class="node-icon">📤</span>
+                        <span class="node-id">OUTPUT</span>
+                        <span class="node-title">CompanyProfile JSON</span>
+                        <span class="node-toggle">▼</span>
+                    </div>
+                    <div class="node-subtitle">Perfil estruturado completo</div>
+                    <div class="node-details">
+                        <div class="detail-section">
+                            <div class="detail-label">Estrutura</div>
+                            <div class="detail-list">
+                                <span class="detail-tag">identity</span>
+                                <span class="detail-tag">classification</span>
+                                <span class="detail-tag">team</span>
+                                <span class="detail-tag">offerings</span>
+                                <span class="detail-tag">reputation</span>
+                                <span class="detail-tag">contact</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+        <div class="legend-title">Legenda</div>
+        <div class="legend-items">
+            <div class="legend-item"><div class="legend-shape" style="background: var(--accent-input);"></div><span>Input/Output</span></div>
+            <div class="legend-item"><div class="legend-shape" style="background: var(--accent-scrape);"></div><span>Scrape</span></div>
+            <div class="legend-item"><div class="legend-shape" style="background: var(--accent-decision);"></div><span>Decisão</span></div>
+            <div class="legend-item"><div class="legend-shape" style="background: var(--accent-check);"></div><span>Verificação</span></div>
+            <div class="legend-item"><div class="legend-shape" style="background: var(--accent-loop);"></div><span>Loop</span></div>
+            <div class="legend-item"><div class="legend-shape" style="background: var(--accent-error);"></div><span>Erro</span></div>
+            <div class="legend-item"><div class="legend-shape" style="background: var(--accent-profile);"></div><span>LLM</span></div>
+        </div>
+    </div>
+
+    <!-- Info Box -->
+    <div class="info-box">
+        <div class="info-title">💡 Navegação</div>
+        <div class="info-content">
+            Clique nos nós para expandir detalhes.<br>
+            Use +/- para zoom.<br>
+            <strong>Foco:</strong> Etapa SCRAPE ultra-detalhada.
+        </div>
+    </div>
+
+    <script>
+        let zoomLevel = 100;
+        const wrapper = document.getElementById('diagramWrapper');
+
+        function toggleNode(node) { node.classList.toggle('expanded'); }
+        function zoomIn() { zoomLevel = Math.min(150, zoomLevel + 10); updateZoom(); }
+        function zoomOut() { zoomLevel = Math.max(50, zoomLevel - 10); updateZoom(); }
+        function resetZoom() { zoomLevel = 100; updateZoom(); }
+        function updateZoom() {
+            wrapper.style.transform = `scale(${zoomLevel / 100})`;
+            document.getElementById('zoomLevel').textContent = `${zoomLevel}%`;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '+' || e.key === '=') zoomIn();
+            if (e.key === '-') zoomOut();
+            if (e.key === '0') resetZoom();
+        });
+    </script>
+</body>
+</html>
