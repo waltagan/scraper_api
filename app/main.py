@@ -139,7 +139,7 @@ async def process_analysis(url: str, ctx_label: str = "") -> CompanyProfile:
 
     # 1. Scrape the main website AND subpages
     step_start = time.perf_counter()
-    markdown, _, scraped_urls = await scrape_url(url, max_subpages=100, ctx_label=ctx_label)
+    markdown, _, scraped_urls = await scrape_url(url, max_subpages=50, ctx_label=ctx_label)
     scrape_duration = time.perf_counter() - step_start
     logger.info(
         f"{ctx_label} [PERF] process_analysis step=scrape_url url={url} "

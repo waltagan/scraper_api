@@ -14,7 +14,7 @@ MAX_ANALYSIS_TIMEOUT = 300  # 5 minutos
 STRESS_TEST_TIMEOUT = 90    # Por empresa
 
 # Limites de processamento
-MAX_SUBPAGES = 100
+MAX_SUBPAGES = 50
 MAX_CONCURRENT_REQUESTS = 50
 
 # User-Agents para rotação
