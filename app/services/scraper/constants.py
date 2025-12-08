@@ -39,7 +39,12 @@ FAST_TRACK_CONFIG = {
     'slow_chunk_semaphore_limit': 4,
     'proxy_max_latency_ms': 250,
     'proxy_max_failures': 2,
-    'per_domain_limit': 4
+    'per_domain_limit': 4,
+    # Batch scraping settings (meio termo entre sequencial e paralelo)
+    'batch_size': 6,             # Número de páginas por batch
+    'batch_min_delay': 2.0,      # Delay mínimo entre batches (segundos)
+    'batch_max_delay': 5.0,      # Delay máximo entre batches (segundos)
+    'intra_batch_delay': 0.5     # Delay pequeno dentro do batch
 }
 
 # Configuração padrão = Fast Track
@@ -195,6 +200,22 @@ class ScraperConfig:
     @property
     def min_word_threshold(self) -> int:
         return self._config.get('min_word_threshold', 4)
+    
+    @property
+    def batch_size(self) -> int:
+        return self._config.get('batch_size', 4)
+    
+    @property
+    def batch_min_delay(self) -> float:
+        return self._config.get('batch_min_delay', 3.0)
+    
+    @property
+    def batch_max_delay(self) -> float:
+        return self._config.get('batch_max_delay', 7.0)
+    
+    @property
+    def intra_batch_delay(self) -> float:
+        return self._config.get('intra_batch_delay', 0.5)
     
     def update(self, **kwargs):
         """Atualiza configurações dinamicamente."""

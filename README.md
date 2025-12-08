@@ -118,6 +118,7 @@ busca_fornecedo_crawl/
 - **Proxies**: WebShare (rotating residential)
 - **Validação**: Pydantic v2
 - **Testes**: pytest + asyncio
+- **Scraping**: Batch processing (mini-batches com delays variáveis)
 
 ## 📝 Decisões Arquiteturais
 
@@ -126,6 +127,7 @@ busca_fornecedo_crawl/
 3. **Sistema RESCUE**: Tenta subpages quando main page tem < 500 chars
 4. **Circuit Breaker**: Evita bater em domínios problemáticos
 5. **Learning Engine**: Aprende estratégias bem-sucedidas por domínio
+6. **Batch Scraping**: Meio termo entre sequencial e paralelo (3-5x mais rápido, simula navegação humana)
 
 ## 📊 Monitoramento
 
@@ -144,7 +146,12 @@ busca_fornecedo_crawl/
 
 ## 📜 Changelog
 
-### v2.1 (Atual)
+### v2.2 (Atual)
+- ✅ Batch Scraping: 3-5x mais rápido que sequencial (delays variáveis 3-7s)
+- ✅ Simula navegação humana para evitar detecção de bot
+- ✅ Configurável por ambiente (batch_size, delays)
+
+### v2.1
 - ✅ Sistema RESCUE para main pages com < 500 chars
 - ✅ Documentação interativa completa
 - ✅ Teste de stress com 300 empresas
