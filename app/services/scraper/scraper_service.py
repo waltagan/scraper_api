@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 _domain_semaphores = {}
 _proxy_failures = {}
 _proxy_quarantine_until = {}
-_PROXY_QUARANTINE_SECONDS = 300
+_PROXY_QUARANTINE_SECONDS = 120  # Reduzido de 300s para 120s (1000 proxies disponíveis)
 
 
 def _get_domain_semaphore(host: str) -> asyncio.Semaphore:
@@ -322,8 +322,8 @@ async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[
     logger.info("⚡ FAST TRACK: Iniciando processamento rápido...")
     scraper_config.update(**FAST_TRACK_CONFIG)
     
-    # Usar concorrência alta para Fast Track (ex: 60)
-    fast_sem = asyncio.Semaphore(60)
+    # Usar concorrência do config (otimizado para 1000 proxies = 200)
+    fast_sem = asyncio.Semaphore(FAST_TRACK_CONFIG['site_semaphore_limit'])
     fast_timeout = 35.0
     
     async def fast_scrape(url):
@@ -357,8 +357,8 @@ async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[
     from .circuit_breaker import _domain_failures
     _domain_failures.clear()
     
-    # Usar concorrência baixa para Retry Track (ex: 5)
-    retry_sem = asyncio.Semaphore(5)
+    # Usar concorrência do config (otimizado para 1000 proxies = 25)
+    retry_sem = asyncio.Semaphore(RETRY_TRACK_CONFIG['site_semaphore_limit'])
     retry_timeout = 120.0
     
     async def retry_scrape(url):

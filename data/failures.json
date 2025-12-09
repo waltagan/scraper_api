@@ -15030,5 +15030,46 @@
     "retry_count": 0,
     "error_message": "Nenhuma variação de https://www.dmservice.ind.br/ respondeu",
     "duration_ms": 144015.39254188538
+  },
+  {
+    "timestamp": "2025-12-09T13:57:30.074893",
+    "module": "scraper",
+    "error_type": "unknown",
+    "url": "http://conair.com.br/",
+    "domain": "conair.com.br",
+    "context": {
+      "site_type": "static"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "No content",
+    "duration_ms": 3487.590291071683
+  },
+  {
+    "timestamp": "2025-12-09T14:02:02.673659",
+    "module": "scraper",
+    "error_type": "dns_error",
+    "url": "https://site-inexistente-xyz.com.br/",
+    "domain": "site-inexistente-xyz.com.br",
+    "context": {},
+    "strategy_used": "",
+    "retry_count": 0,
+    "error_message": "[🌐 DNS_ERROR] DNS não resolve 'site-inexistente-xyz.com.br' - domínio inexistente ou expirado",
+    "duration_ms": 129.47241682559252
+  },
+  {
+    "timestamp": "2025-12-09T14:02:06.464616",
+    "module": "scraper",
+    "error_type": "connection_error",
+    "url": "http://conair.com.br/",
+    "domain": "conair.com.br",
+    "context": {
+      "site_type": "static",
+      "diagnosis": "no_response"
+    },
+    "strategy_used": "fast",
+    "retry_count": 0,
+    "error_message": "[❓ NO_RESPONSE] Nenhuma resposta obtida do servidor",
+    "duration_ms": 3760.67979214713
   }
 ]

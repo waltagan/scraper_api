@@ -19,58 +19,61 @@ DEFAULT_HEADERS = {
     "Cache-Control": "max-age=0"
 }
 
-# Perfil R7 (SpeedCombo2) - Fast Track Otimizado
+# Perfil R7 (SpeedCombo2) - Fast Track Otimizado para 1000 Proxies
+# Com 1000 IPs, podemos aumentar significativamente a concorrência
+# mantendo < 1 req/proxy simultâneo (menos detecção)
 FAST_TRACK_CONFIG = {
-    'site_semaphore_limit': 60,
+    'site_semaphore_limit': 200,          # Era 60 → 200 (3.3x) - 1000 proxies suportam isso
     'circuit_breaker_threshold': 5,
     'page_timeout': 35000,
-    'md_threshold': 0.3,         # Reduzido para aceitar conteúdo mais simples
-    'min_word_threshold': 2,     # Reduzido para aceitar páginas com menos texto
-    'chunk_size': 15,
-    'chunk_semaphore_limit': 60,
-    'session_timeout': 8,        # Reduzido para falhar rápido na conexão
+    'md_threshold': 0.3,
+    'min_word_threshold': 2,
+    'chunk_size': 25,                     # Era 15 → 25 (mais paralelo)
+    'chunk_semaphore_limit': 200,         # Era 60 → 200 (3.3x)
+    'session_timeout': 8,
     'slow_probe_threshold_ms': 5000,
     'slow_main_threshold_ms': 8000,
-    'slow_subpage_cap': 2,       # Cap agressivo se detectado lento no fast track
+    'slow_subpage_cap': 5,                # Era 2 → 5 (mais subpáginas mesmo lento)
     'slow_per_request_timeout': 8,
     'fast_per_request_timeout': 12,
-    'fast_chunk_internal_limit': 10,
-    'slow_chunk_internal_limit': 2,
-    'slow_chunk_semaphore_limit': 4,
-    'proxy_max_latency_ms': 250,
-    'proxy_max_failures': 2,
-    'per_domain_limit': 4,
-    # Batch scraping settings (meio termo entre sequencial e paralelo)
-    'batch_size': 6,             # Número de páginas por batch
-    'batch_min_delay': 2.0,      # Delay mínimo entre batches (segundos)
-    'batch_max_delay': 5.0,      # Delay máximo entre batches (segundos)
-    'intra_batch_delay': 0.5     # Delay pequeno dentro do batch
+    'fast_chunk_internal_limit': 25,      # Era 10 → 25 (2.5x)
+    'slow_chunk_internal_limit': 5,       # Era 2 → 5 (2.5x)
+    'slow_chunk_semaphore_limit': 10,     # Era 4 → 10 (2.5x)
+    'proxy_max_latency_ms': 300,          # Era 250 → 300 (mais tolerante com muitos proxies)
+    'proxy_max_failures': 3,              # Era 2 → 3 (mais tolerante)
+    'per_domain_limit': 8,                # Era 4 → 8 (mais paralelo por domínio)
+    # Batch scraping settings - otimizado para 1000 proxies
+    'batch_size': 15,                     # Era 6 → 15 (2.5x mais paralelo)
+    'batch_min_delay': 1.0,               # Era 2.0 → 1.0 (mais rápido)
+    'batch_max_delay': 3.0,               # Era 5.0 → 3.0 (mais rápido)
+    'intra_batch_delay': 0.2              # Era 0.5 → 0.2 (mais rápido)
 }
 
 # Configuração padrão = Fast Track
 DEFAULT_CONFIG = FAST_TRACK_CONFIG.copy()
 
-# Perfil Robusto - Retry Track
+# Perfil Robusto - Retry Track Otimizado para 1000 Proxies
+# Com muitos proxies, podemos ser mais agressivos mesmo no retry
 RETRY_TRACK_CONFIG = {
-    'site_semaphore_limit': 5,
+    'site_semaphore_limit': 25,           # Era 5 → 25 (5x) - proxies abundantes
     'circuit_breaker_threshold': 10,
     'page_timeout': 120000,
     'md_threshold': 0.6,
     'min_word_threshold': 4,
-    'chunk_size': 5,
-    'chunk_semaphore_limit': 5,
+    'chunk_size': 15,                     # Era 5 → 15 (3x)
+    'chunk_semaphore_limit': 25,          # Era 5 → 25 (5x)
     'session_timeout': 30,
     'slow_probe_threshold_ms': 15000,
     'slow_main_threshold_ms': 20000,
-    'slow_subpage_cap': 10,      # Mais permissivo no retry track
+    'slow_subpage_cap': 20,               # Era 10 → 20 (mais subpáginas)
     'slow_per_request_timeout': 20,
     'fast_per_request_timeout': 20,
-    'fast_chunk_internal_limit': 4,
-    'slow_chunk_internal_limit': 2,
-    'slow_chunk_semaphore_limit': 2,
-    'proxy_max_latency_ms': 400,
+    'fast_chunk_internal_limit': 12,      # Era 4 → 12 (3x)
+    'slow_chunk_internal_limit': 6,       # Era 2 → 6 (3x)
+    'slow_chunk_semaphore_limit': 8,      # Era 2 → 8 (4x)
+    'proxy_max_latency_ms': 500,          # Era 400 → 500 (mais tolerante)
     'proxy_max_failures': 5,
-    'per_domain_limit': 1
+    'per_domain_limit': 3                 # Era 1 → 3 (mais paralelo)
 }
 
 # Extensões de documentos (para identificar, não processar)

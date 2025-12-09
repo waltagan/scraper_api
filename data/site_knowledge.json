@@ -11113,5 +11113,44 @@
     "last_failure": "",
     "special_config": {},
     "notes": ""
+  },
+  "www.dcoracaoonline.com.br": {
+    "domain": "www.dcoracaoonline.com.br",
+    "protection_type": "captcha",
+    "best_strategy": "fast",
+    "avg_response_time_ms": 10076.888875104487,
+    "success_rate": 1.0,
+    "total_attempts": 1,
+    "total_successes": 1,
+    "last_success": "2025-12-09T13:57:26.546138",
+    "last_failure": "",
+    "special_config": {},
+    "notes": ""
+  },
+  "conair.com.br": {
+    "domain": "conair.com.br",
+    "protection_type": "none",
+    "best_strategy": "standard",
+    "avg_response_time_ms": 0.0,
+    "success_rate": 0.0,
+    "total_attempts": 2,
+    "total_successes": 0,
+    "last_success": "",
+    "last_failure": "2025-12-09T14:02:06.500920",
+    "special_config": {},
+    "notes": ""
+  },
+  "www.construeloc.com.br": {
+    "domain": "www.construeloc.com.br",
+    "protection_type": "none",
+    "best_strategy": "fast",
+    "avg_response_time_ms": 6048.451458103955,
+    "success_rate": 1.0,
+    "total_attempts": 1,
+    "total_successes": 1,
+    "last_success": "2025-12-09T13:57:36.176957",
+    "last_failure": "",
+    "special_config": {},
+    "notes": ""
   }
 }

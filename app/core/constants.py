@@ -13,9 +13,9 @@ DEFAULT_REQUEST_TIMEOUT = 30
 MAX_ANALYSIS_TIMEOUT = 300  # 5 minutos
 STRESS_TEST_TIMEOUT = 90    # Por empresa
 
-# Limites de processamento
+# Limites de processamento - Otimizado para 1000 proxies
 MAX_SUBPAGES = 50
-MAX_CONCURRENT_REQUESTS = 50
+MAX_CONCURRENT_REQUESTS = 200  # Era 50 → 200 (1000 proxies disponíveis)
 
 # User-Agents para rotação
 USER_AGENTS = [
