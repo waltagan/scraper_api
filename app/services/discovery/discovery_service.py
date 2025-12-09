@@ -3,6 +3,7 @@ import logging
 import json
 import urllib.parse
 import random
+import httpx
 from typing import Optional, List, Dict, Any
 from bs4 import BeautifulSoup
 from openai import AsyncOpenAI
@@ -220,8 +221,9 @@ IGNORE completamente URLs contendo: facebook, instagram, linkedin, youtube, twit
 }
 ```
 """
+    
+    # import httpx  <-- Removido, já está no topo
 
-import httpx
 
 async def search_google_serper(query: str, num_results: int = 100) -> List[Dict[str, str]]:
     """
