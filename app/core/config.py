@@ -23,14 +23,19 @@ class Settings:
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1-nano")
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     
-    # 4. OpenRouter (3 modelos para maior capacidade)
+    # 4. RunPod (Provider Primário - Mistral 3 8B)
+    RUNPOD_API_KEY: str = os.getenv("RUNPOD_API_KEY", "sk-ABCDEFGHIJKLMNOPQRSTUVWZ")
+    RUNPOD_MODEL: str = os.getenv("RUNPOD_MODEL", "mistralai/Ministral-3-8B-Instruct-2512")
+    RUNPOD_BASE_URL: str = os.getenv("RUNPOD_BASE_URL", "https://h00gtsw9cqma00-8000.proxy.runpod.net/v1")
+    
+    # 5. OpenRouter (3 modelos para maior capacidade - Fallback)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
     OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-lite-001")
     OPENROUTER_MODEL_2: str = os.getenv("OPENROUTER_MODEL_2", "google/gemini-2.5-flash-lite")
     OPENROUTER_MODEL_3: str = os.getenv("LLM_MODEL3", "openai/gpt-4.1-nano")  # Terceiro modelo
     OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     
-    # Timeout específico para seleção de links (LLM)
+    # Timeout específico para seleção de links (LLM) - agora preferir config em app/configs/llm_agents.json (link_selector)
     LLM_LINK_SELECTION_TIMEOUT: float = float(os.getenv("LLM_LINK_SELECTION_TIMEOUT", "30.0"))
     
     # Logic to select provider (Priority: Google > xAI > OpenAI)
@@ -54,5 +59,28 @@ class Settings:
     SERPER_API_KEY: str = os.getenv("SERPER_API_KEY", "")
 
     WEBSHARE_PROXY_LIST_URL: str = os.getenv("WEBSHARE_PROXY_LIST_URL", "")
+    
+    # Database (PostgreSQL Railway)
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://postgres:UQIXJbRUopTkZjjRbZZwORImhfpipQDg@trolley.proxy.rlwy.net:32994/railway"
+    )
+    
+    # Phoenix Tracing (Observabilidade)
+    PHOENIX_COLLECTOR_URL: str = os.getenv(
+        "PHOENIX_COLLECTOR_URL",
+        "https://arize-phoenix-buscafornecedor.up.railway.app"
+    )
+    
+    # vLLM RunPod Configuration
+    VLLM_BASE_URL: str = os.getenv(
+        "VLLM_BASE_URL",
+        "https://5u888x525vvzvs-8000.proxy.runpod.net/v1"
+    )
+    VLLM_API_KEY: str = os.getenv("VLLM_API_KEY", "buscafornecedor")
+    VLLM_MODEL: str = os.getenv(
+        "VLLM_MODEL",
+        "mistralai/Ministral-3-3B-Instruct-2512"
+    )
 
 settings = Settings()
