@@ -1,0 +1,117 @@
+{
+  "llm_limits": {
+    "google": {
+      "gemini-2.0-flash": {
+        "rpm": 10000,
+        "rpm_note": "Requests/min base do provider; aumentar acelera pico e risco de 429; reduzir diminui throughput mas protege.",
+        "tpm": 10000000,
+        "tpm_note": "Tokens/min; subir libera textos maiores ou mais chamadas; descer evita custo/429 mas bloqueia requisições longas.",
+        "context_window": 1048576,
+        "context_window_note": "Tamanho máximo de contexto; maior aceita prompts grandes; menor pode cortar entrada.",
+        "max_output_tokens": 8192,
+        "max_output_tokens_note": "Saída máxima; subir gera respostas maiores e mais custo; baixar limita verbosidade.",
+        "weight": 29,
+        "weight_note": "Peso na distribuição; subir envia mais tráfego para este modelo; baixar desloca carga a outros.",
+        "description": "Gemini 2.0 Flash (1M context) - principal Google"
+      }
+    },
+    "openai": {
+      "gpt-4.1-nano": {
+        "rpm": 5000,
+        "rpm_note": "Requests/min; subir acelera pico e risco de rate-limit; baixar reduz throughput mas dá margem.",
+        "tpm": 4000000,
+        "tpm_note": "Tokens/min; subir permite mais texto; baixar reduz custo/429 mas pode enfileirar.",
+        "context_window": 1047576,
+        "context_window_note": "Máximo de contexto; maior comporta prompts longos; menor exige chunk menor.",
+        "max_output_tokens": 32768,
+        "max_output_tokens_note": "Máximo de saída; subir permite respostas longas; baixar limita custo/verbosidade.",
+        "weight": 14,
+        "weight_note": "Peso na distribuição; subir envia mais carga; baixar envia menos.",
+        "description": "GPT-4.1 Nano (1M context)"
+      }
+    },
+    "openrouter": {
+      "google/gemini-2.0-flash-lite-001": {
+        "rpm": 20000,
+        "rpm_note": "Requests/min via OpenRouter; subir acelera burst; baixar dá margem.",
+        "tpm": 10000000,
+        "tpm_note": "Tokens/min; subir aumenta capacidade; baixar protege custo/limite.",
+        "context_window": 1048576,
+        "context_window_note": "Máximo de contexto; maior aceita prompts grandes.",
+        "max_output_tokens": 8192,
+        "max_output_tokens_note": "Saída máxima; subir = respostas maiores; baixar = menor custo.",
+        "weight": 30,
+        "weight_note": "Peso de distribuição; subir manda mais tráfego para este modelo.",
+        "description": "Gemini 2.0 Flash Lite via OpenRouter (1M context)"
+      },
+      "google/gemini-2.5-flash-lite": {
+        "rpm": 15000,
+        "rpm_note": "Requests/min; subir acelera; baixar reduz risco de 429.",
+        "tpm": 8000000,
+        "tpm_note": "Tokens/min; subir libera mais texto; baixar protege custos.",
+        "context_window": 1048576,
+        "context_window_note": "Máximo de contexto; maior aceita prompts longos.",
+        "max_output_tokens": 65536,
+        "max_output_tokens_note": "Saída máxima; subir permite respostas longas; baixar corta custo.",
+        "weight": 25,
+        "weight_note": "Peso na distribuição; subir aumenta tráfego aqui; baixar diminui.",
+        "description": "Gemini 2.5 Flash Lite via OpenRouter (1M context)"
+      },
+      "openai/gpt-4.1-nano": {
+        "rpm": 10000,
+        "rpm_note": "Requests/min via OpenRouter; subir acelera; baixar dá margem.",
+        "tpm": 5000000,
+        "tpm_note": "Tokens/min; subir libera mais texto; baixar reduz risco/custo.",
+        "context_window": 1047576,
+        "context_window_note": "Máximo de contexto; maior aceita prompts grandes.",
+        "max_output_tokens": 32768,
+        "max_output_tokens_note": "Saída máxima; subir = respostas longas; baixar = economia.",
+        "weight": 20,
+        "weight_note": "Peso de distribuição; subir envia mais carga; baixar envia menos.",
+        "description": "GPT-4.1 Nano via OpenRouter (1M context)"
+      }
+    },
+    "config": {
+      "safety_margin": 0.8,
+      "safety_margin_note": "Usa 80% do limite para reduzir 429; aumentar margem (ex.: 0.9) dá mais throughput e risco; diminuir (ex.: 0.7) aumenta proteção e filas.",
+      "retry_delay_seconds": 1,
+      "retry_delay_seconds_note": "Espera entre tentativas; subir evita tempestade de retries; baixar acelera mas pode reencontrar limite.",
+      "max_retries": 3,
+      "max_retries_note": "Tentativas totais; subir melhora resiliência e custo; baixar falha mais cedo e economiza.",
+      "weighted_distribution": true,
+      "weighted_distribution_note": "Se true, distribui por peso; desligar remove balanceamento e usa ordem fixa.",
+      "total_providers_capacity_rpm": 50000,
+      "total_providers_capacity_rpm_note": "Capacidade agregada usada em cálculos de distribuição; subir assume mais espaço; baixar torna distribuição mais conservadora.",
+      "default_max_chunk_tokens": 200000,
+      "default_max_chunk_tokens_note": "Tamanho máximo de chunk padrão; subir reduz cortes e aumenta risco de contexto/TPM; baixar força chunks menores.",
+      "system_prompt_overhead": 2500,
+      "system_prompt_overhead_note": "Reserva de tokens para system prompt; subir protege contra overflow; baixar arrisca exceder contexto."
+    }
+  },
+  "serper": {
+    "rate_per_second": 190.0,
+    "rate_per_second_note": "Req/s permitidas; subir aproxima do limite 200 e aumenta risco de 429; baixar reduz throughput e dá margem.",
+    "max_burst": 170,
+    "max_burst_note": "Rajada inicial; subir acelera pico curto; baixar deixa fila mais estável.",
+    "max_concurrent": 1000,
+    "max_concurrent_note": "Conexões HTTP simultâneas; subir aumenta paralelismo e uso de recursos; baixar limita uso de rede/CPU.",
+    "request_timeout": 2.0,
+    "request_timeout_note": "Timeout de leitura; subir evita timeouts prematuros mas segura conexão; baixar falha mais rápido e libera recursos.",
+    "connect_timeout": 6.0,
+    "connect_timeout_note": "Timeout de conexão; subir tolera rede lenta; baixar reage mais rápido a quedas.",
+    "max_retries": 2,
+    "max_retries_note": "Tentativas; subir melhora resiliência e custo; baixar falha mais cedo.",
+    "retry_base_delay": 1.0,
+    "retry_base_delay_note": "Delay inicial de backoff; subir diminui tempestade de retries; baixar re-tenta mais agressivo.",
+    "retry_max_delay": 5.0,
+    "retry_max_delay_note": "Delay máximo de backoff; subir espaça mais; baixar concentra retries."
+  },
+  "scraper_domain": {
+    "requests_per_minute": 100,
+    "requests_per_minute_note": "RPM padrão por domínio; subir acelera scraping e risco de bloquear domínios; baixar protege e aumenta tempo.",
+    "burst_size": 50,
+    "burst_size_note": "Rajada por domínio; subir libera pico rápido; baixar deixa fluxo mais uniforme.",
+    "slow_domain_rpm": 10,
+    "slow_domain_rpm_note": "RPM para domínios marcados como lentos; subir arrisca manter pressão; baixar alivia e reduz bloqueios."
+  }
+}
