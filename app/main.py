@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="B2B Flash Profiler")
 
 # Registrar router v2
-app.include_router(v2_router, prefix="/api/v2")
+app.include_router(v2_router, prefix="/v2")
 
 # Iniciar monitor de saúde dos providers LLM no startup
 @app.on_event("startup")
