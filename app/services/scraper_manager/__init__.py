@@ -26,6 +26,7 @@ from .proxy_manager import (
 )
 from .circuit_breaker import (
     CircuitBreaker,
+    CircuitState,
     circuit_breaker,
     is_circuit_open,
     record_failure,
@@ -53,6 +54,7 @@ __all__ = [
     "record_proxy_success",
     # Circuit Breaker
     "CircuitBreaker",
+    "CircuitState",
     "circuit_breaker",
     "is_circuit_open",
     "record_failure",

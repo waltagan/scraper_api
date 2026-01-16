@@ -23,6 +23,11 @@ from .priority_queue import (
     priority_queue,
     Priority,
 )
+from .config_loader import (
+    load_config,
+    get_section,
+    reset_cache,
+)
 
 __all__ = [
     # Orchestrator
@@ -36,6 +41,10 @@ __all__ = [
     "PriorityQueue",
     "priority_queue",
     "Priority",
+    # Config Loader
+    "load_config",
+    "get_section",
+    "reset_cache",
 ]
 
 
