@@ -73,3 +73,40 @@ class CompanyProfile(BaseModel):
     reputation: Reputation = Reputation()
     contact: Contact = Contact()
     sources: List[str] = []
+
+    def is_empty(self) -> bool:
+        """
+        Verifica se o perfil da empresa está vazio (sem dados preenchidos).
+        Retorna True se nenhum campo relevante foi preenchido.
+        """
+        # Verifica se identity tem dados básicos
+        identity_empty = (
+            not self.identity.company_name and
+            not self.identity.cnpj and
+            not self.identity.tagline and
+            not self.identity.description
+        )
+
+        # Verifica se classification tem dados
+        classification_empty = (
+            not self.classification.industry and
+            not self.classification.business_model and
+            not self.classification.target_audience
+        )
+
+        # Verifica se offerings tem dados
+        offerings_empty = (
+            not self.offerings.products and
+            not self.offerings.services and
+            not self.offerings.product_categories
+        )
+
+        # Verifica se contact tem dados
+        contact_empty = (
+            not self.contact.website and
+            not self.contact.email and
+            not self.contact.phone
+        )
+
+        # Se pelo menos um campo principal tem dados, não está vazio
+        return identity_empty and classification_empty and offerings_empty and contact_empty

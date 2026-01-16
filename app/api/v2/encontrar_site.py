@@ -8,7 +8,6 @@ from app.schemas.v2.discovery import DiscoveryRequest, DiscoveryResponse
 from app.services.database_service import DatabaseService, get_db_service
 from app.services.agents.discovery_agent import get_discovery_agent
 from app.core.phoenix_tracer import trace_llm_call
-
 from app.services.discovery.discovery_service import _filter_search_results, is_blacklisted_domain
 
 logger = logging.getLogger(__name__)

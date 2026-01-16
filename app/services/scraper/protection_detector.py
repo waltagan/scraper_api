@@ -6,6 +6,7 @@ Analisa headers e corpo da resposta para identificar proteções.
 import logging
 from typing import Optional, Dict
 from .models import ProtectionType
+from app.configs.config_loader import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -13,70 +14,15 @@ logger = logging.getLogger(__name__)
 class ProtectionDetector:
     """Detecta tipo de proteção baseado em resposta HTTP."""
     
-    # Assinaturas de Cloudflare
-    CLOUDFLARE_BODY_SIGNATURES = [
-        "cf-browser-verification",
-        "cf_chl_opt",
-        "just a moment",
-        "checking your browser",
-        "ray id:",
-        "challenge-running",
-        "cloudflare"
-    ]
+    _SIG = load_config("scraper/protection_signatures.json")
     
-    CLOUDFLARE_HEADERS = [
-        "cf-ray",
-        "cf-cache-status",
-        "cf-request-id"
-    ]
-    
-    # Assinaturas de WAF genérico
-    WAF_BODY_SIGNATURES = [
-        "access denied",
-        "403 forbidden",
-        "blocked by security",
-        "firewall",
-        "security check",
-        "blocked request",
-        "web application firewall",
-        "waf"
-    ]
-    
-    WAF_HEADERS = [
-        "x-waf-",
-        "x-security-",
-        "x-blocked-by"
-    ]
-    
-    # Assinaturas de Captcha
-    CAPTCHA_SIGNATURES = [
-        "recaptcha",
-        "hcaptcha",
-        "g-recaptcha",
-        "h-captcha",
-        "challenge-form",
-        "captcha-container",
-        "verify you are human",
-        "prove you're not a robot"
-    ]
-    
-    # Assinaturas de Rate Limit
-    RATE_LIMIT_SIGNATURES = [
-        "rate limit",
-        "too many requests",
-        "request limit exceeded",
-        "slow down",
-        "retry after"
-    ]
-    
-    # Assinaturas de detecção de bot
-    BOT_DETECTION_SIGNATURES = [
-        "bot detected",
-        "automated access",
-        "suspicious activity",
-        "unusual traffic",
-        "please verify"
-    ]
+    CLOUDFLARE_BODY_SIGNATURES = _SIG.get("cloudflare_body_signatures", [])
+    CLOUDFLARE_HEADERS = _SIG.get("cloudflare_headers", [])
+    WAF_BODY_SIGNATURES = _SIG.get("waf_body_signatures", [])
+    WAF_HEADERS = _SIG.get("waf_headers", [])
+    CAPTCHA_SIGNATURES = _SIG.get("captcha_signatures", [])
+    RATE_LIMIT_SIGNATURES = _SIG.get("rate_limit_signatures", [])
+    BOT_DETECTION_SIGNATURES = _SIG.get("bot_detection_signatures", [])
     
     def detect(
         self, 

@@ -8,23 +8,19 @@ Constantes específicas de cada módulo devem ficar em seus próprios arquivos.
 # Versão do sistema
 VERSION = "2.0.0"
 
-# Timeouts globais (em segundos)
-DEFAULT_REQUEST_TIMEOUT = 30
-MAX_ANALYSIS_TIMEOUT = 300  # 5 minutos
-STRESS_TEST_TIMEOUT = 90    # Por empresa
+from app.configs.config_loader import load_config
 
-# Limites de processamento - Otimizado para 1000 proxies
-MAX_SUBPAGES = 50
-MAX_CONCURRENT_REQUESTS = 200  # Era 50 → 200 (1000 proxies disponíveis)
+_CORE_CFG = load_config("core_constants.json")
+_UA_CFG = load_config("user_agents.json")
 
 # User-Agents para rotação
-USER_AGENTS = [
+USER_AGENTS = _UA_CFG.get("user_agents", [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-]
+])
 
 # Assinaturas de proteção (usadas em múltiplos módulos)
 CLOUDFLARE_SIGNATURES = [

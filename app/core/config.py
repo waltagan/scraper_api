@@ -59,7 +59,7 @@ class Settings:
     SERPER_API_KEY: str = os.getenv("SERPER_API_KEY", "")
 
     WEBSHARE_PROXY_LIST_URL: str = os.getenv("WEBSHARE_PROXY_LIST_URL", "")
-    
+
     # Database (PostgreSQL Railway)
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",

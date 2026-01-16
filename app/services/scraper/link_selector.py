@@ -1,20 +1,15 @@
 """
 Seleção inteligente de links para scraping de subpáginas.
-Usa LLM para priorizar links mais relevantes para construção de perfil.
 
-IMPORTANTE: Usa o sistema de gerenciamento de LLM centralizado para:
-- Rate limiting por provider
-- Balanceamento de carga
-- Health monitoring
-- Fallback automático
+REFATORADO: Agora usa LinkSelectorAgent para seleção de links
+via llm_manager centralizado.
 """
 
-import json
 import time
 import logging
-import asyncio
 from typing import List, Set
 from urllib.parse import urlparse
+
 from .constants import (
     DOCUMENT_EXTENSIONS,
     EXCLUDED_EXTENSIONS,
@@ -23,11 +18,17 @@ from .constants import (
     LOW_PRIORITY_KEYWORDS
 )
 
+# Usar agente de seleção de links
+from app.services.agents import get_link_selector_agent
+
 logger = logging.getLogger(__name__)
 
-# Semáforo global para limitar requisições simultâneas de seleção de links
-# Isso evita saturar os providers quando muitas empresas são processadas em paralelo
-_link_selector_semaphore = asyncio.Semaphore(10)  # Máximo 10 seleções simultâneas
+# NOTA: Não precisamos de semáforo aqui!
+# O controle de concorrência é feito pelo llm_manager que já gerencia:
+# - Rate limiting (RPM/TPM)
+# - Semáforos por provider
+# - Sistema de prioridades
+# - Health monitoring
 
 
 def filter_non_html_links(links: Set[str]) -> Set[str]:
@@ -111,22 +112,20 @@ async def select_links_with_llm(
     links: Set[str], 
     base_url: str, 
     max_links: int = 30,
-    ctx_label: str = ""
+    ctx_label: str = "",
+    request_id: str = ""
 ) -> List[str]:
     """
     Usa LLM para selecionar links mais relevantes para construção de perfil.
     
-    IMPORTANTE: Usa o sistema centralizado de LLM para:
-    - Rate limiting (evita saturar providers)
-    - Balanceamento entre múltiplos providers
-    - Timeout configurável
-    - Fallback automático
+    REFATORADO: Agora usa LinkSelectorAgent via llm_manager centralizado.
     
     Args:
         links: Conjunto de links encontrados na página
         base_url: URL base do site
         max_links: Número máximo de links a retornar
         ctx_label: Label de contexto para logs
+        request_id: ID da requisição
     
     Returns:
         Lista de links selecionados pelo LLM
@@ -152,187 +151,50 @@ async def select_links_with_llm(
         logger.info(f"{ctx_label}[PERF] select_links_llm duration={duration:.3f}s strategy=short_circuit")
         return list(filtered_links)
     
-    # Usar semáforo para limitar concorrência de seleção de links
-    # Isso evita saturar os providers quando 250+ empresas são processadas em paralelo
-    async with _link_selector_semaphore:
-        return await _select_links_with_llm_internal(
-            filtered_links, base_url, max_links, ctx_label, start_ts
-        )
+    # Chamar agente diretamente - o llm_manager já controla a concorrência
+    return await _select_links_with_agent(
+        filtered_links, base_url, max_links, ctx_label, start_ts, request_id
+    )
 
 
-async def _select_links_with_llm_internal(
+async def _select_links_with_agent(
     filtered_links: Set[str],
     base_url: str,
     max_links: int,
     ctx_label: str,
-    start_ts: float
+    start_ts: float,
+    request_id: str = ""
 ) -> List[str]:
     """
-    Implementação interna da seleção de links com LLM.
-    Usa o sistema centralizado de gerenciamento de providers.
+    Implementação interna usando LinkSelectorAgent.
     """
-    # Importar sistema centralizado de LLM
-    from app.services.llm.provider_manager import provider_manager, LLMPriority
-    from app.services.llm.queue_manager import create_queue_manager
-    from app.services.llm.health_monitor import health_monitor
+    link_selector = get_link_selector_agent()
     
-    # Criar queue manager para esta requisição com WEIGHTS para distribuição proporcional
-    queue_manager = create_queue_manager(
-        providers=provider_manager.available_providers,
-        priorities=provider_manager.provider_weights  # Usar WEIGHTS ao invés de priorities
-    )
-    
-    links_list = "\n".join([f"{i+1}. {url}" for i, url in enumerate(sorted(filtered_links))])
-    
-    prompt = f"""Você é um especialista em análise de websites B2B.
-
-CONTEXTO: Estamos coletando dados para criar um perfil completo de empresa com os seguintes campos:
-
-**IDENTITY**: Nome da empresa, CNPJ, tagline, descrição, ano de fundação, número de funcionários
-**CLASSIFICATION**: Indústria, modelo de negócio (B2B/B2C), público-alvo, cobertura geográfica
-**TEAM**: Tamanho da equipe, cargos-chave, certificações do time
-**OFFERINGS**: Produtos, categorias de produtos, serviços, detalhes de serviços, modelos de engajamento, diferenciais
-**REPUTATION**: Certificações, prêmios, parcerias, lista de clientes, cases de sucesso
-**CONTACT**: E-mails, telefones, LinkedIn, endereço, localizações
-
-TAREFA: Selecione os {max_links} links MAIS RELEVANTES da lista abaixo. Priorize:
-1. Páginas "Sobre", "Quem Somos", "Institucional"
-2. Páginas de Produtos/Serviços/Soluções/Catálogos
-3. Páginas de Cases, Clientes, Projetos
-4. Páginas de Contato, Equipe, Localizações
-5. Páginas de Certificações, Prêmios, Parcerias
-
-EVITE: Blogs, notícias, políticas de privacidade, login, carrinho, termos de uso
-
-LISTA DE LINKS DO SITE {base_url}:
-{links_list}
-
-Responda APENAS com um JSON array contendo os números dos links selecionados (ex: [1, 3, 5, 7, ...]):
-"""
-
-    messages = [
-                {"role": "system", "content": "Você é um assistente especializado em análise de websites B2B. Responda sempre em JSON válido."},
-                {"role": "user", "content": prompt}
-    ]
-    
-    # Tentar com cada provider usando WEIGHTED selection (com fallback)
-    providers_tried = []
-    max_attempts = len(provider_manager.available_providers)
-    
-    for attempt in range(max_attempts):
-        # NOVO: Usar weighted selection para distribuir carga proporcionalmente
-        provider = queue_manager.get_weighted_provider(
-            exclude=providers_tried,
-            weights=provider_manager.provider_weights
+    try:
+        selected_urls = await link_selector.select_links(
+            links=filtered_links,
+            base_url=base_url,
+            max_links=max_links,
+            ctx_label=ctx_label,
+            request_id=request_id
         )
         
-        if not provider:
-            logger.warning(f"{ctx_label}[LinkSelector] Nenhum provider LLM disponível")
-            break
-        
-        providers_tried.append(provider)
-        
-        try:
-            # Usar o provider_manager centralizado para fazer a chamada
-            # LinkSelector usa prioridade HIGH para não ser bloqueado pelo Profile
-            response_content, latency_ms = await asyncio.wait_for(
-                provider_manager.call(
-                    provider=provider,
-                    messages=messages,
-                    response_format={"type": "json_object"},
-                    temperature=0.1,
-                    ctx_label=f"{ctx_label}[LinkSelector]",
-                    priority=LLMPriority.HIGH  # Prioridade alta - desbloqueia scrape
-                ),
-                timeout=30.0  # Timeout de 30s para seleção de links
+        if selected_urls:
+            duration = time.perf_counter() - start_ts
+            logger.info(
+                f"{ctx_label}[PERF] select_links_llm duration={duration:.3f}s "
+                f"selected={len(selected_urls)} strategy=agent"
             )
-            
-            # Registrar sucesso no health monitor
-            health_monitor.record_success(provider, latency_ms)
-            
-            # Processar resposta
-            selected_urls = _parse_link_selection_response(
-                response_content, filtered_links, ctx_label
-            )
-            
-            if selected_urls:
-                duration = time.perf_counter() - start_ts
-                logger.info(
-                    f"{ctx_label}[PERF] select_links_llm duration={duration:.3f}s "
-                    f"selected={len(selected_urls)} provider={provider} strategy=llm"
-                )
-                return selected_urls[:max_links]
-            
-            # LLM retornou vazio, mas não é erro - usar fallback
-            logger.warning(f"{ctx_label}[LinkSelector] LLM retornou lista vazia, usando fallback heurístico")
-            return prioritize_links(filtered_links, base_url)[:max_links]
-            
-        except asyncio.TimeoutError:
-            from app.services.llm.health_monitor import FailureType
-            health_monitor.record_failure(provider, FailureType.TIMEOUT)
-            logger.warning(f"{ctx_label}[LinkSelector] Timeout com {provider}, tentando próximo...")
-            continue
-            
-        except Exception as e:
-            from app.services.llm.health_monitor import FailureType
-            health_monitor.record_failure(provider, FailureType.ERROR)
-            logger.warning(f"{ctx_label}[LinkSelector] Erro com {provider}: {type(e).__name__}, tentando próximo...")
-            continue
-    
-    # Todos providers falharam - usar fallback heurístico
-    duration = time.perf_counter() - start_ts
-    logger.warning(
-        f"{ctx_label}[LinkSelector] Todos providers falharam após {duration:.2f}s, "
-        f"usando fallback heurístico"
-    )
-    return prioritize_links(filtered_links, base_url)[:max_links]
-
-
-def _parse_link_selection_response(
-    content: str, 
-    filtered_links: Set[str],
-    ctx_label: str
-) -> List[str]:
-    """
-    Parse a resposta do LLM para extrair os índices de links selecionados.
-    """
-    try:
-        result = json.loads(content)
+            return selected_urls[:max_links]
         
-        if isinstance(result, list):
-            selected_indices = result
-        elif "links" in result:
-            selected_indices = result["links"]
-        elif "selected" in result:
-            selected_indices = result["selected"]
-        elif "indices" in result:
-            selected_indices = result["indices"]
-        else:
-            # Procurar primeiro array no resultado
-            for value in result.values():
-                if isinstance(value, list):
-                    selected_indices = value
-                    break
-            else:
-                selected_indices = []
+        # LLM retornou vazio - usar fallback
+        logger.warning(f"{ctx_label}[LinkSelector] Agente retornou lista vazia, usando fallback heurístico")
+        return prioritize_links(filtered_links, base_url)[:max_links]
         
-        sorted_links = sorted(filtered_links)
-        selected_urls = []
-        
-        for idx in selected_indices:
-            try:
-                idx_int = int(idx)
-                if 1 <= idx_int <= len(sorted_links):
-                    selected_urls.append(sorted_links[idx_int - 1])
-            except (ValueError, TypeError):
-                continue
-        
-        return selected_urls
-        
-    except json.JSONDecodeError:
-        logger.warning(f"{ctx_label}[LinkSelector] LLM não retornou JSON válido")
-        return []
     except Exception as e:
-        logger.warning(f"{ctx_label}[LinkSelector] Erro ao processar resposta: {e}")
-        return []
-
+        duration = time.perf_counter() - start_ts
+        logger.warning(
+            f"{ctx_label}[LinkSelector] Erro no agente após {duration:.2f}s: {e}. "
+            f"Usando fallback heurístico"
+        )
+        return prioritize_links(filtered_links, base_url)[:max_links]

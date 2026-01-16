@@ -4,8 +4,12 @@ Constantes e configurações do módulo de scraping.
 
 import asyncio
 
-# Headers que imitam um navegador real para evitar bloqueios WAF
-DEFAULT_HEADERS = {
+from app.services.concurrency_manager.config_loader import get_section as get_config
+from app.configs.config_loader import load_config
+
+# Headers que imitam um navegador real para evitar bloqueios WAF (externalizados)
+_HEADERS_CFG = load_config("scraper/headers.json").get("default_headers", {})
+DEFAULT_HEADERS = _HEADERS_CFG or {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -19,62 +23,66 @@ DEFAULT_HEADERS = {
     "Cache-Control": "max-age=0"
 }
 
-# Perfil R7 (SpeedCombo2) - Fast Track Otimizado para 1000 Proxies
-# Com 1000 IPs, podemos aumentar significativamente a concorrência
-# mantendo < 1 req/proxy simultâneo (menos detecção)
-FAST_TRACK_CONFIG = {
-    'site_semaphore_limit': 200,          # Era 60 → 200 (3.3x) - 1000 proxies suportam isso
+FAST_TRACK_CONFIG = get_config("scraper/scraper_fast_track", {}) or {
+    'site_semaphore_limit': 1000,
     'circuit_breaker_threshold': 5,
-    'page_timeout': 35000,
+    'page_timeout': 20000,
     'md_threshold': 0.3,
-    'min_word_threshold': 2,
-    'chunk_size': 25,                     # Era 15 → 25 (mais paralelo)
-    'chunk_semaphore_limit': 200,         # Era 60 → 200 (3.3x)
-    'session_timeout': 8,
-    'slow_probe_threshold_ms': 5000,
-    'slow_main_threshold_ms': 8000,
-    'slow_subpage_cap': 5,                # Era 2 → 5 (mais subpáginas mesmo lento)
-    'slow_per_request_timeout': 8,
-    'fast_per_request_timeout': 12,
-    'fast_chunk_internal_limit': 25,      # Era 10 → 25 (2.5x)
-    'slow_chunk_internal_limit': 5,       # Era 2 → 5 (2.5x)
-    'slow_chunk_semaphore_limit': 10,     # Era 4 → 10 (2.5x)
-    'proxy_max_latency_ms': 300,          # Era 250 → 300 (mais tolerante com muitos proxies)
-    'proxy_max_failures': 3,              # Era 2 → 3 (mais tolerante)
-    'per_domain_limit': 8,                # Era 4 → 8 (mais paralelo por domínio)
-    # Batch scraping settings - otimizado para 1000 proxies
-    'batch_size': 15,                     # Era 6 → 15 (2.5x mais paralelo)
-    'batch_min_delay': 1.0,               # Era 2.0 → 1.0 (mais rápido)
-    'batch_max_delay': 3.0,               # Era 5.0 → 3.0 (mais rápido)
-    'intra_batch_delay': 0.2              # Era 0.5 → 0.2 (mais rápido)
+    'min_word_threshold': 5,
+    'chunk_size': 25,
+    'chunk_semaphore_limit': 2000,
+    'session_timeout': 15,
+    'slow_probe_threshold_ms': 10000,
+    'slow_main_threshold_ms': 15000,
+    'slow_subpage_cap': 5,
+    'slow_per_request_timeout': 15,
+    'fast_per_request_timeout': 10,
+    'fast_chunk_internal_limit': 50,
+    'slow_chunk_internal_limit': 10,
+    'slow_chunk_semaphore_limit': 100,
+    'proxy_max_latency_ms': 300,
+    'proxy_max_failures': 3,
+    'per_domain_limit': 10,
+    'batch_size': 30,
+    'batch_min_delay': 0.5,
+    'batch_max_delay': 1.5,
+    'intra_batch_delay': 0.9
 }
 
 # Configuração padrão = Fast Track
 DEFAULT_CONFIG = FAST_TRACK_CONFIG.copy()
 
-# Perfil Robusto - Retry Track Otimizado para 1000 Proxies
-# Com muitos proxies, podemos ser mais agressivos mesmo no retry
-RETRY_TRACK_CONFIG = {
-    'site_semaphore_limit': 25,           # Era 5 → 25 (5x) - proxies abundantes
-    'circuit_breaker_threshold': 10,
-    'page_timeout': 120000,
-    'md_threshold': 0.6,
+# Perfil Robusto - Retry Track apontando para configs centralizadas
+RETRY_TRACK_CONFIG = get_config("scraper/scraper_retry_track", {}) or {
+    'site_semaphore_limit': 500,
+    'circuit_breaker_threshold': 8,
+    'page_timeout': 20000,
+    'md_threshold': 0.4,
     'min_word_threshold': 4,
-    'chunk_size': 15,                     # Era 5 → 15 (3x)
-    'chunk_semaphore_limit': 25,          # Era 5 → 25 (5x)
+    'chunk_size': 15,
+    'chunk_semaphore_limit': 100,
     'session_timeout': 30,
     'slow_probe_threshold_ms': 15000,
     'slow_main_threshold_ms': 20000,
-    'slow_subpage_cap': 20,               # Era 10 → 20 (mais subpáginas)
+    'slow_subpage_cap': 8,
     'slow_per_request_timeout': 20,
-    'fast_per_request_timeout': 20,
-    'fast_chunk_internal_limit': 12,      # Era 4 → 12 (3x)
-    'slow_chunk_internal_limit': 6,       # Era 2 → 6 (3x)
-    'slow_chunk_semaphore_limit': 8,      # Era 2 → 8 (4x)
-    'proxy_max_latency_ms': 500,          # Era 400 → 500 (mais tolerante)
-    'proxy_max_failures': 5,
-    'per_domain_limit': 3                 # Era 1 → 3 (mais paralelo)
+    'fast_per_request_timeout': 25,
+    'fast_chunk_internal_limit': 20,
+    'slow_chunk_internal_limit': 8,
+    'slow_chunk_semaphore_limit': 40,
+    'proxy_max_latency_ms': 400,
+    'proxy_max_failures': 4,
+    'per_domain_limit': 10,
+    'batch_size': 15,
+    'batch_min_delay': 0.5,
+    'batch_max_delay': 3.0,
+    'intra_batch_delay': 0.2
 }
+
+# Override opcional via configs externos (compatibilidade)
+_RETRY_OVERRIDE = get_config("scraper/scraper_retry_track_override", {})
+if _RETRY_OVERRIDE:
+    RETRY_TRACK_CONFIG = _RETRY_OVERRIDE
 
 # Extensões de documentos (para identificar, não processar)
 DOCUMENT_EXTENSIONS = {'.pdf', '.doc', '.docx', '.ppt', '.pptx'}

@@ -6,6 +6,7 @@ Decide qual estratégia usar baseado no perfil do site.
 import logging
 from typing import List
 from .models import SiteProfile, SiteType, ProtectionType, ScrapingStrategy
+from app.configs.config_loader import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -16,61 +17,28 @@ class StrategySelector:
     Retorna lista de estratégias para tentar em cascata.
     """
     
+    _CFG = load_config("scraper/strategy_selector.json")
+    
+    _PROT = _CFG.get("protection_strategies", {})
+    _SITE = _CFG.get("site_type_strategies", {})
+    _STRAT_CFG = _CFG.get("strategy_configs", {})
+    
     # Configuração de estratégias por tipo de proteção
     PROTECTION_STRATEGIES = {
-        ProtectionType.NONE: [
-            ScrapingStrategy.FAST,
-            ScrapingStrategy.STANDARD,
-            ScrapingStrategy.ROBUST
-        ],
-        ProtectionType.CLOUDFLARE: [
-            ScrapingStrategy.AGGRESSIVE,
-            ScrapingStrategy.ROBUST,
-            ScrapingStrategy.STANDARD
-        ],
-        ProtectionType.WAF: [
-            ScrapingStrategy.ROBUST,
-            ScrapingStrategy.AGGRESSIVE,
-            ScrapingStrategy.STANDARD
-        ],
-        ProtectionType.CAPTCHA: [
-            ScrapingStrategy.AGGRESSIVE,
-            ScrapingStrategy.ROBUST
-        ],
-        ProtectionType.RATE_LIMIT: [
-            ScrapingStrategy.STANDARD,
-            ScrapingStrategy.ROBUST
-        ],
-        ProtectionType.BOT_DETECTION: [
-            ScrapingStrategy.AGGRESSIVE,
-            ScrapingStrategy.ROBUST,
-            ScrapingStrategy.STANDARD
-        ]
+        ProtectionType.NONE: [ScrapingStrategy[s.upper()] for s in _PROT.get("none", ["fast","standard","robust"])],
+        ProtectionType.CLOUDFLARE: [ScrapingStrategy[s.upper()] for s in _PROT.get("cloudflare", ["aggressive","robust","standard"])],
+        ProtectionType.WAF: [ScrapingStrategy[s.upper()] for s in _PROT.get("waf", ["robust","aggressive","standard"])],
+        ProtectionType.CAPTCHA: [ScrapingStrategy[s.upper()] for s in _PROT.get("captcha", ["aggressive","robust"])],
+        ProtectionType.RATE_LIMIT: [ScrapingStrategy[s.upper()] for s in _PROT.get("rate_limit", ["standard","robust"])],
+        ProtectionType.BOT_DETECTION: [ScrapingStrategy[s.upper()] for s in _PROT.get("bot_detection", ["aggressive","robust","standard"])],
     }
     
     # Configuração de estratégias por tipo de site
     SITE_TYPE_STRATEGIES = {
-        SiteType.STATIC: [
-            ScrapingStrategy.FAST,
-            ScrapingStrategy.STANDARD,
-            ScrapingStrategy.ROBUST
-        ],
-        SiteType.SPA: [
-            ScrapingStrategy.ROBUST,
-            ScrapingStrategy.AGGRESSIVE,
-            ScrapingStrategy.STANDARD
-        ],
-        SiteType.HYBRID: [
-            ScrapingStrategy.STANDARD,
-            ScrapingStrategy.ROBUST,
-            ScrapingStrategy.AGGRESSIVE
-        ],
-        SiteType.UNKNOWN: [
-            ScrapingStrategy.STANDARD,
-            ScrapingStrategy.FAST,
-            ScrapingStrategy.ROBUST,
-            ScrapingStrategy.AGGRESSIVE
-        ]
+        SiteType.STATIC: [ScrapingStrategy[s.upper()] for s in _SITE.get("static", ["fast","standard","robust"])],
+        SiteType.SPA: [ScrapingStrategy[s.upper()] for s in _SITE.get("spa", ["robust","aggressive","standard"])],
+        SiteType.HYBRID: [ScrapingStrategy[s.upper()] for s in _SITE.get("hybrid", ["standard","robust","aggressive"])],
+        SiteType.UNKNOWN: [ScrapingStrategy[s.upper()] for s in _SITE.get("unknown", ["standard","fast","robust","aggressive"])],
     }
     
     def select(self, site_profile: SiteProfile) -> List[ScrapingStrategy]:
@@ -169,28 +137,28 @@ class StrategySelector:
             Dict com configurações (timeout, use_proxy, rotate_ua, etc)
         """
         configs = {
-            ScrapingStrategy.FAST: {
+            ScrapingStrategy.FAST: self._STRAT_CFG.get("fast", {
                 "timeout": 10,
-                "use_proxy": False,
+                "use_proxy": True,
                 "rotate_ua": False,
                 "retry_count": 1,
                 "delay_between_requests": 0.1
-            },
-            ScrapingStrategy.STANDARD: {
+            }),
+            ScrapingStrategy.STANDARD: self._STRAT_CFG.get("standard", {
                 "timeout": 15,
                 "use_proxy": True,
                 "rotate_ua": False,
                 "retry_count": 2,
                 "delay_between_requests": 0.5
-            },
-            ScrapingStrategy.ROBUST: {
+            }),
+            ScrapingStrategy.ROBUST: self._STRAT_CFG.get("robust", {
                 "timeout": 20,
                 "use_proxy": True,
                 "rotate_ua": True,
                 "retry_count": 3,
                 "delay_between_requests": 1.0
-            },
-            ScrapingStrategy.AGGRESSIVE: {
+            }),
+            ScrapingStrategy.AGGRESSIVE: self._STRAT_CFG.get("aggressive", {
                 "timeout": 25,
                 "use_proxy": True,
                 "rotate_ua": True,
@@ -198,7 +166,7 @@ class StrategySelector:
                 "custom_headers": True,
                 "retry_count": 3,
                 "delay_between_requests": 2.0
-            }
+            })
         }
         return configs.get(strategy, configs[ScrapingStrategy.STANDARD])
 
