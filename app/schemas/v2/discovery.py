@@ -25,29 +25,26 @@ class DiscoveryRequest(BaseModel):
 
 class DiscoveryResponse(BaseModel):
     """
-    Response schema para descoberta de site.
+    Response schema para descoberta de site (processamento assíncrono).
     
     Campos:
-        success: Indica se a operação foi bem-sucedida
-        discovery_id: ID do registro salvo no banco de dados (tabela website_discovery)
-        website_url: URL do site encontrado (None se não encontrado)
-        discovery_status: Status da descoberta ('found', 'not_found', 'error')
-        confidence_score: Score de confiança (0.0 a 1.0) - opcional
+        success: Indica se a requisição foi aceita
+        message: Mensagem de confirmação
+        cnpj_basico: CNPJ básico da empresa processada
+        status: Status da requisição ('accepted', 'processing')
     """
-    success: bool = Field(..., description="Indica se a operação foi bem-sucedida")
-    discovery_id: Optional[int] = Field(None, description="ID do registro salvo no banco de dados")
-    website_url: Optional[str] = Field(None, description="URL do site encontrado")
-    discovery_status: str = Field(..., description="Status da descoberta: 'found', 'not_found', ou 'error'")
-    confidence_score: Optional[float] = Field(None, description="Score de confiança (0.0 a 1.0)", ge=0.0, le=1.0)
+    success: bool = Field(..., description="Indica se a requisição foi aceita")
+    message: str = Field(..., description="Mensagem de confirmação")
+    cnpj_basico: str = Field(..., description="CNPJ básico da empresa")
+    status: str = Field(default="accepted", description="Status: 'accepted' (requisição aceita) ou 'processing' (em processamento)")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "success": True,
-                "discovery_id": 456,
-                "website_url": "https://www.empresa.com.br",
-                "discovery_status": "found",
-                "confidence_score": 0.95
+                "message": "Requisição de descoberta de site aceita para CNPJ 12345678. Processamento em background.",
+                "cnpj_basico": "12345678",
+                "status": "accepted"
             }
         }
     )

@@ -34,26 +34,26 @@ class SerperRequest(BaseModel):
 
 class SerperResponse(BaseModel):
     """
-    Response schema para busca Serper.
+    Response schema para busca Serper (processamento assíncrono).
     
     Campos:
-        success: Indica se a operação foi bem-sucedida
-        serper_id: ID do registro salvo no banco de dados (tabela serper_results)
-        results_count: Número de resultados retornados pela busca
-        query_used: Query utilizada na busca Serper
+        success: Indica se a requisição foi aceita
+        message: Mensagem de confirmação
+        cnpj_basico: CNPJ básico da empresa processada
+        status: Status da requisição ('accepted', 'processing')
     """
-    success: bool = Field(..., description="Indica se a operação foi bem-sucedida")
-    serper_id: Optional[int] = Field(None, description="ID do registro salvo no banco de dados")
-    results_count: int = Field(..., description="Número de resultados retornados pela busca", ge=0)
-    query_used: str = Field(..., description="Query utilizada na busca Serper")
+    success: bool = Field(..., description="Indica se a requisição foi aceita")
+    message: str = Field(..., description="Mensagem de confirmação")
+    cnpj_basico: str = Field(..., description="CNPJ básico da empresa")
+    status: str = Field(default="accepted", description="Status: 'accepted' (requisição aceita) ou 'processing' (em processamento)")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "success": True,
-                "serper_id": 123,
-                "results_count": 10,
-                "query_used": "Empresa Exemplo LTDA São Paulo"
+                "message": "Requisição de busca Serper aceita para CNPJ 12345678. Processamento em background.",
+                "cnpj_basico": "12345678",
+                "status": "accepted"
             }
         }
     )

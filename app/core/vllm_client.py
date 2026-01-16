@@ -31,7 +31,10 @@ def get_vllm_client() -> AsyncOpenAI:
             base_url=settings.VLLM_BASE_URL,
             api_key=settings.VLLM_API_KEY,
         )
-        logger.info(f"✅ Cliente vLLM criado: {settings.VLLM_BASE_URL}")
+        logger.info(
+            f"✅ Cliente vLLM criado: base_url={settings.VLLM_BASE_URL}, "
+            f"model={settings.VLLM_MODEL}, api_key={'***' if settings.VLLM_API_KEY else 'NONE'}"
+        )
     return _vllm_client
 
 

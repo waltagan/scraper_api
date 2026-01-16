@@ -103,9 +103,9 @@ class CompanyProfile(BaseModel):
 
         # Verifica se contact tem dados
         contact_empty = (
-            not self.contact.website and
-            not self.contact.email and
-            not self.contact.phone
+            not self.contact.website_url and
+            not self.contact.emails and
+            not self.contact.phones
         )
 
         # Se pelo menos um campo principal tem dados, não está vazio

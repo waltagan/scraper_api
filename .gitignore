@@ -1,20 +1,37 @@
+# Python
 __pycache__/
-*.pyc
-.env
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
 venv/
 .venv/
-results/
-.DS_Store
+env/
+ENV/
 
-resultado.json
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
 logs.*.json
 logs_app*.json
-logs/
-debug_profile_builder/
-analysis_*.json
 
-# Test reports
-tests/reports/*.json
+# Results and debug
+results/
+debug_*/
+analysis_*.json
+resultado.json
+empresas*.json
+erros.json
 
 # IDE and editor
 .cursor/
@@ -22,39 +39,39 @@ tests/reports/*.json
 .idea/
 *.swp
 *.swo
+*.sublime-*
 
 # Cache
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
-# Analysis and debug folders
-analysis/
-fixes/
-docs/
-
-# Temporary files
+# OS files
+.DS_Store
+Thumbs.db
 *.tmp
 *.temp
-*.log
 
-# Test data
-empresas*.json
-erros.json
-*_answer.md
-
-# Example/template files with secrets
-exemploenv.md
-
-# Documentation that shouldn't be in deploy
+# Documentation (manter apenas README.md principal)
 CONFIGURACAO_PROVIDERS.md
 INTEGRACAO_RUNPOD.md
 RUNPOD_CONFIG_FASE1.md
 cursor.md
 IMPLEMENTATION_PLAN.md
 PRD.md
+*_answer.md
+exemploenv.md
 
 # Test files
 test_*.py
 pytest.ini
 tests/
+tests/reports/
+
+# Analysis and debug folders
+analysis/
+fixes/
+docs/_build/
+docs/.doctrees/

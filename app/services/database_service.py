@@ -1,5 +1,6 @@
 """
 Serviço de banco de dados 100% assíncrono.
+Atualizado para usar o schema busca_fornecedor.
 """
 import json
 import logging
@@ -8,6 +9,10 @@ from app.core.database import get_pool
 from app.schemas.profile import CompanyProfile
 
 logger = logging.getLogger(__name__)
+
+# Schema do banco de dados - IMPORTANTE: sempre usar explicitamente nas queries
+# Usar aspas duplas para garantir que o PostgreSQL use o schema correto
+SCHEMA = "busca_fornecedor"
 
 
 class DatabaseService:
@@ -42,14 +47,18 @@ class DatabaseService:
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO serper_results 
+            # Garantir que estamos usando o schema correto - SEMPRE explícito
+            query = f"""
+                INSERT INTO "{SCHEMA}".serper_results 
                     (cnpj_basico, company_name, razao_social, nome_fantasia, 
                      municipio, results_json, results_count, query_used)
                 VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
                 RETURNING id
-                """,
+                """
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] Executando INSERT em serper_results")
+            logger.debug(f"🔍 Query: {query[:150]}...")
+            row = await conn.fetchrow(
+                query,
                 cnpj_basico,
                 company_name,
                 razao_social,
@@ -75,13 +84,15 @@ class DatabaseService:
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT * FROM serper_results 
+            query = f"""
+                SELECT * FROM "{SCHEMA}".serper_results 
                 WHERE cnpj_basico = $1 
                 ORDER BY created_at DESC 
                 LIMIT 1
-                """,
+                """
+            logger.debug(f"🔍 [SCHEMA={SCHEMA}] SELECT serper_results")
+            row = await conn.fetchrow(
+                query,
                 cnpj_basico
             )
             if row:
@@ -119,17 +130,19 @@ class DatabaseService:
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
+            # Garantir que estamos usando o schema correto - SEMPRE explícito
+            query_check = f'SELECT id FROM "{SCHEMA}".website_discovery WHERE cnpj_basico = $1'
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] Verificando discovery")
             # Verificar se já existe registro para este CNPJ
             existing = await conn.fetchrow(
-                "SELECT id FROM website_discovery WHERE cnpj_basico = $1",
+                query_check,
                 cnpj_basico
             )
             
             if existing:
                 # Atualizar registro existente
-                row = await conn.fetchrow(
-                    """
-                    UPDATE website_discovery 
+                query_update = f"""
+                    UPDATE "{SCHEMA}".website_discovery 
                     SET website_url = $2,
                         discovery_status = $3,
                         serper_id = $4,
@@ -138,7 +151,10 @@ class DatabaseService:
                         updated_at = NOW()
                     WHERE cnpj_basico = $1
                     RETURNING id
-                    """,
+                    """
+                logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE website_discovery")
+                row = await conn.fetchrow(
+                    query_update,
                     cnpj_basico,
                     website_url,
                     discovery_status,
@@ -150,14 +166,16 @@ class DatabaseService:
                 logger.debug(f"✅ Discovery atualizado: id={discovery_id}, cnpj={cnpj_basico}, status={discovery_status}")
             else:
                 # Criar novo registro
-                row = await conn.fetchrow(
-                    """
-                    INSERT INTO website_discovery 
+                query_insert = f"""
+                    INSERT INTO "{SCHEMA}".website_discovery 
                         (cnpj_basico, serper_id, website_url, discovery_status, 
                          confidence_score, llm_reasoning)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     RETURNING id
-                    """,
+                    """
+                logger.info(f"🔍 [SCHEMA={SCHEMA}] INSERT website_discovery")
+                row = await conn.fetchrow(
+                    query_insert,
                     cnpj_basico,
                     serper_id,
                     website_url,
@@ -182,11 +200,13 @@ class DatabaseService:
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT * FROM website_discovery 
+            query = f"""
+                SELECT * FROM "{SCHEMA}".website_discovery 
                 WHERE cnpj_basico = $1
-                """,
+                """
+            logger.debug(f"🔍 [SCHEMA={SCHEMA}] SELECT website_discovery")
+            row = await conn.fetchrow(
+                query,
                 cnpj_basico
             )
             if row:
@@ -237,14 +257,16 @@ class DatabaseService:
                         page_source
                     ))
                 
-                # Batch insert (muito mais eficiente)
-                await conn.executemany(
-                    """
-                    INSERT INTO scraped_chunks 
+                # Batch insert (muito mais eficiente) - SEMPRE com schema explícito
+                query_chunks = f"""
+                    INSERT INTO "{SCHEMA}".scraped_chunks 
                         (cnpj_basico, discovery_id, website_url, chunk_index, 
                          total_chunks, chunk_content, token_count, page_source)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    """,
+                    """
+                logger.info(f"🔍 [SCHEMA={SCHEMA}] Salvando {len(records)} chunks")
+                await conn.executemany(
+                    query_chunks,
                     records
                 )
                 
@@ -263,12 +285,14 @@ class DatabaseService:
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT * FROM scraped_chunks 
+            query = f"""
+                SELECT * FROM "{SCHEMA}".scraped_chunks 
                 WHERE cnpj_basico = $1 
                 ORDER BY chunk_index ASC
-                """,
+                """
+            logger.debug(f"🔍 [SCHEMA={SCHEMA}] SELECT scraped_chunks")
+            rows = await conn.fetch(
+                query,
                 cnpj_basico
             )
             return [dict(row) for row in rows]
@@ -282,7 +306,8 @@ class DatabaseService:
         company_name: Optional[str] = None,
     ) -> int:
         """
-        Salva perfil completo da empresa.
+        Salva perfil completo da empresa no novo esquema.
+        Inclui salvamento nas tabelas auxiliares (locations, services, products, etc).
         
         Args:
             cnpj_basico: CNPJ básico da empresa
@@ -294,108 +319,289 @@ class DatabaseService:
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
-            # Extrair dados do profile
-            company_name = company_name or profile.identity.company_name
-            cnpj = profile.identity.cnpj or cnpj_basico
-            industry = profile.classification.industry
-            business_model = profile.classification.business_model
-            target_audience = profile.classification.target_audience
-            geographic_coverage = profile.classification.geographic_coverage
-            founding_year = int(profile.identity.founding_year) if profile.identity.founding_year and profile.identity.founding_year.isdigit() else None
-            
-            # Extrair employee_count (range)
-            employee_count_min = None
-            employee_count_max = None
-            if profile.identity.employee_count_range:
-                # Tentar parsear "10-50" ou similar
-                try:
-                    parts = profile.identity.employee_count_range.split('-')
-                    if len(parts) == 2:
-                        employee_count_min = int(parts[0].strip())
-                        employee_count_max = int(parts[1].strip())
-                except:
-                    pass
-            
-            headquarters_address = profile.contact.headquarters_address
-            linkedin_url = profile.contact.linkedin_url
-            website_url = profile.contact.website_url
-            
-            # Converter profile para JSON string (será convertido para JSONB no SQL)
-            profile_json = json.dumps(profile.model_dump())
-            
-            # Verificar se já existe registro
-            existing = await conn.fetchrow(
-                "SELECT id FROM company_profile WHERE cnpj = $1",
-                cnpj
-            )
-            
-            if existing:
-                # Atualizar registro existente
-                row = await conn.fetchrow(
-                    """
-                    UPDATE company_profile 
-                    SET company_name = $2,
-                        industry = $3,
-                        business_model = $4,
-                        target_audience = $5,
-                        geographic_coverage = $6,
-                        founding_year = $7,
-                        employee_count_min = $8,
-                        employee_count_max = $9,
-                        headquarters_address = $10,
-                        linkedin_url = $11,
-                        website_url = $12,
-                        profile_json = $13::jsonb,
-                        updated_at = NOW()
-                    WHERE cnpj = $1
-                    RETURNING id
-                    """,
-                    cnpj,
-                    company_name,
-                    industry,
-                    business_model,
-                    target_audience,
-                    geographic_coverage,
-                    founding_year,
-                    employee_count_min,
-                    employee_count_max,
-                    headquarters_address,
-                    linkedin_url,
-                    website_url,
-                    profile_json
+            # Transação para garantir atomicidade
+            async with conn.transaction():
+                # Verificar e garantir que estamos usando o schema correto
+                logger.info(f"📊 Salvando perfil no schema: {SCHEMA}")
+                # Extrair dados do profile
+                company_name = company_name or profile.identity.company_name
+                cnpj = profile.identity.cnpj or cnpj_basico
+                razao_social = None  # Não está no schema atual, mas pode ser adicionado
+                tagline = profile.identity.tagline
+                description = profile.identity.description
+                industry = profile.classification.industry
+                business_model = profile.classification.business_model
+                target_audience = profile.classification.target_audience
+                geographic_coverage = profile.classification.geographic_coverage
+                
+                # Founding year
+                founding_year = None
+                if profile.identity.founding_year:
+                    try:
+                        founding_year = int(profile.identity.founding_year)
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Employee count (range)
+                employee_count_min = None
+                employee_count_max = None
+                employee_count_range = profile.identity.employee_count_range
+                if employee_count_range:
+                    # Tentar parsear "10-50" ou similar
+                    try:
+                        parts = employee_count_range.split('-')
+                        if len(parts) == 2:
+                            employee_count_min = int(parts[0].strip())
+                            employee_count_max = int(parts[1].strip())
+                    except:
+                        pass
+                
+                # Contact info
+                headquarters_address = profile.contact.headquarters_address
+                emails = profile.contact.emails or []
+                phones = profile.contact.phones or []
+                linkedin_url = profile.contact.linkedin_url
+                website_url = profile.contact.website_url
+                instagram_url = None  # Não está no schema atual, mas pode ser adicionado
+                
+                # Sources
+                sources = profile.sources or []
+                
+                # Campos opcionais
+                n_exibicoes = 0  # Default
+                recebe_email = False  # Default
+                
+                # Converter profile para JSON string (será convertido para JSONB no SQL)
+                profile_json = json.dumps(profile.model_dump(), ensure_ascii=False)
+                
+                # Verificar se já existe registro - SEMPRE com schema explícito
+                query_check_profile = f'SELECT id FROM "{SCHEMA}".company_profile WHERE cnpj = $1'
+                logger.info(f"🔍 [SCHEMA={SCHEMA}] Verificando profile existente")
+                existing = await conn.fetchrow(
+                    query_check_profile,
+                    cnpj
                 )
-                company_id = row['id']
-                logger.debug(f"✅ Profile atualizado: id={company_id}, cnpj={cnpj}")
-            else:
-                # Criar novo registro
-                row = await conn.fetchrow(
-                    """
-                    INSERT INTO company_profile 
-                        (company_name, cnpj, industry, business_model, 
-                         target_audience, geographic_coverage, founding_year,
-                         employee_count_min, employee_count_max, 
-                         headquarters_address, linkedin_url, website_url, profile_json)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
-                    RETURNING id
-                    """,
-                    company_name,
-                    cnpj,
-                    industry,
-                    business_model,
-                    target_audience,
-                    geographic_coverage,
-                    founding_year,
-                    employee_count_min,
-                    employee_count_max,
-                    headquarters_address,
-                    linkedin_url,
-                    website_url,
-                    profile_json
-                )
-                company_id = row['id']
-                logger.debug(f"✅ Profile criado: id={company_id}, cnpj={cnpj}")
-            
-            return company_id
+                
+                if existing:
+                    # Atualizar registro existente - SEMPRE com schema explícito
+                    query_update = f"""
+                        UPDATE "{SCHEMA}".company_profile 
+                        SET company_name = $2,
+                            razao_social = $3,
+                            tagline = $4,
+                            description = $5,
+                            industry = $6,
+                            business_model = $7,
+                            target_audience = $8,
+                            geographic_coverage = $9,
+                            founding_year = $10,
+                            employee_count_min = $11,
+                            employee_count_max = $12,
+                            employee_count_range = $13,
+                            headquarters_address = $14,
+                            emails = $15,
+                            phones = $16,
+                            linkedin_url = $17,
+                            website_url = $18,
+                            instagram_url = $19,
+                            sources = $20,
+                            n_exibicoes = $21,
+                            recebe_email = $22,
+                            profile_json = $23::jsonb,
+                            updated_at = NOW()
+                        WHERE cnpj = $1
+                        RETURNING id
+                        """
+                    logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE company_profile")
+                    row = await conn.fetchrow(
+                        query_update,
+                        cnpj,
+                        company_name,
+                        razao_social,
+                        tagline,
+                        description,
+                        industry,
+                        business_model,
+                        target_audience,
+                        geographic_coverage,
+                        founding_year,
+                        employee_count_min,
+                        employee_count_max,
+                        employee_count_range,
+                        headquarters_address,
+                        emails,
+                        phones,
+                        linkedin_url,
+                        website_url,
+                        instagram_url,
+                        sources,
+                        n_exibicoes,
+                        recebe_email,
+                        profile_json
+                    )
+                    company_id = row['id']
+                    logger.debug(f"✅ Profile atualizado: id={company_id}, cnpj={cnpj}")
+                else:
+                    # Criar novo registro - SEMPRE com schema explícito
+                    query_insert_profile = f"""
+                        INSERT INTO "{SCHEMA}".company_profile 
+                            (company_name, razao_social, cnpj, tagline, description,
+                             industry, business_model, target_audience, geographic_coverage,
+                             founding_year, employee_count_min, employee_count_max, employee_count_range,
+                             headquarters_address, emails, phones, linkedin_url, website_url,
+                             instagram_url, sources, n_exibicoes, recebe_email, profile_json)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::jsonb)
+                        RETURNING id
+                        """
+                    logger.info(f"🔍 [SCHEMA={SCHEMA}] INSERT company_profile")
+                    row = await conn.fetchrow(
+                        query_insert_profile,
+                        company_name,
+                        razao_social,
+                        cnpj,
+                        tagline,
+                        description,
+                        industry,
+                        business_model,
+                        target_audience,
+                        geographic_coverage,
+                        founding_year,
+                        employee_count_min,
+                        employee_count_max,
+                        employee_count_range,
+                        headquarters_address,
+                        emails,
+                        phones,
+                        linkedin_url,
+                        website_url,
+                        instagram_url,
+                        sources,
+                        n_exibicoes,
+                        recebe_email,
+                        profile_json
+                    )
+                    company_id = row['id']
+                    logger.debug(f"✅ Profile criado: id={company_id}, cnpj={cnpj}")
+                
+                # Salvar dados nas tabelas auxiliares
+                await self._save_profile_auxiliary_data(conn, company_id, profile)
+                
+                return company_id
+    
+    async def _save_profile_auxiliary_data(
+        self,
+        conn,
+        company_id: int,
+        profile: CompanyProfile
+    ):
+        """
+        Salva dados nas tabelas auxiliares (locations, services, products, etc).
+        
+        Args:
+            conn: Conexão do banco de dados
+            company_id: ID da empresa
+            profile: Objeto CompanyProfile
+        """
+        # 1. Locations - SEMPRE com schema explícito
+        if profile.contact.locations:
+            # Deletar locations antigas
+            query_delete_locations = f'DELETE FROM "{SCHEMA}".company_location WHERE company_id = $1'
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] DELETE company_location")
+            await conn.execute(query_delete_locations, company_id)
+            # Inserir novas locations
+            for location in profile.contact.locations:
+                if location and location.strip():
+                    query_insert_location = f'INSERT INTO "{SCHEMA}".company_location (company_id, location) VALUES ($1, $2)'
+                    logger.debug(f"🔍 [SCHEMA={SCHEMA}] INSERT location: {location[:50]}")
+                    await conn.execute(query_insert_location, company_id, location.strip())
+        
+        # 2. Services - SEMPRE com schema explícito
+        if profile.offerings.service_details:
+            # Deletar services antigos
+            query_delete_services = f'DELETE FROM "{SCHEMA}".company_service WHERE company_id = $1'
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] DELETE company_service")
+            await conn.execute(query_delete_services, company_id)
+            # Inserir novos services
+            for service in profile.offerings.service_details:
+                if service.name:
+                    deliverables_json = json.dumps(service.deliverables or [], ensure_ascii=False)
+                    query_insert_service = f"""
+                        INSERT INTO "{SCHEMA}".company_service 
+                            (company_id, name, description, methodology, ideal_client_profile, deliverables)
+                        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                        """
+                    logger.debug(f"🔍 [SCHEMA={SCHEMA}] INSERT service: {service.name}")
+                    await conn.execute(
+                        query_insert_service,
+                        company_id,
+                        service.name,
+                        service.description,
+                        service.methodology,
+                        service.ideal_client_profile,
+                        deliverables_json
+                    )
+        
+        # 3. Product Categories - SEMPRE com schema explícito
+        if profile.offerings.product_categories:
+            # Deletar product categories antigas
+            query_delete_categories = f'DELETE FROM "{SCHEMA}".company_product_category WHERE company_id = $1'
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] DELETE company_product_category")
+            await conn.execute(query_delete_categories, company_id)
+            # Inserir novas product categories
+            for category in profile.offerings.product_categories:
+                if category.category_name:
+                    items_json = json.dumps(category.items or [], ensure_ascii=False)
+                    query_insert_category = f"""
+                        INSERT INTO "{SCHEMA}".company_product_category 
+                            (company_id, category_name, items)
+                        VALUES ($1, $2, $3::jsonb)
+                        """
+                    logger.debug(f"🔍 [SCHEMA={SCHEMA}] INSERT product_category: {category.category_name}")
+                    await conn.execute(
+                        query_insert_category,
+                        company_id,
+                        category.category_name,
+                        items_json
+                    )
+        
+        # 4. Certifications - SEMPRE com schema explícito
+        if profile.reputation.certifications:
+            # Deletar certifications antigas
+            query_delete_certs = f'DELETE FROM "{SCHEMA}".company_certification WHERE company_id = $1'
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] DELETE company_certification")
+            await conn.execute(query_delete_certs, company_id)
+            # Inserir novas certifications
+            for cert in profile.reputation.certifications:
+                if cert and cert.strip():
+                    query_insert_cert = f'INSERT INTO "{SCHEMA}".company_certification (company_id, name) VALUES ($1, $2)'
+                    logger.debug(f"🔍 [SCHEMA={SCHEMA}] INSERT certification: {cert[:50]}")
+                    await conn.execute(query_insert_cert, company_id, cert.strip())
+        
+        # 5. Awards - SEMPRE com schema explícito
+        if profile.reputation.awards:
+            # Deletar awards antigos
+            query_delete_awards = f'DELETE FROM "{SCHEMA}".company_award WHERE company_id = $1'
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] DELETE company_award")
+            await conn.execute(query_delete_awards, company_id)
+            # Inserir novos awards
+            for award in profile.reputation.awards:
+                if award and award.strip():
+                    query_insert_award = f'INSERT INTO "{SCHEMA}".company_award (company_id, name) VALUES ($1, $2)'
+                    logger.debug(f"🔍 [SCHEMA={SCHEMA}] INSERT award: {award[:50]}")
+                    await conn.execute(query_insert_award, company_id, award.strip())
+        
+        # 6. Partnerships - SEMPRE com schema explícito
+        if profile.reputation.partnerships:
+            # Deletar partnerships antigas
+            query_delete_partners = f'DELETE FROM "{SCHEMA}".company_partnership WHERE company_id = $1'
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] DELETE company_partnership")
+            await conn.execute(query_delete_partners, company_id)
+            # Inserir novas partnerships
+            for partnership in profile.reputation.partnerships:
+                if partnership and partnership.strip():
+                    query_insert_partner = f'INSERT INTO "{SCHEMA}".company_partnership (company_id, name) VALUES ($1, $2)'
+                    logger.debug(f"🔍 [SCHEMA={SCHEMA}] INSERT partnership: {partnership[:50]}")
+                    await conn.execute(query_insert_partner, company_id, partnership.strip())
     
     async def get_profile(self, cnpj_basico: str) -> Optional[Dict[str, Any]]:
         """
@@ -409,13 +615,15 @@ class DatabaseService:
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT * FROM company_profile 
+            query = f"""
+                SELECT * FROM "{SCHEMA}".company_profile 
                 WHERE cnpj = $1 OR cnpj LIKE $2
                 ORDER BY updated_at DESC
                 LIMIT 1
-                """,
+                """
+            logger.debug(f"🔍 [SCHEMA={SCHEMA}] SELECT company_profile")
+            row = await conn.fetchrow(
+                query,
                 cnpj_basico,
                 f"{cnpj_basico}%"
             )
@@ -443,4 +651,3 @@ def get_db_service() -> DatabaseService:
     if _db_service is None:
         _db_service = DatabaseService()
     return _db_service
-

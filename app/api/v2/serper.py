@@ -1,7 +1,9 @@
 """
 Endpoint Serper v2 - Busca assíncrona no Google via Serper API.
+Processamento em background - retorna imediatamente após aceitar requisição.
 """
 import logging
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from app.schemas.v2.serper import SerperRequest, SerperResponse
@@ -60,25 +62,9 @@ def _build_search_query(
     return "site oficial"
 
 
-@router.post("/serper", response_model=SerperResponse)
-async def buscar_serper(request: SerperRequest) -> SerperResponse:
+async def _process_serper_background(request: SerperRequest):
     """
-    Busca informações da empresa no Google via Serper API.
-    
-    Fluxo:
-    1. Constrói query de busca a partir dos dados da empresa
-    2. Executa busca assíncrona via Serper API
-    3. Salva resultados no banco de dados
-    4. Retorna resposta com ID e contagem de resultados
-    
-    Args:
-        request: Dados da empresa para busca (cnpj_basico, razao_social, nome_fantasia, municipio)
-    
-    Returns:
-        SerperResponse com sucesso, ID do registro, contagem de resultados e query usada
-    
-    Raises:
-        HTTPException: Em caso de erro na busca ou persistência
+    Processa busca Serper em background.
     """
     try:
         # 1. Construir query de busca
@@ -88,41 +74,21 @@ async def buscar_serper(request: SerperRequest) -> SerperResponse:
             municipio=request.municipio
         )
         
-        logger.info(f"🔍 Serper busca: cnpj={request.cnpj_basico}, query='{query}'")
+        logger.info(f"🔍 [BACKGROUND] Serper busca: cnpj={request.cnpj_basico}, query='{query}'")
         
         # 2. Executar busca assíncrona via Serper
         results, retries = await serper_manager.search(
             query=query,
-            num_results=10,  # Número padrão de resultados
+            num_results=10,
             country="br",
             language="pt-br",
             request_id=""
         )
         
-        if not results:
-            logger.warning(f"⚠️ Nenhum resultado encontrado para query: {query}")
-            # Salvar mesmo sem resultados para histórico
-            serper_id = await db_service.save_serper_results(
-                cnpj_basico=request.cnpj_basico,
-                results=[],
-                query_used=query,
-                company_name=request.nome_fantasia or request.razao_social,
-                razao_social=request.razao_social,
-                nome_fantasia=request.nome_fantasia,
-                municipio=request.municipio
-            )
-            
-            return SerperResponse(
-                success=True,
-                serper_id=serper_id,
-                results_count=0,
-                query_used=query
-            )
-        
         # 3. Salvar resultados no banco de dados
         serper_id = await db_service.save_serper_results(
             cnpj_basico=request.cnpj_basico,
-            results=results,
+            results=results or [],
             query_used=query,
             company_name=request.nome_fantasia or request.razao_social,
             razao_social=request.razao_social,
@@ -131,22 +97,48 @@ async def buscar_serper(request: SerperRequest) -> SerperResponse:
         )
         
         logger.info(
-            f"✅ Serper busca concluída: cnpj={request.cnpj_basico}, "
-            f"results={len(results)}, serper_id={serper_id}"
+            f"✅ [BACKGROUND] Serper busca concluída: cnpj={request.cnpj_basico}, "
+            f"results={len(results) if results else 0}, serper_id={serper_id}"
         )
+    except Exception as e:
+        logger.error(f"❌ [BACKGROUND] Erro ao processar Serper: {e}", exc_info=True)
+
+
+@router.post("/serper", response_model=SerperResponse)
+async def buscar_serper(request: SerperRequest) -> SerperResponse:
+    """
+    Busca informações da empresa no Google via Serper API.
+    
+    Processamento assíncrono: retorna imediatamente após aceitar a requisição.
+    O processamento (busca Serper e salvamento) ocorre em background.
+    
+    Args:
+        request: Dados da empresa para busca (cnpj_basico, razao_social, nome_fantasia, municipio)
+    
+    Returns:
+        SerperResponse com confirmação de recebimento da requisição
+    
+    Raises:
+        HTTPException: Em caso de erro ao aceitar requisição
+    """
+    try:
+        logger.info(f"📥 Requisição Serper recebida: cnpj={request.cnpj_basico}")
         
-        # 4. Retornar resposta
+        # Iniciar processamento em background
+        asyncio.create_task(_process_serper_background(request))
+        
+        # Retornar confirmação imediata
         return SerperResponse(
             success=True,
-            serper_id=serper_id,
-            results_count=len(results),
-            query_used=query
+            message=f"Requisição de busca Serper aceita para CNPJ {request.cnpj_basico}. Processamento em background.",
+            cnpj_basico=request.cnpj_basico,
+            status="accepted"
         )
     
     except Exception as e:
-        logger.error(f"❌ Erro ao buscar Serper: {e}", exc_info=True)
+        logger.error(f"❌ Erro ao aceitar requisição Serper: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Erro ao buscar informações no Serper: {str(e)}"
+            detail=f"Erro ao aceitar requisição: {str(e)}"
         )
 

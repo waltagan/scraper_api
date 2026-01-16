@@ -23,10 +23,11 @@ class Settings:
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1-nano")
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     
-    # 4. RunPod (Provider Primário - Mistral 3 8B)
-    RUNPOD_API_KEY: str = os.getenv("RUNPOD_API_KEY", "sk-ABCDEFGHIJKLMNOPQRSTUVWZ")
+    # 4. RunPod/vLLM (Provider Primário - Mistral 3 8B)
+    # Usa VLLM_BASE_URL e VLLM_API_KEY (unificado)
+    RUNPOD_API_KEY: str = os.getenv("RUNPOD_API_KEY", "")  # Deprecated: usar VLLM_API_KEY
     RUNPOD_MODEL: str = os.getenv("RUNPOD_MODEL", "mistralai/Ministral-3-8B-Instruct-2512")
-    RUNPOD_BASE_URL: str = os.getenv("RUNPOD_BASE_URL", "https://h00gtsw9cqma00-8000.proxy.runpod.net/v1")
+    RUNPOD_BASE_URL: str = os.getenv("RUNPOD_BASE_URL", "")  # Deprecated: usar VLLM_BASE_URL
     
     # 5. OpenRouter (3 modelos para maior capacidade - Fallback)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
@@ -61,10 +62,13 @@ class Settings:
     WEBSHARE_PROXY_LIST_URL: str = os.getenv("WEBSHARE_PROXY_LIST_URL", "")
 
     # Database (PostgreSQL Railway)
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres:UQIXJbRUopTkZjjRbZZwORImhfpipQDg@trolley.proxy.rlwy.net:32994/railway"
-    )
+    # IMPORTANTE: Configure DATABASE_URL como variável de ambiente no Railway
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    
+    if not DATABASE_URL:
+        raise ValueError(
+            "DATABASE_URL não configurada. Configure como variável de ambiente no Railway."
+        )
     
     # Phoenix Tracing (Observabilidade)
     PHOENIX_COLLECTOR_URL: str = os.getenv(
@@ -72,10 +76,14 @@ class Settings:
         "https://arize-phoenix-buscafornecedor.up.railway.app"
     )
     
-    # vLLM RunPod Configuration
-    VLLM_BASE_URL: str = os.getenv(
-        "VLLM_BASE_URL",
-        "https://5u888x525vvzvs-8000.proxy.runpod.net/v1"
+    # vLLM RunPod Configuration (Provider Primário)
+    # URL base do vLLM (deve incluir /v1 para compatibilidade OpenAI)
+    _vllm_url_raw = os.getenv("VLLM_BASE_URL", "https://5u888x525vvzvs-8000.proxy.runpod.net")
+    # Garantir que a URL termine com /v1
+    VLLM_BASE_URL: str = (
+        _vllm_url_raw if _vllm_url_raw.endswith("/v1")
+        else (_vllm_url_raw + "v1" if _vllm_url_raw.endswith("/")
+              else _vllm_url_raw + "/v1")
     )
     VLLM_API_KEY: str = os.getenv("VLLM_API_KEY", "buscafornecedor")
     VLLM_MODEL: str = os.getenv(

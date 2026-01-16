@@ -28,29 +28,29 @@ class ScrapeRequest(BaseModel):
 
 class ScrapeResponse(BaseModel):
     """
-    Response schema para scraping de site.
+    Response schema para scraping de site (processamento assíncrono).
     
     Campos:
-        success: Indica se a operação foi bem-sucedida
-        chunks_saved: Número de chunks salvos no banco de dados
-        total_tokens: Total de tokens processados em todos os chunks
-        pages_scraped: Número de páginas scraped com sucesso
-        processing_time_ms: Tempo de processamento em milissegundos
+        success: Indica se a requisição foi aceita
+        message: Mensagem de confirmação
+        cnpj_basico: CNPJ básico da empresa processada
+        website_url: URL do site que será processado
+        status: Status da requisição ('accepted', 'processing')
     """
-    success: bool = Field(..., description="Indica se a operação foi bem-sucedida")
-    chunks_saved: int = Field(..., description="Número de chunks salvos no banco de dados", ge=0)
-    total_tokens: int = Field(..., description="Total de tokens processados em todos os chunks", ge=0)
-    pages_scraped: int = Field(..., description="Número de páginas scraped com sucesso", ge=0)
-    processing_time_ms: float = Field(..., description="Tempo de processamento em milissegundos", ge=0.0)
+    success: bool = Field(..., description="Indica se a requisição foi aceita")
+    message: str = Field(..., description="Mensagem de confirmação")
+    cnpj_basico: str = Field(..., description="CNPJ básico da empresa")
+    website_url: str = Field(..., description="URL do site que será processado")
+    status: str = Field(default="accepted", description="Status: 'accepted' (requisição aceita) ou 'processing' (em processamento)")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "success": True,
-                "chunks_saved": 15,
-                "total_tokens": 125000,
-                "pages_scraped": 8,
-                "processing_time_ms": 3450.5
+                "message": "Requisição de scraping aceita para CNPJ 12345678. Processamento em background.",
+                "cnpj_basico": "12345678",
+                "website_url": "https://www.empresa.com.br",
+                "status": "accepted"
             }
         }
     )

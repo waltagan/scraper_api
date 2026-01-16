@@ -477,16 +477,21 @@ class LLMService:
             config = settings
 
             # Fazer uma chamada de teste com max_tokens=1 para obter prompt_tokens
+            # Usar VLLM_* (unificado) com fallback para RUNPOD_* (compatibilidade)
+            api_key = config.VLLM_API_KEY or config.RUNPOD_API_KEY
+            base_url = config.VLLM_BASE_URL or config.RUNPOD_BASE_URL
+            model = config.VLLM_MODEL or config.RUNPOD_MODEL
+            
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {config.RUNPOD_API_KEY}"
+                "Authorization": f"Bearer {api_key}"
             }
 
             async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.post(
-                    config.RUNPOD_BASE_URL + "/chat/completions",
+                    base_url + "/chat/completions",
                     json={
-                        "model": config.RUNPOD_MODEL,
+                        "model": model,
                         "messages": messages,
                         "max_tokens": 1,
                         "temperature": 0

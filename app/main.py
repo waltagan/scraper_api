@@ -7,13 +7,23 @@ from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, HttpUrl
 
+# Configurar encoding UTF-8 para Windows
+import sys
+if sys.platform == 'win32':
+    import io
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except:
+        pass  # Se já estiver configurado, ignora
+
 # Carregar variáveis de ambiente do arquivo .env
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    print("✅ Arquivo .env carregado")
+    print("[OK] Arquivo .env carregado")
 except ImportError:
-    print("⚠️ python-dotenv não instalado - usando variáveis de ambiente do sistema")
+    print("[WARN] python-dotenv nao instalado - usando variaveis de ambiente do sistema")
 
 from app.schemas.profile import CompanyProfile
 from app.services.scraper import scrape_url

@@ -154,9 +154,10 @@ class ProviderManager:
         default_providers = [
             ProviderConfig(
                 name="RunPod",
-                api_key=settings.RUNPOD_API_KEY or "",
-                base_url=settings.RUNPOD_BASE_URL or "https://4noz2ezujocy7q-8000.proxy.runpod.net/v1",
-                model=settings.RUNPOD_MODEL or "mistralai/Ministral-3-8B-Instruct-2512",
+                # Usar VLLM_BASE_URL e VLLM_API_KEY (unificado)
+                api_key=settings.VLLM_API_KEY or settings.RUNPOD_API_KEY or "",
+                base_url=settings.VLLM_BASE_URL or settings.RUNPOD_BASE_URL or "https://5u888x525vvzvs-8000.proxy.runpod.net/v1",
+                model=settings.VLLM_MODEL or settings.RUNPOD_MODEL or "mistralai/Ministral-3-3B-Instruct-2512",
                 max_concurrent=runpod_concurrent,
                 priority=90,  # Prioridade mais alta (provider primário)
                 weight=runpod_weight,
