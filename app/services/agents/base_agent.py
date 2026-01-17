@@ -132,6 +132,7 @@ class BaseAgent(ABC):
         self,
         priority: LLMPriority = LLMPriority.NORMAL,
         timeout: float = None,
+        max_retries: int = None,
         ctx_label: str = "",
         request_id: str = "",
         **kwargs
@@ -147,6 +148,7 @@ class BaseAgent(ABC):
         Args:
             priority: Nível de prioridade
             timeout: Timeout em segundos
+            max_retries: Número máximo de tentativas (com backoff exponencial)
             ctx_label: Label de contexto
             request_id: ID da requisição
             **kwargs: Parâmetros específicos do agente
@@ -163,6 +165,7 @@ class BaseAgent(ABC):
             messages=messages,
             priority=priority,
             timeout=timeout,
+            max_retries=max_retries or self.DEFAULT_MAX_RETRIES,
             response_format=self._get_response_format(),
             ctx_label=ctx_label,
             request_id=request_id

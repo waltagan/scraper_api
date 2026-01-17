@@ -227,6 +227,7 @@ Schema (Mantenha as chaves em inglês, valores em Português):
             return await self.execute(
                 priority=LLMPriority.NORMAL,  # Profile usa prioridade normal
                 timeout=self.DEFAULT_TIMEOUT,
+                max_retries=self.DEFAULT_MAX_RETRIES,
                 ctx_label=ctx_label,
                 request_id=request_id,
                 content=content

@@ -226,6 +226,9 @@ class LLMCallManager:
         priority_providers = self._get_providers_for_priority(priority)
         priority_weights = {p: self.provider_weights.get(p, 10) for p in priority_providers}
         
+        # Backoff exponencial: delay inicial de 1s, multiplicado por 2 a cada tentativa
+        retry_base_delay = 1.0
+        
         for attempt in range(max_retries):
             # Selecionar provider da fila correta
             if provider and attempt == 0 and provider in priority_providers:
@@ -273,18 +276,33 @@ class LLMCallManager:
                 self.health_monitor.record_failure(selected_provider, FailureType.RATE_LIMIT)
                 logger.warning(f"{ctx_label}LLMCallManager: RateLimit com {selected_provider}")
                 last_error = e
+                # Backoff exponencial antes do próximo retry
+                if attempt < max_retries - 1:
+                    delay = retry_base_delay * (2 ** attempt)
+                    logger.info(f"{ctx_label}LLMCallManager: Retry {attempt + 1}/{max_retries} após {delay:.1f}s (backoff exponencial)")
+                    await asyncio.sleep(delay)
                 continue
             
             except ProviderTimeoutError as e:
                 self.health_monitor.record_failure(selected_provider, FailureType.TIMEOUT)
                 logger.warning(f"{ctx_label}LLMCallManager: Timeout com {selected_provider}")
                 last_error = e
+                # Backoff exponencial antes do próximo retry
+                if attempt < max_retries - 1:
+                    delay = retry_base_delay * (2 ** attempt)
+                    logger.info(f"{ctx_label}LLMCallManager: Retry {attempt + 1}/{max_retries} após {delay:.1f}s (backoff exponencial)")
+                    await asyncio.sleep(delay)
                 continue
             
             except ProviderError as e:
                 self.health_monitor.record_failure(selected_provider, FailureType.ERROR)
                 logger.warning(f"{ctx_label}LLMCallManager: Erro com {selected_provider}: {e}")
                 last_error = e
+                # Backoff exponencial antes do próximo retry
+                if attempt < max_retries - 1:
+                    delay = retry_base_delay * (2 ** attempt)
+                    logger.info(f"{ctx_label}LLMCallManager: Retry {attempt + 1}/{max_retries} após {delay:.1f}s (backoff exponencial)")
+                    await asyncio.sleep(delay)
                 continue
         
         # Todas tentativas falharam

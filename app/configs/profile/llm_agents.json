@@ -1,8 +1,8 @@
 {
   "profile_extractor": {
-    "timeout": 60.0,
-    "timeout_note": "WHAT: timeout do agente de extração de perfil (s). WHY: permitir processamento de páginas longas. HOW: ↑ tolera mais; ↓ fail-fast. CHANGED: 90→60s.",
-    "max_retries": 1,
-    "max_retries_note": "WHAT: retries do agente. WHY: resiliência. HOW: ↑ mais chance/custo; ↓ falha cedo."
+    "timeout": 120.0,
+    "timeout_note": "WHAT: timeout do agente de extração de perfil (s). WHY: permitir processamento de páginas longas. HOW: ↑ tolera mais; ↓ fail-fast. CHANGED: 60→120s (RunPod com latência alta ~35s).",
+    "max_retries": 3,
+    "max_retries_note": "WHAT: retries do agente. WHY: resiliência com backoff exponencial. HOW: ↑ mais chance/custo; ↓ falha cedo. CHANGED: 1→3 (habilitar retries automáticos)."
   }
 }
