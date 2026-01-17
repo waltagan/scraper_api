@@ -226,8 +226,8 @@ class LLMCallManager:
         priority_providers = self._get_providers_for_priority(priority)
         priority_weights = {p: self.provider_weights.get(p, 10) for p in priority_providers}
         
-        # Backoff exponencial: delay inicial de 1s, multiplicado por 2 a cada tentativa
-        retry_base_delay = 1.0
+        # Backoff exponencial: delay inicial de 5s, multiplicado por 2 a cada tentativa (5s -> 10s -> 20s)
+        retry_base_delay = 5.0
         
         for attempt in range(max_retries):
             # Selecionar provider da fila correta
