@@ -325,7 +325,8 @@ class DatabaseService:
                 logger.info(f"📊 Salvando perfil no schema: {SCHEMA}")
                 # Extrair dados do profile
                 company_name = company_name or profile.identity.company_name
-                cnpj = profile.identity.cnpj or cnpj_basico
+                # SEMPRE usar cnpj_basico (das tabelas iniciais), não o extraído pelo LLM
+                cnpj = cnpj_basico
                 razao_social = None  # Não está no schema atual, mas pode ser adicionado
                 tagline = profile.identity.tagline
                 description = profile.identity.description
@@ -372,7 +373,10 @@ class DatabaseService:
                 recebe_email = False  # Default
                 
                 # Converter profile para JSON string (será convertido para JSONB no SQL)
-                profile_json = json.dumps(profile.model_dump(), ensure_ascii=False)
+                profile_dict = profile.model_dump()
+                profile_json = json.dumps(profile_dict, ensure_ascii=False)
+                # full_profile: salva o perfil completo gerado
+                full_profile = json.dumps(profile_dict, ensure_ascii=False)
                 
                 # Verificar se já existe registro - SEMPRE com schema explícito
                 query_check_profile = f'SELECT id FROM "{SCHEMA}".company_profile WHERE cnpj = $1'
@@ -408,6 +412,7 @@ class DatabaseService:
                             n_exibicoes = $21,
                             recebe_email = $22,
                             profile_json = $23::jsonb,
+                            full_profile = $24::jsonb,
                             updated_at = NOW()
                         WHERE cnpj = $1
                         RETURNING id
@@ -437,7 +442,8 @@ class DatabaseService:
                         sources,
                         n_exibicoes,
                         recebe_email,
-                        profile_json
+                        profile_json,
+                        full_profile
                     )
                     company_id = row['id']
                     logger.debug(f"✅ Profile atualizado: id={company_id}, cnpj={cnpj}")
@@ -449,8 +455,8 @@ class DatabaseService:
                              industry, business_model, target_audience, geographic_coverage,
                              founding_year, employee_count_min, employee_count_max, employee_count_range,
                              headquarters_address, emails, phones, linkedin_url, website_url,
-                             instagram_url, sources, n_exibicoes, recebe_email, profile_json)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::jsonb)
+                             instagram_url, sources, n_exibicoes, recebe_email, profile_json, full_profile)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::jsonb, $24::jsonb)
                         RETURNING id
                         """
                     logger.info(f"🔍 [SCHEMA={SCHEMA}] INSERT company_profile")
@@ -478,7 +484,8 @@ class DatabaseService:
                         sources,
                         n_exibicoes,
                         recebe_email,
-                        profile_json
+                        profile_json,
+                        full_profile
                     )
                     company_id = row['id']
                     logger.debug(f"✅ Profile criado: id={company_id}, cnpj={cnpj}")
