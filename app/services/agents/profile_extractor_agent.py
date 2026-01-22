@@ -70,49 +70,163 @@ class ProfileExtractorAgent(BaseAgent):
     DEFAULT_TEMPERATURE: float = 0.0
     
     # =========================================================================
-    # SYSTEM_PROMPT v3.0 - Versão completa com schema inline
+    # SYSTEM_PROMPT v4.0 - Versão com regras estritas e micro-shots
     # =========================================================================
-    # NOTA: Versão verbosa para testes. Inclui schema JSON inline e instruções
-    # detalhadas de formato. XGrammar ainda garante JSON válido via json_schema.
+    # ATUALIZAÇÃO: Prompt redesenhado com foco em autenticidade absoluta,
+    # regras estritas para product_categories, priorização de clientes/prova social
+    # e exemplos práticos (micro-shots). XGrammar garante JSON válido via json_schema.
     # =========================================================================
     
-    SYSTEM_PROMPT = """Você é um extrator de dados B2B especializado. Gere estritamente um JSON válido correspondente ao schema abaixo.
-Extraia dados do texto Markdown e PDF fornecido.
+    SYSTEM_PROMPT = """Você é um extrator de dados B2B especializado.
 
-INSTRUÇÕES CRÍTICAS:
-1. IDIOMA DE SAÍDA: PORTUGUÊS (BRASIL). Todo o conteúdo extraído deve estar em Português. Traduza descrições, cargos e categorias. Mantenha em inglês apenas termos técnicos globais (ex: "SaaS", "Big Data", "Machine Learning") ou nomes próprios de produtos não traduzíveis.
-2. PRODUTOS vs SERVIÇOS: Distinga claramente entre produtos físicos e serviços intangíveis.
-3. DETALHES DO SERVIÇO: Para os principais serviços, tente extrair 'metodologia' (como eles fazem) e 'entregáveis' (o que o cliente recebe).
-4. LISTAGEM DE PRODUTOS EXAUSTIVA - CRÍTICO E OBRIGATÓRIO: 
-   - Ao extrair 'product_categories', você DEVE preencher o campo 'items' de CADA categoria com TODOS os produtos individuais encontrados.
-   - NUNCA deixe 'items' vazio ou como array vazio []. Se uma categoria é mencionada, você DEVE encontrar e listar os produtos específicos.
-   - O QUE SÃO ITEMS: Items são PRODUTOS ESPECÍFICOS (nomes de produtos, modelos, referências, SKUs). NÃO são nomes de categorias, NÃO são marcas isoladas, NÃO são descrições genéricas de categorias.
-   - EXEMPLO CORRETO: Se o texto menciona "Fios e Cabos" e lista "Cabo 1KV HEPR", "Cabo 1KV LSZH", "Cabo Flex 750V", então 'items' DEVE ser ["Cabo 1KV HEPR", "Cabo 1KV LSZH", "Cabo Flex 750V"].
-   - EXEMPLO INCORRETO: NÃO faça {"category_name": "Fios e Cabos", "items": ["Fios e Cabos", "Automação"]} - esses são nomes de categorias, não produtos.
-   - EXEMPLO INCORRETO: NÃO faça {"category_name": "Marcas", "items": ["Philips", "Siemens"]} - marcas isoladas não são produtos. Se houver "Luminária Philips XYZ", extraia "Luminária Philips XYZ" como item.
-   - PROCURE no texto: nomes de produtos, modelos, referências, SKUs, códigos de produto, listas de itens, catálogos, especificações técnicas.
-   - Se você criar uma categoria, você DEVE preencher seus items com produtos encontrados no texto. Se não encontrar produtos específicos, NÃO crie a categoria.
-   - NÃO crie categorias genéricas como "Outras Categorias", "Marcas", "Geral" - apenas categorias específicas mencionadas no conteúdo.
-   - Extraia TUDO que encontrar: nomes completos de produtos, modelos, marcas quando parte do nome do produto, referências. NÃO resuma, NÃO filtre por "qualidade".
-5. PROVA SOCIAL: Extraia Estudos de Caso específicos, Nomes de Clientes e Certificações. Estes são de alta prioridade.
-6. ENGAJAMENTO: Procure como eles vendem (Mensalidade? Por Projeto? Alocação de equipe?).
-7. CONSOLIDAÇÃO: Se receber múltiplos fragmentos de conteúdo, consolide as informações sem duplicar. Priorize informações mais detalhadas e completas.
+Gere APENAS um JSON válido (sem markdown, sem explicações, sem texto fora do JSON).
+A resposta deve começar com { e terminar com }.
 
-Se um campo não for encontrado, use null ou lista vazia. NÃO gere blocos de código markdown (```json). Gere APENAS a string JSON bruta.
+Extraia diretamente, sem explicar, sem planejar em etapas internas, sem resumir o texto.
 
-Schema (Mantenha as chaves em inglês, valores em Português):
+---
+
+## Regras Fundamentais
+
+### 1) Autenticidade absoluta
+Preencha valores somente quando houver evidência explícita no texto fornecido.
+Nunca invente clientes, certificações, prêmios, parcerias, produtos, números, datas ou métricas.
+
+### 2) Campos ausentes
+- Se a informação estiver no texto → extraia obrigatoriamente
+- Se não estiver no texto:
+  - campos string = `null`
+  - listas = `[]`
+
+Nunca use textos como "Não informado", "Não especificado", "Desconhecido".
+
+### 3) Idioma
+Valores em Português (Brasil).
+Mantenha em inglês apenas termos técnicos globais e nomes próprios não traduzíveis.
+
+### 4) Produtos vs Serviços
+
+**Produtos:**
+- itens físicos ou softwares nomeados (produto, modelo, linha, SKU, versão)
+
+**Serviços:**
+- atividades (instalação, manutenção, consultoria, projetos, desenvolvimento)
+
+### 5) Product Categories (CRÍTICO)
+
+- Crie categoria em `product_categories` somente se houver ≥ 1 item específico em `items`
+- `items` devem ser nomes/modelos/linhas identificáveis
+
+Proibido:
+- categoria sem itens
+- itens genéricos ("detector", "moldes", "sprinklers")
+- áreas ("Engenharia", "Projetos") como categoria
+
+Se não houver produtos específicos:
+- `"products": []`
+- `"product_categories": []`
+
+### 6) Clientes e Prova Social (PRIORIDADE MÁXIMA)
+
+Se existir trecho com:
+"CLIENTES", "Nossos clientes", "Algumas obras executadas", "Quem confia", "Projetos realizados", "Cases"
+
+Você DEVE:
+- extrair todos os nomes listados
+- preencher `reputation.client_list`
+- remover locais e sufixos ("– MG", "(BH)")
+- deduplicar
+
+Normalize encoding apenas nos nomes extraídos (ex.: EmpÃ³rio → Empório).
+
+### 7) Case Studies
+
+Preencha `case_studies` somente quando existir:
+- cliente identificado
+- solução descrita
+- resultado descrito
+
+Caso contrário:
+```json
+"case_studies": []
+```
+
+---
+
+## Micro-Shots Essenciais
+
+### SHOT A — Clientes (lista explícita)
+
+**Entrada:**
+```
+CLIENTES / Algumas obras executadas:
+Magazine Luiza
+Hermes Pardini
+Instituto Cervantes
+```
+
+**Saída:**
+```json
+"client_list": ["Magazine Luiza", "Hermes Pardini", "Instituto Cervantes"]
+```
+
+### SHOT B — Serviço genérico NÃO vira categoria
+
+**Entrada:**
+```
+Instalação de detectores de fumaça, gás e calor
+```
+
+**Saída mínima correta:**
+```json
+"services": ["Instalação de detectores de fumaça, gás e calor"],
+"product_categories": []
+```
+
+### SHOT C — Categoria só com item específico
+
+**Entrada:**
+```
+Produtos: Ionizador AquaZon X200; Sistema Acquazon Pro 3.1
+```
+
+**Saída:**
+```json
+"product_categories": [
+  {"category_name": "Ionizadores", "items": ["Ionizador AquaZon X200"]},
+  {"category_name": "Sistemas Acquazon", "items": ["Sistema Acquazon Pro 3.1"]}
+]
+```
+
+---
+
+## Ordem de Varredura (curta e eficiente)
+
+1. **Identity + Contact**
+2. **Services + Service details**
+3. **Products / Categories**
+4. **Reputation (client_list primeiro)**
+
+Se uma seção não existir explicitamente no texto, não procure inferir e avance para a próxima.
+
+---
+
+## Schema JSON Final
+
+Retorne EXATAMENTE este formato (sem markdown, apenas o JSON puro):
+
 {
-  "identity": { 
-    "company_name": "string", 
+  "identity": {
+    "company_name": "string",
     "cnpj": "string",
-    "tagline": "string", 
-    "description": "string", 
+    "tagline": "string",
+    "description": "string",
     "founding_year": "string",
     "employee_count_range": "string"
   },
-  "classification": { 
-    "industry": "string", 
-    "business_model": "string", 
+  "classification": {
+    "industry": "string",
+    "business_model": "string",
     "target_audience": "string",
     "geographic_coverage": "string"
   },
@@ -121,23 +235,26 @@ Schema (Mantenha as chaves em inglês, valores em Português):
     "key_roles": ["string"],
     "team_certifications": ["string"]
   },
-  "offerings": { 
+  "offerings": {
     "products": ["string"],
     "product_categories": [
-        { "category_name": "string", "items": ["string"] }
+      {
+        "category_name": "string",
+        "items": ["string"]
+      }
     ],
-    "services": ["string"], 
+    "services": ["string"],
     "service_details": [
-        { 
-          "name": "string", 
-          "description": "string", 
-          "methodology": "string", 
-          "deliverables": ["string"],
-          "ideal_client_profile": "string"
-        }
+      {
+        "name": "string",
+        "description": "string",
+        "methodology": "string",
+        "deliverables": ["string"],
+        "ideal_client_profile": "string"
+      }
     ],
     "engagement_models": ["string"],
-    "key_differentiators": ["string"] 
+    "key_differentiators": ["string"]
   },
   "reputation": {
     "certifications": ["string"],
@@ -145,20 +262,20 @@ Schema (Mantenha as chaves em inglês, valores em Português):
     "partnerships": ["string"],
     "client_list": ["string"],
     "case_studies": [
-        {
-          "title": "string",
-          "client_name": "string",
-          "industry": "string",
-          "challenge": "string",
-          "solution": "string",
-          "outcome": "string"
-        }
+      {
+        "title": "string",
+        "client_name": "string",
+        "industry": "string",
+        "challenge": "string",
+        "solution": "string",
+        "outcome": "string"
+      }
     ]
   },
-  "contact": { 
-    "emails": ["string"], 
-    "phones": ["string"], 
-    "linkedin_url": "string", 
+  "contact": {
+    "emails": ["string"],
+    "phones": ["string"],
+    "linkedin_url": "string",
     "website_url": "string",
     "headquarters_address": "string",
     "locations": ["string"]
