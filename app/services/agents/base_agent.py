@@ -51,8 +51,9 @@ class BaseAgent(ABC):
     # Configurações padrão (fallback)
     DEFAULT_TIMEOUT: float = 60.0
     DEFAULT_TEMPERATURE: float = 0.0
-    DEFAULT_REPETITION_PENALTY: float = 1.0  # Sem penalização por padrão
-    DEFAULT_FREQUENCY_PENALTY: float = 0.0   # Sem penalização por padrão
+    DEFAULT_PRESENCE_PENALTY: float = 0.3    # Anti-loop: penaliza tokens já aparecidos
+    DEFAULT_FREQUENCY_PENALTY: float = 0.4   # Anti-repetição: penaliza tokens frequentes
+    DEFAULT_SEED: int = 42                   # Reprodutibilidade
     DEFAULT_MAX_RETRIES: int = 3
     
     # Configuração de structured output
@@ -118,8 +119,9 @@ class BaseAgent(ABC):
         priority: LLMPriority = LLMPriority.NORMAL,
         timeout: float = None,
         temperature: float = None,
-        repetition_penalty: float = None,
+        presence_penalty: float = None,
         frequency_penalty: float = None,
+        seed: int = None,
         response_format: dict = None,
         ctx_label: str = "",
         max_retries: int = None,
@@ -133,8 +135,9 @@ class BaseAgent(ABC):
             priority: Nível de prioridade
             timeout: Timeout em segundos
             temperature: Temperatura da geração
-            repetition_penalty: Penalização para repetições (1.0 = sem penalização, 1.1 = leve)
-            frequency_penalty: Penalização por frequência de tokens (-2.0 a 2.0, 0 = sem penalização)
+            presence_penalty: Penaliza tokens já aparecidos (-2.0 a 2.0, padrão 0.3)
+            frequency_penalty: Penaliza tokens frequentes (-2.0 a 2.0, padrão 0.4)
+            seed: Seed para reprodutibilidade (padrão 42)
             response_format: Formato de resposta
             ctx_label: Label de contexto para logs
             max_retries: Número máximo de tentativas
@@ -149,8 +152,9 @@ class BaseAgent(ABC):
             request_id=request_id,
             timeout=timeout or self.DEFAULT_TIMEOUT,
             temperature=temperature or self.DEFAULT_TEMPERATURE,
-            repetition_penalty=repetition_penalty or self.DEFAULT_REPETITION_PENALTY,
-            frequency_penalty=frequency_penalty or self.DEFAULT_FREQUENCY_PENALTY,
+            presence_penalty=presence_penalty if presence_penalty is not None else self.DEFAULT_PRESENCE_PENALTY,
+            frequency_penalty=frequency_penalty if frequency_penalty is not None else self.DEFAULT_FREQUENCY_PENALTY,
+            seed=seed if seed is not None else self.DEFAULT_SEED,
             response_format=response_format,
             ctx_label=ctx_label,
             max_retries=max_retries or self.DEFAULT_MAX_RETRIES
@@ -191,8 +195,9 @@ class BaseAgent(ABC):
         logger.debug(
             f"{ctx_label}{self.__class__.__name__}: Executando com "
             f"priority={priority.name}, timeout={timeout}, "
-            f"repetition_penalty={getattr(self, 'DEFAULT_REPETITION_PENALTY', 1.0)}, "
-            f"frequency_penalty={getattr(self, 'DEFAULT_FREQUENCY_PENALTY', 0.0)}"
+            f"presence_penalty={getattr(self, 'DEFAULT_PRESENCE_PENALTY', 0.3)}, "
+            f"frequency_penalty={getattr(self, 'DEFAULT_FREQUENCY_PENALTY', 0.4)}, "
+            f"seed={getattr(self, 'DEFAULT_SEED', 42)}"
         )
         
         # 2. Chamar LLM
@@ -200,8 +205,9 @@ class BaseAgent(ABC):
             messages=messages,
             priority=priority,
             timeout=timeout,
-            repetition_penalty=getattr(self, 'DEFAULT_REPETITION_PENALTY', 1.0),
-            frequency_penalty=getattr(self, 'DEFAULT_FREQUENCY_PENALTY', 0.0),
+            presence_penalty=getattr(self, 'DEFAULT_PRESENCE_PENALTY', 0.3),
+            frequency_penalty=getattr(self, 'DEFAULT_FREQUENCY_PENALTY', 0.4),
+            seed=getattr(self, 'DEFAULT_SEED', 42),
             max_retries=max_retries or self.DEFAULT_MAX_RETRIES,
             response_format=self._get_response_format(),
             ctx_label=ctx_label,

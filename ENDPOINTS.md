@@ -71,3 +71,4 @@ Todos os endpoints POST retornam imediatamente com:
 ### "Not Found"
 - **Causa**: Rota não existe
 - **Solução**: Verifique a URL (deve começar com `/v2/`)
+
