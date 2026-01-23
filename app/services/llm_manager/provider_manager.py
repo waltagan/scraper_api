@@ -385,6 +385,8 @@ class ProviderManager:
         messages: List[dict],
         timeout: float = None,
         temperature: float = 0.0,
+        repetition_penalty: float = 1.0,
+        frequency_penalty: float = 0.0,
         response_format: dict = None,
         ctx_label: str = "",
         priority: LLMPriority = LLMPriority.NORMAL
@@ -392,11 +394,15 @@ class ProviderManager:
         """
         Faz chamada a um provider com controle de rate limiting.
         
+        v3.5: Adicionado suporte a repetition_penalty e frequency_penalty
+        
         Args:
             provider: Nome do provider
             messages: Lista de mensagens
             timeout: Timeout opcional
             temperature: Temperatura da geração
+            repetition_penalty: Penalização para repetições (vLLM/SGLang)
+            frequency_penalty: Penalização por frequência (OpenAI/compatível)
             response_format: Formato de resposta
             ctx_label: Label de contexto para logs
             priority: HIGH (Discovery/LinkSelector) ou NORMAL (Profile)
@@ -456,8 +462,8 @@ class ProviderManager:
             try:
                 return await self._execute_llm_call(
                     client, config, semaphore, messages,
-                    actual_timeout, temperature, response_format,
-                    ctx_label, provider, estimated_tokens
+                    actual_timeout, temperature, repetition_penalty, frequency_penalty,
+                    response_format, ctx_label, provider, estimated_tokens
                 )
             finally:
                 async with self._counter_lock:
@@ -469,8 +475,8 @@ class ProviderManager:
             
             return await self._execute_llm_call(
                 client, config, semaphore, messages,
-                actual_timeout, temperature, response_format,
-                ctx_label, provider, estimated_tokens
+                actual_timeout, temperature, repetition_penalty, frequency_penalty,
+                response_format, ctx_label, provider, estimated_tokens
             )
     
     async def _execute_llm_call(
@@ -481,6 +487,8 @@ class ProviderManager:
         messages: List[dict],
         timeout: float,
         temperature: float,
+        repetition_penalty: float,
+        frequency_penalty: float,
         response_format: dict,
         ctx_label: str,
         provider: str,
@@ -488,6 +496,9 @@ class ProviderManager:
     ) -> Tuple[str, float]:
         """
         Executa a chamada LLM real com controle de rate limiting.
+        
+        v3.5: Adicionado suporte a repetition_penalty e frequency_penalty para
+              evitar repetições, loops e alucinações
         
         v4.0: Suporte a Structured Output via SGLang/XGrammar
               - SGLang suporta json_schema nativo com XGrammar
@@ -528,6 +539,18 @@ class ProviderManager:
                     "max_tokens": max_output_tokens  # Garantir valor explícito e válido
                 }
                 
+                # v3.5: Parâmetros anti-repetição para vLLM/SGLang/OpenAI
+                # repetition_penalty: vLLM/SGLang específico (1.1 recomendado para evitar loops)
+                # frequency_penalty: OpenAI/compatível (-2.0 a 2.0, penaliza tokens frequentes)
+                if is_sglang or is_runpod:
+                    # vLLM/SGLang: usar repetition_penalty
+                    if repetition_penalty != 1.0:
+                        request_params["repetition_penalty"] = repetition_penalty
+                else:
+                    # OpenAI/outros: usar frequency_penalty
+                    if frequency_penalty != 0.0:
+                        request_params["frequency_penalty"] = frequency_penalty
+                
                 # v4.0: SGLang com XGrammar suporta json_schema nativo
                 # Habilitar response_format para todos os providers que suportam
                 if response_format:
@@ -567,7 +590,9 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                 # Log dos parâmetros da requisição para debug
                 logger.debug(
                     f"{ctx_label}ProviderManager: {provider} chamando com model={request_params.get('model')}, "
-                    f"temperature={temperature}, stop={request_params.get('stop')}, "
+                    f"temperature={temperature}, "
+                    f"repetition_penalty={request_params.get('repetition_penalty', 'N/A')}, "
+                    f"frequency_penalty={request_params.get('frequency_penalty', 'N/A')}, "
                     f"response_format={request_params.get('response_format')}"
                 )
                 

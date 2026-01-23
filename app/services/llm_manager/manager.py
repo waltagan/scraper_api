@@ -122,6 +122,8 @@ class LLMCallManager:
         priority: LLMPriority = LLMPriority.NORMAL,
         timeout: float = None,
         temperature: float = 0.0,
+        repetition_penalty: float = 1.0,
+        frequency_penalty: float = 0.0,
         response_format: dict = None,
         ctx_label: str = "",
         max_retries: int = 3,
@@ -131,6 +133,9 @@ class LLMCallManager:
         """
         Faz chamada LLM com seleção automática de provider.
         
+        v3.5: Adicionado suporte a repetition_penalty e frequency_penalty
+              para evitar repetições e alucinações
+        
         v3.4: HIGH bypassa orchestrator (usa rate limiter próprio do Gemini)
               NORMAL usa orchestrator para controle global
         
@@ -139,6 +144,8 @@ class LLMCallManager:
             priority: Nível de prioridade (HIGH para Discovery/LinkSelector)
             timeout: Timeout em segundos (opcional)
             temperature: Temperatura da geração
+            repetition_penalty: Penalização para repetições (1.0 = sem penalização, 1.1 recomendado)
+            frequency_penalty: Penalização por frequência (-2.0 a 2.0, 0 = sem penalização)
             response_format: Formato de resposta (ex: {"type": "json_object"})
             ctx_label: Label de contexto para logs
             max_retries: Número máximo de tentativas
@@ -168,6 +175,8 @@ class LLMCallManager:
                 priority=priority,
                 timeout=timeout,
                 temperature=temperature,
+                repetition_penalty=repetition_penalty,
+                frequency_penalty=frequency_penalty,
                 response_format=response_format,
                 ctx_label=ctx_label,
                 max_retries=max_retries,
@@ -207,6 +216,8 @@ class LLMCallManager:
         priority: LLMPriority,
         timeout: float,
         temperature: float,
+        repetition_penalty: float,
+        frequency_penalty: float,
         response_format: dict,
         ctx_label: str,
         max_retries: int,
@@ -251,6 +262,8 @@ class LLMCallManager:
                     messages=messages,
                     timeout=timeout,
                     temperature=temperature,
+                    repetition_penalty=repetition_penalty,
+                    frequency_penalty=frequency_penalty,
                     response_format=response_format,
                     ctx_label=ctx_label,
                     priority=priority

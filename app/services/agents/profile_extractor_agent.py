@@ -66,8 +66,10 @@ class ProfileExtractorAgent(BaseAgent):
     DEFAULT_TIMEOUT = _CFG.get("timeout", 90.0)
     DEFAULT_MAX_RETRIES = _CFG.get("max_retries", 2)
     
-    # Temperature otimizada para structured output (determinístico)
+    # Parâmetros otimizados para structured output (determinístico + anti-repetição)
     DEFAULT_TEMPERATURE: float = 0.0
+    DEFAULT_REPETITION_PENALTY: float = 1.1  # Evita loops e repetições
+    DEFAULT_FREQUENCY_PENALTY: float = 0.3   # Penaliza tokens já usados
     
     # =========================================================================
     # SYSTEM_PROMPT v5.0 - Versão com controle rígido de deduplicação
