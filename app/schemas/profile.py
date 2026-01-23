@@ -5,7 +5,12 @@ v8.0: Deduplicação robusta via pós-processamento
       - uniqueItems/maxItems/minLength são HINTS para o modelo (podem ser ignorados por XGrammar)
       - Validadores Pydantic garantem deduplicação básica
       - Pós-processamento no agente garante deduplicação robusta + anti-template
-      - Hard caps numéricos no PROMPT v8.0 (40 itens por categoria)
+      - Hard caps numéricos no PROMPT v8.2 (80 itens por categoria)
+
+v9.0: Constraints estruturais para qualidade
+      - ProductCategory.category_name: obrigatório (não-null) → elimina categorias sem nome
+      - ServiceDetail.name: obrigatório (não-null) → elimina objetos vazios em service_details
+      - Melhora qualidade sem aumentar latência
 """
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
@@ -62,8 +67,11 @@ class TeamProfile(BaseModel):
 
 
 class ServiceDetail(BaseModel):
-    """Detalhes de um serviço oferecido."""
-    name: Optional[str] = Field(None, description="Nome do serviço")
+    """Detalhes de um serviço oferecido.
+    
+    v9: name é obrigatório (não-null) para evitar objetos vazios em service_details.
+    """
+    name: str = Field(..., description="Nome do serviço (obrigatório para evitar objetos vazios)")
     description: Optional[str] = Field(None, description="Descrição do serviço")
     methodology: Optional[str] = Field(None, description="Metodologia utilizada")
     deliverables: List[str] = Field(
@@ -91,17 +99,20 @@ class ServiceDetail(BaseModel):
 
 
 class ProductCategory(BaseModel):
-    """Categoria de produtos com itens específicos."""
-    category_name: Optional[str] = Field(None, description="Nome da categoria de produtos")
+    """Categoria de produtos com itens específicos.
+    
+    v9: category_name é obrigatório (não-null) para evitar categorias sem nome.
+    """
+    category_name: str = Field(..., description="Nome da categoria de produtos (obrigatório)")
     items: List[str] = Field(
         default_factory=list, 
-        max_length=200,  # Hint (não garantido por XGrammar), pós-processamento usa hard cap 40
+        max_length=200,  # Hint (não garantido por XGrammar), pós-processamento usa hard cap 80
         description=(
             "PRODUTOS ESPECÍFICOS ÚNICOS: nomes, modelos, códigos, versões, medidas. "
             "DEDUPLICAÇÃO OBRIGATÓRIA: cada item deve aparecer APENAS UMA VEZ. "
             "ANTI-LOOP: não repita variações do mesmo padrão. "
             "Se detectar repetição, interrompa imediatamente. "
-            "HARD CAP: máximo 40 itens por categoria (PROMPT v8.0)."
+            "HARD CAP: máximo 80 itens por categoria (PROMPT v8.2)."
         ),
         json_schema_extra={"uniqueItems": True, "minLength": 2}  # Hints (não garantidos)
     )
