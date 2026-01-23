@@ -22,9 +22,12 @@ _vllm_client: Optional[AsyncOpenAI] = None
 
 def get_vllm_client() -> AsyncOpenAI:
     """
-    Retorna cliente vLLM assíncrono (singleton).
+    Retorna cliente SGLang assíncrono (singleton).
     
-    Usa AsyncOpenAI que é 100% compatível com a API vLLM.
+    IMPORTANTE: Apesar do nome "vllm_client", este cliente conecta ao SGLang.
+    O nome foi mantido por compatibilidade com código existente.
+
+    Usa AsyncOpenAI que é 100% compatível com a API SGLang OpenAI-compatible.
     
     Returns:
         AsyncOpenAI: Cliente assíncrono configurado
@@ -36,7 +39,7 @@ def get_vllm_client() -> AsyncOpenAI:
             api_key=settings.VLLM_API_KEY,
         )
         logger.info(
-            f"✅ Cliente vLLM criado: base_url={settings.VLLM_BASE_URL}, "
+            f"✅ Cliente SGLang criado: base_url={settings.VLLM_BASE_URL}, "
             f"model={settings.VLLM_MODEL}, api_key={'***' if settings.VLLM_API_KEY else 'NONE'}"
         )
     return _vllm_client
@@ -50,7 +53,9 @@ async def chat_completion(
     response_format: Optional[Dict[str, Any]] = None,
 ) -> Any:
     """
-    Executa chat completion no modelo SGLang/vLLM (assíncrono).
+    Executa chat completion no modelo SGLang (assíncrono).
+    
+    IMPORTANTE: Sistema usa APENAS SGLang (não vLLM).
     
     v4.0: Suporte a Structured Output
           - response_format com json_schema para outputs estruturados
@@ -112,13 +117,16 @@ async def chat_completion(
         
         return response
     except Exception as e:
-        logger.error(f"❌ Erro ao chamar SGLang/vLLM: {e}")
+        logger.error(f"❌ Erro ao chamar SGLang: {e}")
         raise
 
 
 async def check_vllm_health() -> Dict[str, Any]:
     """
-    Verifica se o servidor vLLM está respondendo.
+    Verifica se o servidor SGLang está respondendo.
+    
+    IMPORTANTE: Apesar do nome "check_vllm_health", verifica SGLang.
+    Nome mantido por compatibilidade.
     
     Returns:
         Dict com status e latência
@@ -135,7 +143,7 @@ async def check_vllm_health() -> Dict[str, Any]:
     
     try:
         # Tentar fazer uma chamada simples de health check
-        # vLLM pode não ter endpoint /health, então fazemos uma chamada mínima
+        # SGLang pode não ter endpoint /health, então fazemos uma chamada mínima
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Tentar endpoint /health primeiro
             health_url = settings.VLLM_BASE_URL.replace('/v1', '') + '/health'

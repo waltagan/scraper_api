@@ -15,9 +15,9 @@ Todos os endpoints retornam imediatamente e processam em background.
 
 ### Obrigatórias
 - `DATABASE_URL` - URL de conexão PostgreSQL
-- `VLLM_BASE_URL` - URL base do endpoint vLLM
-- `VLLM_API_KEY` - API key do vLLM
-- `VLLM_MODEL` - Modelo a ser usado
+- `VLLM_BASE_URL` - URL base do endpoint SGLang (nome mantido por compatibilidade)
+- `VLLM_API_KEY` - API key do SGLang (nome mantido por compatibilidade)
+- `VLLM_MODEL` - Modelo a ser usado (nome mantido por compatibilidade)
 - `SERPER_API_KEY` - API key do Serper.dev
 
 ### Opcionais

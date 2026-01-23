@@ -69,7 +69,7 @@ class ProfileExtractorAgent(BaseAgent):
     
     # Parâmetros otimizados para structured output (anti-loop forte)
     # v8.0: temperature=0.1 reduz loops em "modo lista" (temperatura=0 aumenta risco)
-    # Valores baseados em consenso da comunidade SGLang/vLLM
+    # Valores baseados em consenso da comunidade SGLang
     DEFAULT_TEMPERATURE: float = 0.1         # 0.1 reduz loops (0.0 aumenta risco em catálogos)
     DEFAULT_PRESENCE_PENALTY: float = 0.3    # Baseline anti-loop (SGLang OpenAI-compatible)
     DEFAULT_FREQUENCY_PENALTY: float = 0.4   # Baseline anti-repetição
@@ -82,7 +82,7 @@ class ProfileExtractorAgent(BaseAgent):
     # - Hard caps: products=120, services=60, client_list=120, items/cat=80
     # - Anti-enumeração degenerada: procedimento operacional obrigatório
     # - Regras binárias para roteamento correto (ISO→reputation, NR-10→team)
-    # - Não depende de uniqueItems/maxItems (ignorados pelo XGrammar - vLLM docs)
+    # - Não depende de uniqueItems/maxItems (ignorados pelo XGrammar do SGLang)
     # - Loop detector + retry seletivo + max_tokens adaptativo implementados
     # =========================================================================
     

@@ -457,7 +457,7 @@ class LLMService:
 
     async def get_exact_token_count(self, messages: list, ctx_label: str = "") -> Optional[int]:
         """
-        FASE 2: Conta tokens exatamente como o servidor vLLM fará.
+        FASE 2: Conta tokens exatamente como o servidor SGLang fará.
 
         Usa uma chamada de teste com max_tokens=1 para obter prompt_tokens
         da resposta, que é mais confiável que estimativas locais.
@@ -503,14 +503,14 @@ class LLMService:
 
                 prompt_tokens = result.get("usage", {}).get("prompt_tokens")
                 if prompt_tokens is not None:
-                    logger.debug(f"{ctx_label}TOKEN_COUNT: vLLM retornou {prompt_tokens} prompt_tokens")
+                    logger.debug(f"{ctx_label}TOKEN_COUNT: SGLang retornou {prompt_tokens} prompt_tokens")
                     return prompt_tokens
                 else:
                     logger.warning(f"{ctx_label}TOKEN_COUNT: usage.prompt_tokens não encontrado na resposta")
                     return None
 
         except Exception as e:
-            logger.warning(f"{ctx_label}TOKEN_COUNT: Falha ao consultar vLLM: {e}")
+            logger.warning(f"{ctx_label}TOKEN_COUNT: Falha ao consultar SGLang: {e}")
             return None
 
 

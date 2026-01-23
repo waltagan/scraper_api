@@ -6,7 +6,7 @@ Define interface padrão que todos os agentes devem implementar.
 v4.0: Suporte a Structured Output via SGLang/XGrammar
       - Método _get_json_schema() para definir schema Pydantic
       - Método _get_response_format() suporta json_schema nativo
-      - Compatibilidade com SGLang, vLLM e OpenAI
+      - Compatibilidade com SGLang e OpenAI (via OpenAI-compatible API)
 """
 
 import json

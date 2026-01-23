@@ -60,12 +60,12 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Erro ao inicializar banco de dados: {e}")
     
-    # Health check do vLLM
+    # Health check do SGLang
     try:
-        vllm_health = await check_vllm_health()
-        logger.info(f"🔍 vLLM Health: {vllm_health}")
+        vllm_health = await check_vllm_health()  # Nome mantido por compatibilidade
+        logger.info(f"🔍 SGLang Health: {vllm_health}")
     except Exception as e:
-        logger.warning(f"⚠️ Erro ao verificar saúde do vLLM: {e}")
+        logger.warning(f"⚠️ Erro ao verificar saúde do SGLang: {e}")
     
     start_health_monitor()
 

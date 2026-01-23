@@ -23,8 +23,9 @@ class Settings:
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1-nano")
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     
-    # 4. RunPod/vLLM (Provider Primário - Mistral 3 8B)
-    # Usa VLLM_BASE_URL e VLLM_API_KEY (unificado)
+    # 4. RunPod/SGLang (Provider Primário - Qwen 2.5 3B)
+    # IMPORTANTE: Sistema usa APENAS SGLang (não vLLM)
+    # Usa VLLM_BASE_URL e VLLM_API_KEY (unificado, nome mantido por compatibilidade)
     RUNPOD_API_KEY: str = os.getenv("RUNPOD_API_KEY", "")  # Deprecated: usar VLLM_API_KEY
     RUNPOD_MODEL: str = os.getenv("RUNPOD_MODEL", "mistralai/Ministral-3-8B-Instruct-2512")
     RUNPOD_BASE_URL: str = os.getenv("RUNPOD_BASE_URL", "")  # Deprecated: usar VLLM_BASE_URL
@@ -76,8 +77,10 @@ class Settings:
         "https://arize-phoenix-buscafornecedor.up.railway.app"
     )
     
-    # vLLM RunPod Configuration (Provider Primário)
-    # URL base do vLLM (deve incluir /v1 para compatibilidade OpenAI)
+    # SGLang RunPod Configuration (Provider Primário)
+    # IMPORTANTE: Sistema usa APENAS SGLang (não vLLM)
+    # Variáveis mantêm nome VLLM_* por compatibilidade, mas apontam para SGLang
+    # URL base do SGLang (deve incluir /v1 para compatibilidade OpenAI)
     _vllm_url_raw = os.getenv("VLLM_BASE_URL", "https://7bwtva7ris0ehj-8000.proxy.runpod.net")
     # Garantir que a URL termine com /v1
     VLLM_BASE_URL: str = (

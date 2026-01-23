@@ -517,12 +517,12 @@ class ProviderManager:
         context_window = self._rate_limiter.get_context_window(provider)
 
         # CORREÇÃO CRÍTICA: Validação mais conservadora para RunPod
-        # O vLLM calcula internamente: max_tokens = context_window - prompt_tokens - safety_margin
+        # O SGLang calcula internamente: max_tokens = context_window - prompt_tokens - safety_margin
         # Quando prompt_tokens > context_window, max_tokens fica negativo causando "max_tokens must be at least 1, got -XXXX"
         is_runpod = "runpod" in provider.lower() or "runpod" in config.base_url.lower()
         if is_runpod:
             # Para RunPod, ser ainda mais conservador: usar apenas 80% do context window
-            # Isso deixa margem para system prompts internos e formatação do vLLM
+            # Isso deixa margem para system prompts internos e formatação do SGLang
             safe_input_tokens = int(context_window * 0.8)  # 80% do context window
 
         if estimated_tokens > safe_input_tokens:
