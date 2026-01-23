@@ -542,14 +542,41 @@ class ProviderManager:
                 # v3.5: Parâmetros anti-repetição para vLLM/SGLang/OpenAI
                 # repetition_penalty: vLLM/SGLang específico (1.1 recomendado para evitar loops)
                 # frequency_penalty: OpenAI/compatível (-2.0 a 2.0, penaliza tokens frequentes)
-                if is_sglang or is_runpod:
-                    # vLLM/SGLang: usar repetition_penalty
-                    if repetition_penalty != 1.0:
-                        request_params["repetition_penalty"] = repetition_penalty
+                # 
+                # IMPORTANTE: Só adicionar se provider explicitamente suportar
+                # Detecção baseada em nome do provider E URL base
+                provider_lower = provider.lower()
+                base_url_lower = config.base_url.lower()
+                
+                # Lista de providers conhecidos que suportam cada parâmetro
+                supports_repetition_penalty = (
+                    "runpod" in provider_lower or 
+                    "runpod" in base_url_lower or
+                    "sglang" in base_url_lower or
+                    "vllm" in provider_lower or
+                    "vllm" in base_url_lower
+                )
+                
+                supports_frequency_penalty = (
+                    "openai" in provider_lower or
+                    "google" in provider_lower or
+                    "gemini" in provider_lower or
+                    "openrouter" in provider_lower or
+                    "xai" in provider_lower
+                )
+                
+                if supports_repetition_penalty and repetition_penalty != 1.0:
+                    request_params["repetition_penalty"] = repetition_penalty
+                    logger.debug(f"{ctx_label}ProviderManager: Usando repetition_penalty={repetition_penalty}")
+                elif supports_frequency_penalty and frequency_penalty != 0.0:
+                    request_params["frequency_penalty"] = frequency_penalty
+                    logger.debug(f"{ctx_label}ProviderManager: Usando frequency_penalty={frequency_penalty}")
                 else:
-                    # OpenAI/outros: usar frequency_penalty
-                    if frequency_penalty != 0.0:
-                        request_params["frequency_penalty"] = frequency_penalty
+                    logger.debug(
+                        f"{ctx_label}ProviderManager: Pulando parâmetros anti-repetição "
+                        f"(provider={provider}, suporta_repetition={supports_repetition_penalty}, "
+                        f"suporta_frequency={supports_frequency_penalty})"
+                    )
                 
                 # v4.0: SGLang com XGrammar suporta json_schema nativo
                 # Habilitar response_format para todos os providers que suportam
@@ -606,11 +633,35 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                     else:
                         response = await client.chat.completions.create(**request_params)
                 except BadRequestError as bad_req:
-                    # Se BadRequest com response_format, tentar sem ele
-                    if response_format and "response_format" in request_params:
+                    bad_req_str = str(bad_req).lower()
+                    
+                    # Remover parâmetros não suportados e tentar novamente
+                    retry_without_params = False
+                    
+                    # Se erro com repetition_penalty ou frequency_penalty
+                    if "repetition_penalty" in bad_req_str or "unexpected keyword argument" in bad_req_str:
+                        if "repetition_penalty" in request_params:
+                            logger.warning(
+                                f"{ctx_label}ProviderManager: {provider} não suporta repetition_penalty, "
+                                f"removendo e tentando novamente"
+                            )
+                            request_params.pop("repetition_penalty", None)
+                            retry_without_params = True
+                    
+                    if "frequency_penalty" in bad_req_str:
+                        if "frequency_penalty" in request_params:
+                            logger.warning(
+                                f"{ctx_label}ProviderManager: {provider} não suporta frequency_penalty, "
+                                f"removendo e tentando novamente"
+                            )
+                            request_params.pop("frequency_penalty", None)
+                            retry_without_params = True
+                    
+                    # Se erro com response_format
+                    if "response_format" in bad_req_str or (not retry_without_params and response_format and "response_format" in request_params):
                         logger.warning(
                             f"{ctx_label}ProviderManager: {provider} BAD_REQUEST com response_format, "
-                            f"tentando sem ele: {bad_req}"
+                            f"removendo e tentando novamente: {bad_req}"
                         )
                         request_params.pop("response_format", None)
                         # Adicionar reforço no prompt se ainda não tiver
@@ -619,7 +670,10 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                             messages[-1]["content"] = f"""{user_msg}
 
 IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicações."""
-                        # Não usar stop tokens para evitar resposta vazia
+                        retry_without_params = True
+                    
+                    # Tentar novamente sem os parâmetros problemáticos
+                    if retry_without_params:
                         if timeout:
                             response = await asyncio.wait_for(
                                 client.chat.completions.create(**request_params),
