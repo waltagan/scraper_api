@@ -89,7 +89,8 @@ class Settings:
     #     - Vast.ai: "https://xxxxx.vast.ai:8000"
     #     - RunPod: "https://xxxxx.proxy.runpod.net"
     #     - Self-hosted: "http://localhost:8000"
-    # - VLLM_API_KEY: API key (se necessário, default: "buscafornecedor")
+    # - VLLM_API_KEY: API key (se necessário)
+    #   Se vazio/None/"NONE", usa "dummy" (muitos SGLang não exigem auth)
     # - VLLM_MODEL: Modelo carregado no SGLang (ex: "Qwen/Qwen2.5-3B-Instruct")
     _vllm_url_raw = os.getenv("VLLM_BASE_URL", "https://7bwtva7ris0ehj-8000.proxy.runpod.net")
     # Garantir que a URL termine com /v1 para compatibilidade OpenAI API
@@ -98,7 +99,9 @@ class Settings:
         else (_vllm_url_raw + "v1" if _vllm_url_raw.endswith("/")
               else _vllm_url_raw + "/v1")
     )
-    VLLM_API_KEY: str = os.getenv("VLLM_API_KEY", "buscafornecedor")
+    # VLLM_API_KEY: Se não definido ou "NONE", usa "dummy" (SGLang local/Cloudflare não exige auth)
+    _vllm_key_raw = os.getenv("VLLM_API_KEY", "NONE")
+    VLLM_API_KEY: str = "dummy" if _vllm_key_raw in ("", "NONE", "none", None) else _vllm_key_raw
     VLLM_MODEL: str = os.getenv(
         "VLLM_MODEL",
         "Qwen/Qwen2.5-3B-Instruct"

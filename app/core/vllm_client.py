@@ -29,6 +29,9 @@ def get_vllm_client() -> AsyncOpenAI:
 
     Usa AsyncOpenAI que é 100% compatível com a API SGLang OpenAI-compatible.
     
+    v9.1: Suporte a SGLang sem autenticação (Cloudflare tunnels, self-hosted)
+          - Se VLLM_API_KEY não definido ou "NONE", usa "dummy"
+    
     Returns:
         AsyncOpenAI: Cliente assíncrono configurado
     """
@@ -38,9 +41,17 @@ def get_vllm_client() -> AsyncOpenAI:
             base_url=settings.VLLM_BASE_URL,
             api_key=settings.VLLM_API_KEY,
         )
+        
+        # Log com indicação se está usando auth real ou dummy
+        auth_status = (
+            "dummy (sem auth)" if settings.VLLM_API_KEY == "dummy" 
+            else "***" if settings.VLLM_API_KEY 
+            else "NONE"
+        )
+        
         logger.info(
             f"✅ Cliente SGLang criado: base_url={settings.VLLM_BASE_URL}, "
-            f"model={settings.VLLM_MODEL}, api_key={'***' if settings.VLLM_API_KEY else 'NONE'}"
+            f"model={settings.VLLM_MODEL}, api_key={auth_status}"
         )
     return _vllm_client
 
