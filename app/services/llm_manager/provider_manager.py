@@ -189,18 +189,19 @@ class ProviderManager:
         # Carregar configuração de providers habilitados
         provider_enabled = self._load_provider_enabled_config()
         
-        # RunPod (Provider Primário) - Detectar modelo configurado
-        # v4.0: Suporte a Qwen2.5-3B-Instruct (SGLang) e Mistral
-        vllm_model = settings.VLLM_MODEL or settings.RUNPOD_MODEL or ""
-        is_qwen_model = "qwen" in vllm_model.lower()
-        runpod_model_key = "Qwen/Qwen2.5-3B-Instruct" if is_qwen_model else "mistralai/Ministral-3-8B-Instruct-2512"
-        runpod_config = limits.get("runpod", {}).get(runpod_model_key, {})
+        # Vast.ai (Provider Primário - SGLang) - Detectar modelo configurado
+        # v11.0: Refatorado para usar MODEL_KEY, MODEL_NAME, URL_MODEL
+        vast_model = settings.MODEL_NAME or settings.VLLM_MODEL or ""
+        is_qwen_model = "qwen" in vast_model.lower()
+        vast_model_key = vast_model if vast_model else "Qwen/Qwen3-8B"
+        # v11.0: Tentar vastai primeiro, fallback para runpod (compatibilidade)
+        vast_config = limits.get("vastai", {}).get(vast_model_key) or limits.get("runpod", {}).get(vast_model_key, {})
         
         # Log do modelo detectado
         if is_qwen_model:
-            logger.info(f"ProviderManager: Detectado modelo Qwen: {vllm_model} (structured output via XGrammar)")
+            logger.info(f"ProviderManager: Vast.ai - Modelo Qwen detectado: {vast_model} (structured output via XGrammar)")
         else:
-            logger.info(f"ProviderManager: Detectado modelo Mistral: {vllm_model}")
+            logger.info(f"ProviderManager: Vast.ai - Modelo detectado: {vast_model}")
         
         gemini_config = limits.get("google", {}).get("gemini-2.0-flash", {})
         openai_config = limits.get("openai", {}).get("gpt-4.1-nano", {})
@@ -245,8 +246,8 @@ class ProviderManager:
         
         logger.info(f"LLM Limits carregados:")
         logger.info(
-            f"  RunPod {runpod_model_key}: RPM={runpod_rpm}, TPM={runpod_tpm:,}, "
-            f"weight={runpod_weight}%, structured_output={runpod_structured} ({runpod_backend})"
+            f"  Vast.ai {vast_model_key}: RPM={vast_rpm}, TPM={vast_tpm:,}, "
+            f"weight={vast_weight}%, structured_output={vast_structured} ({vast_backend})"
         )
         logger.info(f"  Google Gemini: RPM={gemini_rpm}, TPM={gemini_tpm:,}, weight={gemini_weight}%")
         logger.info(f"  OpenAI: RPM={openai_rpm}, TPM={openai_tpm:,}, weight={openai_weight}%")
@@ -256,15 +257,15 @@ class ProviderManager:
         
         default_providers = [
             ProviderConfig(
-                name="RunPod",
-                # Usar VLLM_BASE_URL e VLLM_API_KEY (unificado)
-                api_key=settings.VLLM_API_KEY or settings.RUNPOD_API_KEY or "",
-                base_url=settings.VLLM_BASE_URL or settings.RUNPOD_BASE_URL or "https://5u888x525vvzvs-8000.proxy.runpod.net/v1",
-                model=settings.VLLM_MODEL or settings.RUNPOD_MODEL or "mistralai/Ministral-3-3B-Instruct-2512",
-                max_concurrent=runpod_concurrent,
+                name="Vast.ai",
+                # v11.0: Usar novas variáveis MODEL_KEY, MODEL_NAME, URL_MODEL
+                api_key=settings.MODEL_KEY or settings.VLLM_API_KEY or "",
+                base_url=settings.URL_MODEL or settings.VLLM_BASE_URL or "",
+                model=settings.MODEL_NAME or settings.VLLM_MODEL or "Qwen/Qwen3-8B",
+                max_concurrent=vast_concurrent,
                 priority=90,  # Prioridade mais alta (provider primário)
-                weight=runpod_weight,
-                enabled=True  # RunPod sempre habilitado
+                weight=vast_weight,
+                enabled=True  # Vast.ai sempre habilitado se tiver URL e KEY
             ),
             ProviderConfig(
                 name="Google Gemini",
@@ -319,11 +320,22 @@ class ProviderManager:
         ]
         
         for config in default_providers:
-            # RunPod sempre é adicionado se tiver API key, independente de enabled
+            # Vast.ai sempre é adicionado se tiver URL_MODEL e MODEL_KEY, independente de enabled
             # Outros providers só são adicionados se tiverem API key E estiverem habilitados
-            if config.name == "RunPod":
-                if config.api_key:
+            if config.name == "Vast.ai":
+                if config.base_url and config.api_key:
                     self.add_provider(config)
+                    logger.info(
+                        f"ProviderManager: Vast.ai configurado - "
+                        f"URL={config.base_url}, Model={config.model}, "
+                        f"Auth={'Bearer Token' if config.api_key else 'None'}"
+                    )
+                else:
+                    logger.warning(
+                        f"ProviderManager: Vast.ai não configurado - "
+                        f"URL_MODEL={'✅' if config.base_url else '❌'}, "
+                        f"MODEL_KEY={'✅' if config.api_key else '❌'}"
+                    )
             else:
                 if config.api_key and config.enabled:
                     self.add_provider(config)
@@ -357,10 +369,10 @@ class ProviderManager:
             return enabled_providers
         except Exception as e:
             logger.warning(f"ProviderManager: Erro ao carregar llm_providers.json: {e}")
-            # Padrão: apenas RunPod habilitado
-            logger.info("ProviderManager: Usando configuração padrão (apenas RunPod habilitado)")
+            # Padrão: apenas Vast.ai habilitado
+            logger.info("ProviderManager: Usando configuração padrão (apenas Vast.ai habilitado)")
             return {
-                "RunPod": True,
+                "Vast.ai": True,
                 "Google Gemini": False,
                 "OpenAI": False,
                 "OpenRouter": False,
@@ -383,11 +395,11 @@ class ProviderManager:
         self._semaphores[config.name] = asyncio.Semaphore(config.max_concurrent)
         
         # v3.4: Categorizar provider por prioridade
-        # RunPod → HIGH e NORMAL (provider primário para todas as chamadas)
+        # Vast.ai → HIGH e NORMAL (provider primário para todas as chamadas)
         # Google Gemini (direto) → HIGH priority (Discovery/LinkSelector) - Fallback
         # Outros → NORMAL priority (Profile Building) - Fallback
-        if config.name == "RunPod":
-            # RunPod disponível para ambas as prioridades (primário)
+        if config.name == "Vast.ai":
+            # Vast.ai disponível para ambas as prioridades (primário)
             self._high_priority_providers.append(config.name)
             self._normal_priority_providers.append(config.name)
             priority_label = "HIGH+NORMAL"
@@ -526,9 +538,9 @@ class ProviderManager:
         # CORREÇÃO CRÍTICA: Validação mais conservadora para SGLang
         # O SGLang calcula internamente: max_tokens = context_window - prompt_tokens - safety_margin
         # Quando prompt_tokens > context_window, max_tokens fica negativo causando "max_tokens must be at least 1, got -XXXX"
-        # Detectar SGLang (RunPod, Vast.ai, ou qualquer outro host)
-        is_primary_provider = provider.lower() in ("runpod", "sglang", "primary")
-        is_sglang_url = any(marker in config.base_url.lower() for marker in ["sglang", "vastai", "runpod"])
+        # Detectar SGLang (Vast.ai ou qualquer outro host)
+        is_primary_provider = provider.lower() in ("vast.ai", "vastai", "sglang", "primary")
+        is_sglang_url = any(marker in config.base_url.lower() for marker in ["sglang", "vastai", "vast.ai"])
         is_sglang = is_primary_provider or is_sglang_url
         if is_sglang:
             # Para SGLang, ser ainda mais conservador: usar apenas 80% do context window
@@ -624,10 +636,10 @@ class ProviderManager:
             
             try:
                 # Detectar SGLang (suporta response_format via XGrammar)
-                # SGLang pode estar em: RunPod, Vast.ai, ou qualquer outro host
-                # Detectar por: (1) "sglang" na URL, (2) nome do provider primário, (3) vastai/runpod na URL
-                is_primary_provider = provider.lower() in ("runpod", "sglang", "primary")
-                is_sglang_url = any(marker in config.base_url.lower() for marker in ["sglang", "vastai", "runpod"])
+                # SGLang pode estar em: Vast.ai ou qualquer outro host
+                # Detectar por: (1) "sglang" na URL, (2) nome do provider primário, (3) vastai na URL
+                is_primary_provider = provider.lower() in ("vast.ai", "vastai", "sglang", "primary")
+                is_sglang_url = any(marker in config.base_url.lower() for marker in ["sglang", "vastai", "vast.ai"])
                 is_sglang = is_primary_provider or is_sglang_url
                 
                 # v9.1: max_tokens ADAPTATIVO mais conservador (caps reduzidos no schema)

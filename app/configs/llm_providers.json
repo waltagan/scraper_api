@@ -1,6 +1,6 @@
 {
   "enabled_providers": {
-    "RunPod": true,
+    "Vast.ai": true,
     "Google Gemini": false,
     "OpenAI": false,
     "OpenRouter": false,
@@ -8,13 +8,13 @@
     "OpenRouter3": false
   },
   "notes": {
-    "RunPod": "Provider primário - sempre habilitado. Não pode ser desabilitado.",
+    "Vast.ai": "Provider primário - sempre habilitado se URL_MODEL e MODEL_KEY estiverem configurados. Não pode ser desabilitado.",
     "Google Gemini": "Fallback - habilitar se necessário para maior capacidade",
     "OpenAI": "Fallback - habilitar se necessário para maior capacidade",
     "OpenRouter": "Fallback - habilitar se necessário para maior capacidade",
     "OpenRouter2": "Fallback - habilitar se necessário para maior capacidade",
     "OpenRouter3": "Fallback - habilitar se necessário para maior capacidade"
   },
-  "instructions": "Para habilitar um provider de fallback, altere o valor de 'false' para 'true'. RunPod sempre permanece habilitado independentemente desta configuração."
+  "instructions": "Para habilitar um provider de fallback, altere o valor de 'false' para 'true'. Vast.ai sempre permanece habilitado (se configurado) independentemente desta configuração."
 }
 

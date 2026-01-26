@@ -212,7 +212,7 @@ def create_llm_span(
         model: Nome do modelo LLM
         messages: Lista de mensagens (formato OpenAI)
         request_params: Parâmetros da requisição
-        provider: Nome do provider (ex: "RunPod", "SGLang")
+        provider: Nome do provider (ex: "Vast.ai", "SGLang")
     
     Returns:
         Span do OpenTelemetry ou None se erro

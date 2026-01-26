@@ -302,6 +302,12 @@ class RateLimiter:
     def _get_default_config(self) -> dict:
         """Retorna configuração padrão."""
         return {
+            "vastai": {
+                "Qwen/Qwen3-8B": {
+                    "rpm": 30000, "tpm": 5000000, "weight": 50,
+                    "context_window": 131072, "max_output_tokens": 8192
+                }
+            },
             "runpod": {
                 "mistralai/Ministral-3-8B-Instruct-2512": {
                     "rpm": 30000, "tpm": 5000000, "weight": 50,
@@ -337,38 +343,46 @@ class RateLimiter:
             "config": {"safety_margin": 0.8}
         }
     
-    def _detect_runpod_model(self) -> str:
+    def _detect_vast_model(self) -> str:
         """
-        Detecta qual modelo está configurado no RunPod.
+        Detecta qual modelo está configurado na Vast.ai.
         
-        v4.0: Suporte a múltiplos modelos (Qwen, Mistral, etc.)
+        v11.0: Refatorado para Vast.ai (antes era RunPod)
         
         Returns:
             Nome do modelo configurado ou default
         """
         from app.core.config import settings
         
-        model = settings.VLLM_MODEL or settings.RUNPOD_MODEL or ""
+        model = settings.MODEL_NAME or settings.VLLM_MODEL or ""
         
         # Verificar se é Qwen
         if "qwen" in model.lower():
             # Tentar encontrar configuração específica do Qwen
-            qwen_config = self._config.get("runpod", {}).get("Qwen/Qwen2.5-3B-Instruct", {})
+            # v11.0: Tentar vastai primeiro, fallback para runpod (compatibilidade)
+            qwen_config = (
+                self._config.get("vastai", {}).get(model) or
+                self._config.get("vastai", {}).get("Qwen/Qwen3-8B") or
+                self._config.get("runpod", {}).get("Qwen/Qwen2.5-3B-Instruct", {})
+            )
             if qwen_config:
-                logger.info(f"RateLimiter: Detectado modelo Qwen: {model}")
-                return "Qwen/Qwen2.5-3B-Instruct"
+                logger.info(f"RateLimiter: Vast.ai - Modelo Qwen detectado: {model}")
+                return model if model else "Qwen/Qwen3-8B"
         
-        # Default: Mistral
-        return "mistralai/Ministral-3-8B-Instruct-2512"
+        # Default: Qwen3-8B (Vast.ai padrão)
+        return "Qwen/Qwen3-8B"
     
     def _init_providers(self):
         """Inicializa rate limiters para cada provider."""
         # Mapear nomes de providers para configurações
-        # v4.0: Adicionado mapeamento dinâmico para Qwen2.5-3B-Instruct (SGLang)
-        runpod_model = self._detect_runpod_model()
+        # v11.0: Refatorado para Vast.ai (antes era RunPod)
+        vast_model = self._detect_vast_model()
+        
+        # v11.0: Tentar vastai primeiro, fallback para runpod (compatibilidade)
+        vast_group = "vastai" if "vastai" in self._config else "runpod"
         
         provider_mapping = {
-            "RunPod": ("runpod", runpod_model),
+            "Vast.ai": (vast_group, vast_model),
             "Google Gemini": ("google", "gemini-2.0-flash"),
             "OpenAI": ("openai", "gpt-4.1-nano"),
             "OpenRouter": ("openrouter", "google/gemini-2.0-flash-lite-001"),

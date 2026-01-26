@@ -1,4 +1,40 @@
 {
+  "vastai": {
+    "Qwen/Qwen3-8B": {
+      "rpm": 50000,
+      "rpm_note": "WHAT: limite de requisições/min da Vast.ai. WHY: controlar carga no servidor. HOW: ↑ para mais throughput; ↓ para proteger o servidor.",
+      "tpm": 10000000,
+      "tpm_note": "WHAT: tokens/min processados. WHY: controlar carga no servidor. HOW: ↑ permite mais tokens; ↓ protege o servidor.",
+      "context_window": 131072,
+      "context_window_note": "WHAT: tamanho máximo de contexto (128k tokens). WHY: garante que caiba o prompt. HOW: depende do modelo (não alterar).",
+      "max_output_tokens": 8192,
+      "max_output_tokens_note": "WHAT: teto de tokens de saída. WHY: controlar tamanho de resposta. HOW: ↑ para respostas detalhadas; ↓ para economizar.",
+      "weight": 50,
+      "weight_note": "WHAT: peso no balanceamento. WHY: priorizar Vast.ai como provider primário.",
+      "supports_structured_output": true,
+      "structured_output_backend": "xgrammar",
+      "structured_output_note": "SGLang com XGrammar suporta json_schema nativo para garantir JSON válido.",
+      "description": "Qwen3-8B (SGLang/Vast.ai) - Provider Primário com Structured Output"
+    },
+    "Qwen/Qwen2.5-3B-Instruct": {
+      "rpm": 50000,
+      "rpm_note": "WHAT: limite de requisições/min da Vast.ai SGLang. WHY: controlar carga no servidor. HOW: ↑ para mais throughput; ↓ para proteger o servidor.",
+      "tpm": 10000000,
+      "tpm_note": "WHAT: tokens/min processados. WHY: controlar carga no servidor. HOW: ↑ permite mais tokens; ↓ protege o servidor.",
+      "context_window": 32768,
+      "context_window_note": "WHAT: tamanho máximo de contexto (32k tokens). WHY: Qwen2.5-3B suporta 32k. HOW: depende do modelo (não alterar).",
+      "max_output_tokens": 4096,
+      "max_output_tokens_note": "WHAT: teto de tokens de saída. WHY: controlar tamanho de resposta para profile. HOW: 4k suficiente para JSON completo.",
+      "weight": 50,
+      "weight_note": "WHAT: peso no balanceamento. WHY: priorizar Vast.ai SGLang como provider primário.",
+      "supports_structured_output": true,
+      "structured_output_backend": "xgrammar",
+      "structured_output_note": "SGLang com XGrammar suporta json_schema nativo para garantir JSON válido.",
+      "recommended_temperature": 0.1,
+      "recommended_temperature_note": "Para JSON estruturado, usar temperature 0.1 para output preciso.",
+      "description": "Qwen 2.5 3B Instruct (SGLang/Vast.ai) - Provider Primário com Structured Output"
+    }
+  },
   "runpod": {
     "mistralai/Ministral-3-8B-Instruct-2512": {
       "rpm": 50000,

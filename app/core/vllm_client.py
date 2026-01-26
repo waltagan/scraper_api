@@ -1,14 +1,18 @@
 """
-Cliente assíncrono para o modelo LLM hospedado no RunPod via SGLang/vLLM.
+Cliente assíncrono para o modelo LLM hospedado na Vast.ai via SGLang.
 Usa a biblioteca openai com AsyncOpenAI para compatibilidade total.
 
 v4.0: Suporte a Structured Output via SGLang/XGrammar
       - response_format com json_schema para outputs estruturados
-      - Compatível com SGLang (XGrammar) e vLLM
+      - Compatível com SGLang (XGrammar)
 
 v9.1: Suporte a SGLang com autenticação Bearer Token
       - SEMPRE usa httpx diretamente (nunca AsyncOpenAI)
-      - Usa Authorization: Bearer Token header quando VLLM_API_KEY estiver definido
+      - Usa Authorization: Bearer Token header quando MODEL_KEY estiver definido
+
+v11.0: Refatorado para usar Vast.ai
+      - Usa MODEL_KEY, MODEL_NAME, URL_MODEL das variáveis de ambiente
+      - Variáveis legadas (VLLM_*) mantidas por compatibilidade
 """
 import logging
 import time
@@ -44,21 +48,27 @@ def get_vllm_client() -> AsyncOpenAI:
     """
     global _vllm_client
     if _vllm_client is None:
+        # v11.0: Usar novas variáveis (MODEL_KEY, URL_MODEL) com fallback para legadas
+        base_url = settings.URL_MODEL or settings.VLLM_BASE_URL
+        api_key = settings.MODEL_KEY or settings.VLLM_API_KEY
+        
         _vllm_client = AsyncOpenAI(
-            base_url=settings.VLLM_BASE_URL,
-            api_key=settings.VLLM_API_KEY,
+            base_url=base_url,
+            api_key=api_key,
         )
         
         # Log com indicação se está usando auth real ou dummy
         auth_status = (
-            "dummy (sem auth)" if settings.VLLM_API_KEY == "dummy" 
-            else "***" if settings.VLLM_API_KEY 
-            else "NONE"
+            "dummy (sem auth)" if api_key == "dummy" 
+            else "Bearer Token ✅" if api_key 
+            else "NONE ⚠️"
         )
         
+        model_name = settings.MODEL_NAME or settings.VLLM_MODEL
+        
         logger.info(
-            f"✅ Cliente SGLang criado: base_url={settings.VLLM_BASE_URL}, "
-            f"model={settings.VLLM_MODEL}, api_key={auth_status}"
+            f"✅ Cliente Vast.ai (SGLang) criado: "
+            f"base_url={base_url}, model={model_name}, auth={auth_status}"
         )
     return _vllm_client
 
@@ -128,21 +138,24 @@ async def chat_completion(
         from app.core.phoenix_tracer import _inject_sglang_stream_options
         request_params = _inject_sglang_stream_options(request_params)
         
-        # v9.1: SEMPRE usar httpx diretamente para SGLang
-        # Autenticação via Authorization: Bearer Token (se VLLM_API_KEY estiver definido)
-        request_url = f"{settings.VLLM_BASE_URL}/chat/completions"
+        # v11.0: SEMPRE usar httpx diretamente para Vast.ai (SGLang)
+        # Autenticação via Authorization: Bearer Token (MODEL_KEY obrigatório)
+        base_url = settings.URL_MODEL or settings.VLLM_BASE_URL
+        model_key = settings.MODEL_KEY or settings.VLLM_API_KEY
         
-        # Preparar headers (com Authorization Bearer se token disponível)
+        request_url = f"{base_url}/chat/completions"
+        
+        # Preparar headers (com Authorization Bearer - obrigatório para Vast.ai)
         headers = {"Content-Type": "application/json"}
-        if settings.VLLM_API_KEY:
-            headers["Authorization"] = f"Bearer {settings.VLLM_API_KEY}"
+        if model_key:
+            headers["Authorization"] = f"Bearer {model_key}"
             logger.debug(
-                f"vllm_client: Usando httpx direto para SGLang com Authorization Bearer "
-                f"(token={settings.VLLM_API_KEY[:20]}...)"
+                f"vllm_client: Vast.ai com Authorization Bearer "
+                f"(token={model_key[:20]}...)"
             )
         else:
-            logger.debug(
-                f"vllm_client: Usando httpx direto para SGLang (sem autenticação)"
+            logger.warning(
+                f"vllm_client: ⚠️ Vast.ai sem autenticação (MODEL_KEY não configurado)"
             )
         
         # Instrumentação nativa do Phoenix para chamadas httpx (SGLang)
@@ -174,7 +187,9 @@ async def chat_completion(
                 if span:
                     # Adicionar informações adicionais específicas
                     span.set_attribute("llm.request.url", request_url)
-                    span.set_attribute("llm.request.has_auth", bool(settings.VLLM_API_KEY))
+                    model_key = settings.MODEL_KEY or settings.VLLM_API_KEY
+                    span.set_attribute("llm.request.has_auth", bool(model_key))
+                    span.set_attribute("llm.provider", "Vast.ai")
                     
                     # Adicionar headers (sem expor token completo)
                     headers_info = {
@@ -267,7 +282,7 @@ async def chat_completion(
                 id=response_data.get("id", "unknown"),
                 object="chat.completion",
                 created=response_data.get("created", int(time.time())),
-                model=response_data.get("model", model or settings.VLLM_MODEL),
+                model=response_data.get("model", model or settings.MODEL_NAME or settings.VLLM_MODEL),
                 choices=[choice_obj],
                 usage=CompletionUsage(
                     prompt_tokens=response_data.get("usage", {}).get("prompt_tokens", 0),
@@ -316,28 +331,37 @@ async def check_vllm_health() -> Dict[str, Any]:
     start = time.perf_counter()
     
     try:
+        base_url = settings.URL_MODEL or settings.VLLM_BASE_URL
+        model_key = settings.MODEL_KEY or settings.VLLM_API_KEY
+        
+        # Preparar headers com autenticação
+        headers = {}
+        if model_key:
+            headers["Authorization"] = f"Bearer {model_key}"
+        
         async with httpx.AsyncClient(timeout=10.0) as http_client:
             # Tentar endpoint /health primeiro
-            health_url = settings.VLLM_BASE_URL.replace('/v1', '') + '/health'
+            health_url = base_url.replace('/v1', '') + '/health'
             
             try:
-                response = await http_client.get(health_url)
+                response = await http_client.get(health_url, headers=headers)
                 latency_ms = (time.perf_counter() - start) * 1000
                 
-                # SGLang/vLLM retorna 200 quando saudável
+                # SGLang retorna 200 quando saudável
                 if response.status_code == 200:
-                    logger.debug(f"✅ SGLang /health endpoint OK: {response.status_code}")
+                    logger.debug(f"✅ Vast.ai /health endpoint OK: {response.status_code}")
+                    model_name = settings.MODEL_NAME or settings.VLLM_MODEL
                     return {
                         "status": "healthy",
                         "latency_ms": round(latency_ms, 2),
-                        "model": settings.VLLM_MODEL,
-                        "endpoint": settings.VLLM_BASE_URL,
+                        "model": model_name,
+                        "endpoint": base_url,
                         "health_endpoint": "OK"
                     }
                 else:
                     # Status != 200, mas endpoint existe - tentar chamada de teste
                     logger.warning(
-                        f"⚠️ SGLang /health retornou {response.status_code}, "
+                        f"⚠️ Vast.ai /health retornou {response.status_code}, "
                         f"tentando chamada de teste ao modelo..."
                     )
                     raise httpx.RequestError("Health endpoint returned non-200")
@@ -367,11 +391,12 @@ async def check_vllm_health() -> Dict[str, Any]:
                         f"(endpoint /health não disponível, mas modelo OK)"
                     )
                     
+                    model_name = settings.MODEL_NAME or settings.VLLM_MODEL
                     return {
                         "status": "healthy",
                         "latency_ms": round(model_latency_ms, 2),
-                        "model": settings.VLLM_MODEL,
-                        "endpoint": settings.VLLM_BASE_URL,
+                        "model": model_name,
+                        "endpoint": base_url,
                         "health_endpoint": "unavailable",
                         "health_method": "model_test"
                     }
@@ -385,13 +410,14 @@ async def check_vllm_health() -> Dict[str, Any]:
                         f"❌ SGLang não respondeu: {type(model_error).__name__}: {error_msg}"
                     )
                     
+                    model_name = settings.MODEL_NAME or settings.VLLM_MODEL
                     return {
                         "status": "unhealthy",
                         "error": error_msg,
                         "error_type": type(model_error).__name__,
                         "latency_ms": round(total_latency_ms, 2),
-                        "model": settings.VLLM_MODEL,
-                        "endpoint": settings.VLLM_BASE_URL,
+                        "model": model_name,
+                        "endpoint": base_url,
                     }
                     
     except Exception as e:
@@ -401,12 +427,14 @@ async def check_vllm_health() -> Dict[str, Any]:
         
         logger.error(f"❌ Erro crítico no health check: {type(e).__name__}: {error_msg}")
         
+        base_url = settings.URL_MODEL or settings.VLLM_BASE_URL
+        model_name = settings.MODEL_NAME or settings.VLLM_MODEL
         return {
             "status": "error",
             "error": error_msg,
             "error_type": type(e).__name__,
             "latency_ms": round(latency_ms, 2),
-            "model": settings.VLLM_MODEL,
-            "endpoint": settings.VLLM_BASE_URL,
+            "model": model_name,
+            "endpoint": base_url,
         }
 

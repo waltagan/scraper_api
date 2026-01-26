@@ -477,10 +477,10 @@ class LLMService:
             config = settings
 
             # Fazer uma chamada de teste com max_tokens=1 para obter prompt_tokens
-            # Usar VLLM_* (unificado) com fallback para RUNPOD_* (compatibilidade)
-            api_key = config.VLLM_API_KEY or config.RUNPOD_API_KEY
-            base_url = config.VLLM_BASE_URL or config.RUNPOD_BASE_URL
-            model = config.VLLM_MODEL or config.RUNPOD_MODEL
+            # v11.0: Usar novas variáveis (MODEL_KEY, URL_MODEL, MODEL_NAME) com fallback para legadas
+            api_key = config.MODEL_KEY or config.VLLM_API_KEY or config.RUNPOD_API_KEY
+            base_url = config.URL_MODEL or config.VLLM_BASE_URL or config.RUNPOD_BASE_URL
+            model = config.MODEL_NAME or config.VLLM_MODEL or config.RUNPOD_MODEL
             
             headers = {
                 "Content-Type": "application/json",

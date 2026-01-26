@@ -23,13 +23,12 @@ class Settings:
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1-nano")
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     
-    # 4. SGLang (Provider Primário - suporta RunPod, Vast.ai, ou qualquer host)
-    # IMPORTANTE: Sistema usa APENAS SGLang (não vLLM)
-    # Variáveis VLLM_* mantidas por compatibilidade, mas apontam para SGLang
-    # Funciona com qualquer instância SGLang compatível com OpenAI API (/v1/*)
-    RUNPOD_API_KEY: str = os.getenv("RUNPOD_API_KEY", "")  # Deprecated: usar VLLM_API_KEY
-    RUNPOD_MODEL: str = os.getenv("RUNPOD_MODEL", "mistralai/Ministral-3-8B-Instruct-2512")
-    RUNPOD_BASE_URL: str = os.getenv("RUNPOD_BASE_URL", "")  # Deprecated: usar VLLM_BASE_URL
+    # 4. Vast.ai (Provider Primário - SGLang)
+    # IMPORTANTE: Sistema usa SGLang via Vast.ai
+    # Variáveis legadas mantidas por compatibilidade (deprecated)
+    RUNPOD_API_KEY: str = os.getenv("RUNPOD_API_KEY", "")  # Deprecated: usar MODEL_KEY
+    RUNPOD_MODEL: str = os.getenv("RUNPOD_MODEL", "")  # Deprecated: usar MODEL_NAME
+    RUNPOD_BASE_URL: str = os.getenv("RUNPOD_BASE_URL", "")  # Deprecated: usar URL_MODEL
     
     # 5. OpenRouter (3 modelos para maior capacidade - Fallback)
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
@@ -78,36 +77,49 @@ class Settings:
         "https://arize-phoenix-buscafornecedor.up.railway.app"
     )
     
-    # SGLang Configuration (Provider Primário)
-    # IMPORTANTE: Sistema usa SGLang (não vLLM)
-    # Funciona com qualquer instância SGLang: RunPod, Vast.ai, ou self-hosted
-    # Variáveis mantêm nome VLLM_* por compatibilidade com código legado
+    # Vast.ai Configuration (Provider Primário - SGLang)
+    # IMPORTANTE: Sistema usa SGLang via Vast.ai
     # 
     # CONFIGURAÇÃO (Railway/Environment Variables):
-    # - VLLM_BASE_URL: URL da instância SGLang (deve terminar com /v1)
-    #   Exemplos: 
-    #     - "http://80.188.223.202:10154/v1"
-    #     - "https://xxxxx.vast.ai:8000/v1"
-    #     - "https://xxxxx.proxy.runpod.net/v1"
-    #     - "http://localhost:8000/v1"
-    # - VLLM_API_KEY: Token Bearer para autenticação (usado em Authorization header)
-    #   Se vazio/None/"NONE", usa "" (sem autenticação)
-    # - VLLM_MODEL: Modelo carregado no SGLang (ex: "Qwen/Qwen2.5-3B-Instruct")
-    _vllm_url_raw = os.getenv("VLLM_BASE_URL", "http://80.188.223.202:10154/v1")
+    # - URL_MODEL: URL da instância SGLang na Vast.ai (deve terminar com /v1)
+    #   Exemplo: "https://xxxxx.vast.ai:8000/v1" ou "http://80.188.223.202:10154/v1"
+    # - MODEL_KEY: Token Bearer para autenticação (usado em Authorization header)
+    #   Obrigatório para Vast.ai
+    # - MODEL_NAME: Nome do modelo carregado no SGLang
+    #   Exemplo: "Qwen/Qwen3-8B" ou "Qwen/Qwen2.5-3B-Instruct"
+    #
+    # Variáveis legadas (deprecated, mantidas por compatibilidade):
+    # - VLLM_BASE_URL, VLLM_API_KEY, VLLM_MODEL (fallback se novas variáveis não existirem)
+    
+    # Nova configuração (preferencial)
+    _url_model_raw = os.getenv("URL_MODEL", "")
+    _model_key_raw = os.getenv("MODEL_KEY", "")
+    _model_name_raw = os.getenv("MODEL_NAME", "")
+    
+    # Fallback para variáveis legadas (compatibilidade)
+    if not _url_model_raw:
+        _url_model_raw = os.getenv("VLLM_BASE_URL", "")
+    if not _model_key_raw:
+        _model_key_raw = os.getenv("VLLM_API_KEY", "")
+    if not _model_name_raw:
+        _model_name_raw = os.getenv("VLLM_MODEL", "")
     
     # Garantir que a URL termine com /v1 para compatibilidade OpenAI API
-    VLLM_BASE_URL: str = (
-        _vllm_url_raw if _vllm_url_raw.endswith("/v1")
-        else (_vllm_url_raw + "v1" if _vllm_url_raw.endswith("/")
-              else _vllm_url_raw + "/v1")
+    URL_MODEL: str = (
+        _url_model_raw if _url_model_raw and _url_model_raw.endswith("/v1")
+        else (_url_model_raw + "v1" if _url_model_raw and _url_model_raw.endswith("/")
+              else (_url_model_raw + "/v1" if _url_model_raw else ""))
     )
     
-    # VLLM_API_KEY: Token Bearer para Authorization header
-    _vllm_key_raw = os.getenv("VLLM_API_KEY", "")
-    VLLM_API_KEY: str = _vllm_key_raw if _vllm_key_raw not in ("", "NONE", "none", None) else ""
-    VLLM_MODEL: str = os.getenv(
-        "VLLM_MODEL",
-        "Qwen/Qwen2.5-3B-Instruct"
-    )
+    # MODEL_KEY: Token Bearer para Authorization header (obrigatório para Vast.ai)
+    MODEL_KEY: str = _model_key_raw if _model_key_raw not in ("", "NONE", "none", None) else ""
+    
+    # MODEL_NAME: Nome do modelo
+    MODEL_NAME: str = _model_name_raw if _model_name_raw else "Qwen/Qwen3-8B"
+    
+    # Variáveis legadas (mantidas por compatibilidade, apontam para novas)
+    VLLM_BASE_URL: str = URL_MODEL
+    VLLM_API_KEY: str = MODEL_KEY
+    VLLM_MODEL: str = MODEL_NAME
 
 settings = Settings()
