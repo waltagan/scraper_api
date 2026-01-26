@@ -711,22 +711,11 @@ class ProviderManager:
                         
                         # v10.1: Supressão de <think> tags (comportamento de reasoning)
                         # Stop tokens para forçar modelo a pular raciocínio e ir direto ao JSON
-                        request_params["stop"] = ["</think>", "<think>", "\n<think>"]
-                        # Não incluir stop token no output
-                        request_params["include_stop_str_in_output"] = False
+                        # SGLang suporta stop como lista de strings
+                        request_params["stop"] = ["</think>", "<think>"]
                         
-                        # v10.1: Forçar início com { via regex pattern (se SGLang suportar)
-                        # Isso garante que o modelo comece direto no JSON
-                        try:
-                            # Tentar adicionar regex pattern para forçar início com {
-                            if "extra_body" not in request_params:
-                                request_params["extra_body"] = {}
-                            # SGLang pode suportar regex_accept_pattern para forçar formato
-                            # Pattern: deve começar com { (JSON object)
-                            request_params["extra_body"]["regex_accept_pattern"] = r"^\s*\{"
-                        except Exception:
-                            # Se não suportar, continuar sem regex
-                            pass
+                        # v10.1: Nota: include_stop_str_in_output pode não ser suportado pelo SGLang
+                        # Removido para evitar erros que causam content=None
                         
                         logger.debug(
                             f"{ctx_label}ProviderManager: {provider} (Qwen3-8B) - "
@@ -943,7 +932,28 @@ class ProviderManager:
                             raise ProviderError(f"{provider} retornou resposta sem choices")
                         
                         message_data = choices_data[0].get("message", {})
-                        content = message_data.get("content", "")
+                        # v10.1: Tratar content=None explicitamente (SGLang pode retornar null)
+                        raw_content = message_data.get("content")
+                        if raw_content is None:
+                            logger.error(
+                                f"{ctx_label}ProviderManager: {provider} retornou content=None no JSON. "
+                                f"Response data: {json.dumps(response_data, ensure_ascii=False)[:500]}"
+                            )
+                            raise ProviderError(
+                                f"{provider} retornou content=None. "
+                                f"Possível problema com Guided Decoding ou modelo em modo reasoning."
+                            )
+                        
+                        # Garantir que content é string
+                        content = str(raw_content) if raw_content is not None else ""
+                        
+                        # v10.1: Se content vazio após conversão, também é erro
+                        if not content or len(content.strip()) == 0:
+                            logger.warning(
+                                f"{ctx_label}ProviderManager: {provider} retornou content vazio. "
+                                f"Finish reason: {choices_data[0].get('finish_reason', 'unknown')}"
+                            )
+                            raise ProviderError(f"{provider} retornou content vazio")
                         
                         # Criar objeto de resposta compatível com OpenAI
                         response = ChatCompletion(
@@ -1054,16 +1064,31 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                     raise ProviderError(f"{provider} retornou choices[0] sem message")
                 
                 message = response.choices[0].message
-                if not hasattr(message, 'content') or not message.content:
+                
+                # v10.1: Verificar se content existe e não é None antes de processar
+                if not hasattr(message, 'content') or message.content is None:
                     # Log detalhado para debug
                     logger.error(
-                        f"{ctx_label}ProviderManager: {provider} retornou resposta vazia. "
+                        f"{ctx_label}ProviderManager: {provider} retornou resposta vazia (content=None). "
                         f"Response object: {type(response)}, "
                         f"Choices count: {len(response.choices) if response.choices else 0}, "
                         f"Message type: {type(message) if message else None}, "
                         f"Content attr exists: {hasattr(message, 'content') if message else False}, "
                         f"Content value: {repr(getattr(message, 'content', None))}"
                     )
+                    # v10.1: Lançar exceção específica para content None (permite retry)
+                    raise ProviderError(
+                        f"{provider} retornou resposta com content=None. "
+                        f"Possível problema com Guided Decoding ou modelo em modo reasoning."
+                    )
+                
+                # v10.1: Verificar se content é string vazia
+                if not isinstance(message.content, str) or len(message.content.strip()) == 0:
+                    logger.warning(
+                        f"{ctx_label}ProviderManager: {provider} retornou content vazio ou não-string. "
+                        f"Content type: {type(message.content)}, value: {repr(message.content)}"
+                    )
+                    raise ProviderError(f"{provider} retornou content vazio ou inválido")
                 
                 # v8.0: LOOP DETECTOR - Detectar geração degenerada
                 # Se detectar loop, lançar exceção para retry seletivo
@@ -1076,9 +1101,9 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                     raise ProviderDegenerationError(
                         f"Loop de repetição detectado na resposta de {provider}"
                     )
-                    raise ProviderError(f"{provider} retornou resposta vazia")
                 
-                content = message.content.strip()
+                # v10.1: Agora safe para fazer strip (content já validado como string não-vazia)
+                content = content.strip()
                 
                 # Log com tokens reais e comparação com estimativa
                 actual_tokens = getattr(response, 'usage', None)
