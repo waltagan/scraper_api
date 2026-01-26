@@ -16,6 +16,7 @@ import random
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 from openai import AsyncOpenAI, RateLimitError, APIError, APITimeoutError, BadRequestError
+import httpx
 
 from app.core.config import settings
 from app.services.concurrency_manager.config_loader import (
@@ -731,66 +732,67 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                     f"response_format={request_params.get('response_format')}"
                 )
                 
-                # Usar asyncio.wait_for para aplicar timeout se necessário
-                try:
-                    if timeout:
-                        response = await asyncio.wait_for(
-                            client.chat.completions.create(**request_params),
-                            timeout=timeout
+                # v9.1: Se API key for "dummy" ou vazia, usar httpx diretamente (sem Authorization header)
+                # AsyncOpenAI sempre adiciona Authorization header, mesmo com api_key="dummy"
+                # Isso causa 401 em SGLang que não requer autenticação
+                api_key = config.api_key or ""
+                use_httpx_direct = api_key in ("", "dummy", "NONE", "none", None)
+                
+                if use_httpx_direct:
+                    # Usar httpx diretamente SEM Authorization header
+                    logger.debug(
+                        f"{ctx_label}ProviderManager: {provider} usando httpx direto "
+                        f"(sem Authorization header, api_key={api_key})"
+                    )
+                    
+                    async with httpx.AsyncClient(timeout=timeout or config.timeout) as http_client:
+                        http_response = await http_client.post(
+                            f"{config.base_url}/chat/completions",
+                            json=request_params,
+                            headers={"Content-Type": "application/json"}
+                            # SEM Authorization header
                         )
-                    else:
-                        response = await client.chat.completions.create(**request_params)
-                except BadRequestError as bad_req:
-                    bad_req_str = str(bad_req).lower()
-                    
-                    # Remover parâmetros não suportados e tentar novamente
-                    retry_without_params = False
-                    
-                    # Se erro com presence_penalty, frequency_penalty ou seed
-                    if "presence_penalty" in bad_req_str or "unexpected keyword argument" in bad_req_str:
-                        if "presence_penalty" in request_params:
-                            logger.warning(
-                                f"{ctx_label}ProviderManager: {provider} não suporta presence_penalty, "
-                                f"removendo e tentando novamente"
-                            )
-                            request_params.pop("presence_penalty", None)
-                            retry_without_params = True
-                    
-                    if "frequency_penalty" in bad_req_str:
-                        if "frequency_penalty" in request_params:
-                            logger.warning(
-                                f"{ctx_label}ProviderManager: {provider} não suporta frequency_penalty, "
-                                f"removendo e tentando novamente"
-                            )
-                            request_params.pop("frequency_penalty", None)
-                            retry_without_params = True
-                    
-                    if "seed" in bad_req_str:
-                        if "seed" in request_params:
-                            logger.warning(
-                                f"{ctx_label}ProviderManager: {provider} não suporta seed, "
-                                f"removendo e tentando novamente"
-                            )
-                            request_params.pop("seed", None)
-                            retry_without_params = True
-                    
-                    # Se erro com response_format
-                    if "response_format" in bad_req_str or (not retry_without_params and response_format and "response_format" in request_params):
-                        logger.warning(
-                            f"{ctx_label}ProviderManager: {provider} BAD_REQUEST com response_format, "
-                            f"removendo e tentando novamente: {bad_req}"
+                        
+                        http_response.raise_for_status()
+                        response_data = http_response.json()
+                        
+                        # Converter resposta httpx para formato OpenAI-like
+                        from openai.types.chat import ChatCompletion, ChatCompletionMessage, Choice
+                        from openai.types.completion_usage import CompletionUsage
+                        
+                        # Extrair dados da resposta
+                        choices_data = response_data.get("choices", [])
+                        if not choices_data:
+                            raise ProviderError(f"{provider} retornou resposta sem choices")
+                        
+                        message_data = choices_data[0].get("message", {})
+                        content = message_data.get("content", "")
+                        
+                        # Criar objeto de resposta compatível com OpenAI
+                        response = ChatCompletion(
+                            id=response_data.get("id", "unknown"),
+                            object="chat.completion",
+                            created=response_data.get("created", int(time.time())),
+                            model=response_data.get("model", config.model),
+                            choices=[
+                                Choice(
+                                    index=0,
+                                    message=ChatCompletionMessage(
+                                        role=message_data.get("role", "assistant"),
+                                        content=content
+                                    ),
+                                    finish_reason=choices_data[0].get("finish_reason", "stop")
+                                )
+                            ],
+                            usage=CompletionUsage(
+                                prompt_tokens=response_data.get("usage", {}).get("prompt_tokens", 0),
+                                completion_tokens=response_data.get("usage", {}).get("completion_tokens", 0),
+                                total_tokens=response_data.get("usage", {}).get("total_tokens", 0)
+                            ) if "usage" in response_data else None
                         )
-                        request_params.pop("response_format", None)
-                        # Adicionar reforço no prompt se ainda não tiver
-                        if messages and messages[-1].get("role") == "user" and not is_sglang:
-                            user_msg = messages[-1]["content"]
-                            messages[-1]["content"] = f"""{user_msg}
-
-IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicações."""
-                        retry_without_params = True
-                    
-                    # Tentar novamente sem os parâmetros problemáticos
-                    if retry_without_params:
+                else:
+                    # Usar AsyncOpenAI normalmente (com Authorization header)
+                    try:
                         if timeout:
                             response = await asyncio.wait_for(
                                 client.chat.completions.create(**request_params),
@@ -798,8 +800,66 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                             )
                         else:
                             response = await client.chat.completions.create(**request_params)
-                    else:
-                        raise
+                    except BadRequestError as bad_req:
+                        bad_req_str = str(bad_req).lower()
+                        
+                        # Remover parâmetros não suportados e tentar novamente
+                        retry_without_params = False
+                        
+                        # Se erro com presence_penalty, frequency_penalty ou seed
+                        if "presence_penalty" in bad_req_str or "unexpected keyword argument" in bad_req_str:
+                            if "presence_penalty" in request_params:
+                                logger.warning(
+                                    f"{ctx_label}ProviderManager: {provider} não suporta presence_penalty, "
+                                    f"removendo e tentando novamente"
+                                )
+                                request_params.pop("presence_penalty", None)
+                                retry_without_params = True
+                        
+                        if "frequency_penalty" in bad_req_str:
+                            if "frequency_penalty" in request_params:
+                                logger.warning(
+                                    f"{ctx_label}ProviderManager: {provider} não suporta frequency_penalty, "
+                                    f"removendo e tentando novamente"
+                                )
+                                request_params.pop("frequency_penalty", None)
+                                retry_without_params = True
+                        
+                        if "seed" in bad_req_str:
+                            if "seed" in request_params:
+                                logger.warning(
+                                    f"{ctx_label}ProviderManager: {provider} não suporta seed, "
+                                    f"removendo e tentando novamente"
+                                )
+                                request_params.pop("seed", None)
+                                retry_without_params = True
+                        
+                        # Se erro com response_format
+                        if "response_format" in bad_req_str or (not retry_without_params and response_format and "response_format" in request_params):
+                            logger.warning(
+                                f"{ctx_label}ProviderManager: {provider} BAD_REQUEST com response_format, "
+                                f"removendo e tentando novamente: {bad_req}"
+                            )
+                            request_params.pop("response_format", None)
+                            # Adicionar reforço no prompt se ainda não tiver
+                            if messages and messages[-1].get("role") == "user" and not is_sglang:
+                                user_msg = messages[-1]["content"]
+                                messages[-1]["content"] = f"""{user_msg}
+
+IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicações."""
+                            retry_without_params = True
+                        
+                        # Tentar novamente sem os parâmetros problemáticos
+                        if retry_without_params:
+                            if timeout:
+                                response = await asyncio.wait_for(
+                                    client.chat.completions.create(**request_params),
+                                    timeout=timeout
+                                )
+                            else:
+                                response = await client.chat.completions.create(**request_params)
+                        else:
+                            raise
                 
                 latency_ms = (time.perf_counter() - start_time) * 1000
                 
