@@ -300,6 +300,7 @@ async def trace_llm_call(project_name: str, operation_name: str):
         from opentelemetry.trace import set_span_in_context
         
         # CRÍTICO: Usar o tracer do tracer_provider explicitamente
+        # Isso garante que o span seja exportado para o Phoenix
         tracer_instance = otel_trace.get_tracer(__name__, tracer_provider=tracer_provider)
         span = tracer_instance.start_span(operation_name)
         
