@@ -755,15 +755,83 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                             f"(sem autenticação)"
                         )
                     
-                    async with httpx.AsyncClient(timeout=timeout or config.timeout) as http_client:
-                        http_response = await http_client.post(
-                            request_url,
-                            json=request_params,
-                            headers=headers
-                        )
-                        
-                        http_response.raise_for_status()
-                        response_data = http_response.json()
+                    # Tracing manual do Phoenix para chamadas httpx (SGLang)
+                    # OpenAIInstrumentor não captura chamadas httpx diretas
+                    from app.core.phoenix_tracer import setup_phoenix_tracing
+                    tracer_provider = setup_phoenix_tracing("profile-llm")
+                    
+                    span = None
+                    token = None
+                    if tracer_provider:
+                        try:
+                            from opentelemetry import trace as otel_trace
+                            from opentelemetry import context as otel_context
+                            from opentelemetry.trace import set_span_in_context
+                            
+                            tracer = otel_trace.get_tracer(__name__)
+                            span = tracer.start_span(f"llm.call.{provider}")
+                            
+                            # Adicionar atributos do OpenInference
+                            span.set_attribute("gen_ai.request.model", request_params.get("model", ""))
+                            span.set_attribute("gen_ai.request.temperature", temperature)
+                            span.set_attribute("gen_ai.request.max_tokens", request_params.get("max_tokens", 0))
+                            span.set_attribute("gen_ai.system", provider)
+                            
+                            # Adicionar mensagens do prompt
+                            if messages:
+                                system_msg = next((m.get("content", "") for m in messages if m.get("role") == "system"), "")
+                                user_msg = next((m.get("content", "") for m in messages if m.get("role") == "user"), "")
+                                if system_msg:
+                                    span.set_attribute("gen_ai.prompt.system", system_msg[:1000])  # Limitar tamanho
+                                if user_msg:
+                                    span.set_attribute("gen_ai.prompt.user", user_msg[:2000])  # Limitar tamanho
+                            
+                            token = otel_context.attach(set_span_in_context(span))
+                        except Exception as e:
+                            logger.debug(f"{ctx_label}Erro ao criar span Phoenix: {e}")
+                            span = None
+                            token = None
+                            token = None
+                    
+                    try:
+                        async with httpx.AsyncClient(timeout=timeout or config.timeout) as http_client:
+                            http_response = await http_client.post(
+                                request_url,
+                                json=request_params,
+                                headers=headers
+                            )
+                            
+                            http_response.raise_for_status()
+                            response_data = http_response.json()
+                            
+                            # Adicionar atributos de resposta ao span
+                            if span:
+                                try:
+                                    content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                                    usage = response_data.get("usage", {})
+                                    
+                                    span.set_attribute("gen_ai.response.finish_reason", 
+                                                      response_data.get("choices", [{}])[0].get("finish_reason", "unknown"))
+                                    span.set_attribute("gen_ai.usage.prompt_tokens", usage.get("prompt_tokens", 0))
+                                    span.set_attribute("gen_ai.usage.completion_tokens", usage.get("completion_tokens", 0))
+                                    span.set_attribute("gen_ai.usage.total_tokens", usage.get("total_tokens", 0))
+                                    span.set_attribute("gen_ai.response.content", content[:5000])  # Limitar tamanho
+                                except Exception as e:
+                                    logger.debug(f"{ctx_label}Erro ao adicionar atributos ao span: {e}")
+                    finally:
+                        if span and token is not None:
+                            try:
+                                from opentelemetry import context as otel_context
+                                otel_context.detach(token)
+                                span.end()
+                            except Exception:
+                                pass
+                        elif span:
+                            # Se span existe mas token não, apenas finalizar
+                            try:
+                                span.end()
+                            except Exception:
+                                pass
                         
                         # Converter resposta httpx para formato OpenAI-like
                         # Usar imports compatíveis com diferentes versões do openai

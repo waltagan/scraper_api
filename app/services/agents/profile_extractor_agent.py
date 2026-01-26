@@ -108,7 +108,8 @@ Proibido inventar: clientes, certificações, prêmios, parcerias, produtos, nú
 Saída em Português (Brasil). Manter em inglês apenas termos técnicos globais e nomes próprios.
 
 ## 3) Roteamento fechado (evita troca de campos)
-- identity.*: nome, CNPJ, slogan, descrição institucional, ano, faixa funcionários.
+- identity.company_name: **OBRIGATÓRIO** - Nome legal ou comercial da empresa. Se não houver explícito, use o primeiro nome próprio encontrado no texto (título, cabeçalho, ou primeira menção clara).
+- identity.*: CNPJ, slogan, descrição institucional, ano, faixa funcionários.
 - contact.*: emails, telefones, site, linkedin, endereço, locations (cidades/estados/unidades).
 - offerings.services: atividades/serviços.
 - offerings.service_details: detalhes reais (metodologia, entregáveis, como funciona).
@@ -118,6 +119,7 @@ Saída em Português (Brasil). Manter em inglês apenas termos técnicos globais
 - reputation.*: certificações, prêmios, parcerias, clientes, cases com evidência.
 
 REGRA CRÍTICA: serviço/atividade NUNCA pode ir em offerings.products.
+REGRA CRÍTICA: identity.company_name DEVE ser preenchido. Se não houver nome explícito, use o primeiro nome próprio identificável no texto (ex: título da página, cabeçalho principal, ou primeira menção clara da empresa).
 
 ## 4) Anti-repetição (obrigatório)
 Em TODAS as listas: valores estritamente únicos, manter só a primeira ocorrência.

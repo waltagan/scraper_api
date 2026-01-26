@@ -325,6 +325,36 @@ class DatabaseService:
                 logger.info(f"📊 Salvando perfil no schema: {SCHEMA}")
                 # Extrair dados do profile
                 company_name = company_name or profile.identity.company_name
+                
+                # VALIDAÇÃO CRÍTICA: company_name é NOT NULL no banco
+                # Se não houver nome, usar fallback baseado em outros campos
+                if not company_name or company_name.strip() == "":
+                    # Fallback 1: Usar tagline se disponível
+                    if profile.identity.tagline and profile.identity.tagline.strip():
+                        company_name = profile.identity.tagline.strip()[:100]  # Limitar tamanho
+                        logger.warning(
+                            f"⚠️ company_name ausente para cnpj={cnpj_basico}, "
+                            f"usando tagline como fallback: {company_name[:50]}..."
+                        )
+                    # Fallback 2: Usar primeira parte da descrição
+                    elif profile.identity.description and profile.identity.description.strip():
+                        desc = profile.identity.description.strip()
+                        # Pegar primeiras palavras (até 50 chars)
+                        company_name = desc[:50].split('.')[0].strip()
+                        if not company_name:
+                            company_name = desc[:50].strip()
+                        logger.warning(
+                            f"⚠️ company_name ausente para cnpj={cnpj_basico}, "
+                            f"usando descrição como fallback: {company_name[:50]}..."
+                        )
+                    # Fallback 3: Usar CNPJ como último recurso
+                    else:
+                        company_name = f"Empresa CNPJ {cnpj_basico}"
+                        logger.warning(
+                            f"⚠️ company_name ausente para cnpj={cnpj_basico}, "
+                            f"usando CNPJ como fallback"
+                        )
+                
                 # SEMPRE usar cnpj_basico (das tabelas iniciais), não o extraído pelo LLM
                 cnpj = cnpj_basico
                 razao_social = None  # Não está no schema atual, mas pode ser adicionado
