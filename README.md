@@ -15,10 +15,12 @@ Todos os endpoints retornam imediatamente e processam em background.
 
 ### Obrigatórias
 - `DATABASE_URL` - URL de conexão PostgreSQL
-- `VLLM_BASE_URL` - URL base do endpoint SGLang (nome mantido por compatibilidade)
-- `VLLM_API_KEY` - API key do SGLang (nome mantido por compatibilidade)
-- `VLLM_MODEL` - Modelo a ser usado (nome mantido por compatibilidade)
+- `VLLM_BASE_URL` - URL base do endpoint SGLang (RunPod, Vast.ai, ou self-hosted)
+- `VLLM_API_KEY` - API key do SGLang (se necessário)
+- `VLLM_MODEL` - Modelo carregado no SGLang (ex: `Qwen/Qwen2.5-3B-Instruct`)
 - `SERPER_API_KEY` - API key do Serper.dev
+
+**Nota**: As variáveis `VLLM_*` funcionam com qualquer instância SGLang compatível com OpenAI API (/v1/*).
 
 ### Opcionais
 - `GOOGLE_API_KEY` - API key do Google Gemini (fallback)

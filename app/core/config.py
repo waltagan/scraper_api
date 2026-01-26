@@ -23,9 +23,10 @@ class Settings:
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1-nano")
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     
-    # 4. RunPod/SGLang (Provider Primário - Qwen 2.5 3B)
+    # 4. SGLang (Provider Primário - suporta RunPod, Vast.ai, ou qualquer host)
     # IMPORTANTE: Sistema usa APENAS SGLang (não vLLM)
-    # Usa VLLM_BASE_URL e VLLM_API_KEY (unificado, nome mantido por compatibilidade)
+    # Variáveis VLLM_* mantidas por compatibilidade, mas apontam para SGLang
+    # Funciona com qualquer instância SGLang compatível com OpenAI API (/v1/*)
     RUNPOD_API_KEY: str = os.getenv("RUNPOD_API_KEY", "")  # Deprecated: usar VLLM_API_KEY
     RUNPOD_MODEL: str = os.getenv("RUNPOD_MODEL", "mistralai/Ministral-3-8B-Instruct-2512")
     RUNPOD_BASE_URL: str = os.getenv("RUNPOD_BASE_URL", "")  # Deprecated: usar VLLM_BASE_URL
@@ -77,12 +78,21 @@ class Settings:
         "https://arize-phoenix-buscafornecedor.up.railway.app"
     )
     
-    # SGLang RunPod Configuration (Provider Primário)
-    # IMPORTANTE: Sistema usa APENAS SGLang (não vLLM)
-    # Variáveis mantêm nome VLLM_* por compatibilidade, mas apontam para SGLang
-    # URL base do SGLang (deve incluir /v1 para compatibilidade OpenAI)
+    # SGLang Configuration (Provider Primário)
+    # IMPORTANTE: Sistema usa SGLang (não vLLM)
+    # Funciona com qualquer instância SGLang: RunPod, Vast.ai, ou self-hosted
+    # Variáveis mantêm nome VLLM_* por compatibilidade com código legado
+    # 
+    # CONFIGURAÇÃO (Railway/Environment Variables):
+    # - VLLM_BASE_URL: URL da instância SGLang (com ou sem /v1)
+    #   Exemplos: 
+    #     - Vast.ai: "https://xxxxx.vast.ai:8000"
+    #     - RunPod: "https://xxxxx.proxy.runpod.net"
+    #     - Self-hosted: "http://localhost:8000"
+    # - VLLM_API_KEY: API key (se necessário, default: "buscafornecedor")
+    # - VLLM_MODEL: Modelo carregado no SGLang (ex: "Qwen/Qwen2.5-3B-Instruct")
     _vllm_url_raw = os.getenv("VLLM_BASE_URL", "https://7bwtva7ris0ehj-8000.proxy.runpod.net")
-    # Garantir que a URL termine com /v1
+    # Garantir que a URL termine com /v1 para compatibilidade OpenAI API
     VLLM_BASE_URL: str = (
         _vllm_url_raw if _vllm_url_raw.endswith("/v1")
         else (_vllm_url_raw + "v1" if _vllm_url_raw.endswith("/")

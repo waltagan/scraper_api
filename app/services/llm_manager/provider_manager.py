@@ -520,12 +520,15 @@ class ProviderManager:
         safe_input_tokens = self._rate_limiter.get_safe_input_tokens(provider)
         context_window = self._rate_limiter.get_context_window(provider)
 
-        # CORREÇÃO CRÍTICA: Validação mais conservadora para RunPod
+        # CORREÇÃO CRÍTICA: Validação mais conservadora para SGLang
         # O SGLang calcula internamente: max_tokens = context_window - prompt_tokens - safety_margin
         # Quando prompt_tokens > context_window, max_tokens fica negativo causando "max_tokens must be at least 1, got -XXXX"
-        is_runpod = "runpod" in provider.lower() or "runpod" in config.base_url.lower()
-        if is_runpod:
-            # Para RunPod, ser ainda mais conservador: usar apenas 80% do context window
+        # Detectar SGLang (RunPod, Vast.ai, ou qualquer outro host)
+        is_primary_provider = provider.lower() in ("runpod", "sglang", "primary")
+        is_sglang_url = any(marker in config.base_url.lower() for marker in ["sglang", "vastai", "runpod"])
+        is_sglang = is_primary_provider or is_sglang_url
+        if is_sglang:
+            # Para SGLang, ser ainda mais conservador: usar apenas 80% do context window
             # Isso deixa margem para system prompts internos e formatação do SGLang
             safe_input_tokens = int(context_window * 0.8)  # 80% do context window
 
@@ -535,7 +538,7 @@ class ProviderManager:
                 f"Estimado: {estimated_tokens:,} tokens, "
                 f"Limite seguro: {safe_input_tokens:,} tokens, "
                 f"Context window: {context_window:,} tokens"
-                f"{' (RunPod: usando 80% do context window)' if is_runpod else ''}"
+                f"{' (SGLang: usando 80% do context window)' if is_sglang else ''}"
             )
             raise ProviderBadRequestError(
                 f"Conteúdo excede context window do {provider}. "
@@ -616,9 +619,12 @@ class ProviderManager:
             start_time = time.perf_counter()
             
             try:
-                # Detectar SGLang/RunPod (agora suporta response_format via XGrammar)
-                is_runpod = "runpod" in provider.lower() or "runpod" in config.base_url.lower()
-                is_sglang = is_runpod or "sglang" in config.base_url.lower()
+                # Detectar SGLang (suporta response_format via XGrammar)
+                # SGLang pode estar em: RunPod, Vast.ai, ou qualquer outro host
+                # Detectar por: (1) "sglang" na URL, (2) nome do provider primário, (3) vastai/runpod na URL
+                is_primary_provider = provider.lower() in ("runpod", "sglang", "primary")
+                is_sglang_url = any(marker in config.base_url.lower() for marker in ["sglang", "vastai", "runpod"])
+                is_sglang = is_primary_provider or is_sglang_url
                 
                 # v8.0: max_tokens ADAPTATIVO baseado no input
                 # Input pequeno/médio → max_tokens menor (reduz risco de runaway)
@@ -764,7 +770,7 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                         )
                         request_params.pop("response_format", None)
                         # Adicionar reforço no prompt se ainda não tiver
-                        if messages and messages[-1].get("role") == "user" and not is_runpod:
+                        if messages and messages[-1].get("role") == "user" and not is_sglang:
                             user_msg = messages[-1]["content"]
                             messages[-1]["content"] = f"""{user_msg}
 
@@ -832,8 +838,8 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                     diff = actual_prompt_tokens - estimated_tokens
                     diff_percent = (diff / estimated_tokens * 100) if estimated_tokens > 0 else 0
                     
-                    # Log detalhado para RunPod (comparação importante)
-                    if "runpod" in provider.lower() or "runpod" in config.base_url.lower():
+                    # Log detalhado para SGLang (comparação importante)
+                    if is_sglang:
                         if abs(diff_percent) > 10:  # Diferença > 10%
                             logger.warning(
                                 f"{ctx_label}ProviderManager: {provider} - Discrepância significativa de tokens: "
