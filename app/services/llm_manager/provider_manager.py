@@ -737,17 +737,28 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                 # AsyncOpenAI sempre adiciona Authorization header, causando 401
                 if is_sglang:
                     # Usar httpx diretamente SEM Authorization header
-                    logger.debug(
-                        f"{ctx_label}ProviderManager: {provider} é SGLang, usando httpx direto "
-                        f"(sem Authorization header)"
-                    )
+                    # SGLang usa token via query parameter (?token=XXX) em vez de Authorization header
+                    request_url = f"{config.base_url}/chat/completions"
+                    
+                    # Adicionar token como query parameter se disponível (não é "dummy" ou vazio)
+                    if config.api_key and config.api_key not in ("", "dummy", "NONE", "none"):
+                        request_url += f"?token={config.api_key}"
+                        logger.debug(
+                            f"{ctx_label}ProviderManager: {provider} é SGLang, usando httpx direto "
+                            f"com token via query parameter"
+                        )
+                    else:
+                        logger.debug(
+                            f"{ctx_label}ProviderManager: {provider} é SGLang, usando httpx direto "
+                            f"(sem token)"
+                        )
                     
                     async with httpx.AsyncClient(timeout=timeout or config.timeout) as http_client:
                         http_response = await http_client.post(
-                            f"{config.base_url}/chat/completions",
+                            request_url,
                             json=request_params,
                             headers={"Content-Type": "application/json"}
-                            # SEM Authorization header - SGLang não requer autenticação
+                            # SEM Authorization header - SGLang usa token via query parameter
                         )
                         
                         http_response.raise_for_status()

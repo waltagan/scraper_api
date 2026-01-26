@@ -123,17 +123,30 @@ async def chat_completion(
             )
         
         # v9.1: SEMPRE usar httpx diretamente para SGLang (NUNCA enviar Authorization header)
-        # SGLang não requer autenticação e rejeita qualquer Authorization header
-        logger.debug(
-            f"vllm_client: Usando httpx direto para SGLang (sem Authorization header)"
-        )
+        # SGLang usa token via query parameter (?token=XXX) em vez de Authorization header
+        # Construir URL com token se disponível
+        from urllib.parse import urlencode
+        
+        request_url = f"{settings.VLLM_BASE_URL}/chat/completions"
+        
+        # Adicionar token como query parameter se disponível (não é "dummy")
+        if settings.VLLM_API_KEY and settings.VLLM_API_KEY != "dummy":
+            request_url += f"?token={settings.VLLM_API_KEY}"
+            logger.debug(
+                f"vllm_client: Usando httpx direto para SGLang com token via query parameter "
+                f"(token={settings.VLLM_API_KEY[:20]}...)"
+            )
+        else:
+            logger.debug(
+                f"vllm_client: Usando httpx direto para SGLang (sem token)"
+            )
         
         async with httpx.AsyncClient(timeout=120.0) as http_client:
             http_response = await http_client.post(
-                f"{settings.VLLM_BASE_URL}/chat/completions",
+                request_url,
                 json=request_params,
                 headers={"Content-Type": "application/json"}
-                # SEM Authorization header - SGLang não requer autenticação
+                # SEM Authorization header - SGLang usa token via query parameter
             )
             
             http_response.raise_for_status()
