@@ -819,6 +819,56 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                             span.set_attribute("llm.request.url", request_url)
                             span.set_attribute("llm.request.has_auth", bool(config.api_key and config.api_key not in ("", "dummy", "NONE", "none")))
                             
+                            # Adicionar request completo como JSON (para visibilidade total)
+                            request_body_json = json.dumps(request_params, ensure_ascii=False, indent=2)
+                            span.set_attribute("llm.request.body", request_body_json)
+                            
+                            # Adicionar informações sobre tamanhos
+                            if messages:
+                                total_chars = sum(len(m.get("content", "")) for m in messages)
+                                span.set_attribute("llm.request.total_chars", total_chars)
+                                span.set_attribute("llm.request.message_count", len(messages))
+                                
+                                # Tamanho do system prompt
+                                if system_msg:
+                                    span.set_attribute("llm.request.system_prompt_length", len(system_msg))
+                                # Tamanho do user prompt
+                                if user_msg:
+                                    span.set_attribute("llm.request.user_prompt_length", len(user_msg))
+                            
+                            # Adicionar informações sobre response_format detalhadas
+                            if response_format:
+                                response_format_type = response_format.get("type", "unknown")
+                                span.set_attribute("gen_ai.request.response_format.type", response_format_type)
+                                
+                                if response_format_type == "json_schema":
+                                    schema_info = response_format.get("json_schema", {})
+                                    span.set_attribute("gen_ai.request.json_schema.name", schema_info.get("name", ""))
+                                    # Tamanho do schema
+                                    schema_str = json.dumps(schema_info.get("schema", {}), ensure_ascii=False)
+                                    span.set_attribute("gen_ai.request.json_schema.size", len(schema_str))
+                                    span.set_attribute("gen_ai.request.json_schema.strict", schema_info.get("strict", False))
+                            
+                            # Adicionar headers (sem expor token completo)
+                            headers_info = {
+                                "Content-Type": headers.get("Content-Type", ""),
+                                "has_authorization": bool(headers.get("Authorization")),
+                                "authorization_prefix": headers.get("Authorization", "")[:20] + "..." if headers.get("Authorization") else None
+                            }
+                            span.set_attribute("llm.request.headers", json.dumps(headers_info, ensure_ascii=False))
+                            
+                            # Adicionar contexto da chamada
+                            span.set_attribute("llm.request.provider", provider)
+                            span.set_attribute("llm.request.ctx_label", ctx_label)
+                            
+                            # Adicionar evento: requisição sendo enviada
+                            span.add_event("llm.request.sent", {
+                                "timestamp": time.time(),
+                                "url": request_url,
+                                "model": request_params.get("model", ""),
+                                "estimated_tokens": estimated_tokens
+                            })
+                            
                             token = otel_context.attach(set_span_in_context(span))
                             # Marcar início para cálculo de latência
                             span.start_time = time.perf_counter()
@@ -851,6 +901,9 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                                     # Resposta completa como JSON
                                     span.set_attribute("gen_ai.response.raw", json.dumps(response_data, ensure_ascii=False))
                                     
+                                    # Tamanho da resposta
+                                    span.set_attribute("llm.response.content_length", len(content))
+                                    
                                     # Finish reason
                                     span.set_attribute("gen_ai.response.finish_reason", 
                                                       choice_data.get("finish_reason", "unknown"))
@@ -859,6 +912,11 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                                     span.set_attribute("gen_ai.usage.prompt_tokens", usage.get("prompt_tokens", 0))
                                     span.set_attribute("gen_ai.usage.completion_tokens", usage.get("completion_tokens", 0))
                                     span.set_attribute("gen_ai.usage.total_tokens", usage.get("total_tokens", 0))
+                                    
+                                    # Eficiência de tokens
+                                    if usage.get("prompt_tokens", 0) > 0:
+                                        tokens_per_char = usage.get("completion_tokens", 0) / max(len(content), 1)
+                                        span.set_attribute("llm.response.tokens_per_char", round(tokens_per_char, 4))
                                     
                                     # Modelo usado na resposta
                                     span.set_attribute("gen_ai.response.model", response_data.get("model", ""))
@@ -873,9 +931,30 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                                     if hasattr(span, 'start_time'):
                                         latency_ms = (time.perf_counter() - span.start_time) * 1000
                                         span.set_attribute("llm.response.latency_ms", latency_ms)
+                                        
+                                        # Tokens por segundo
+                                        if latency_ms > 0:
+                                            tokens_per_sec = (usage.get("completion_tokens", 0) / latency_ms) * 1000
+                                            span.set_attribute("llm.response.tokens_per_second", round(tokens_per_sec, 2))
                                     
                                     # Status HTTP
                                     span.set_attribute("llm.response.status_code", http_response.status_code)
+                                    
+                                    # Headers da resposta
+                                    response_headers_info = {
+                                        "content-type": http_response.headers.get("content-type", ""),
+                                        "content-length": http_response.headers.get("content-length", ""),
+                                    }
+                                    span.set_attribute("llm.response.headers", json.dumps(response_headers_info, ensure_ascii=False))
+                                    
+                                    # Adicionar evento: resposta recebida
+                                    span.add_event("llm.response.received", {
+                                        "timestamp": time.time(),
+                                        "status_code": http_response.status_code,
+                                        "finish_reason": choice_data.get("finish_reason", "unknown"),
+                                        "tokens": usage.get("total_tokens", 0),
+                                        "content_length": len(content)
+                                    })
                                     
                                 except Exception as e:
                                     logger.debug(f"{ctx_label}Erro ao adicionar atributos ao span: {e}")
