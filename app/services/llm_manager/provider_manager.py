@@ -626,33 +626,42 @@ class ProviderManager:
                 is_sglang_url = any(marker in config.base_url.lower() for marker in ["sglang", "vastai", "runpod"])
                 is_sglang = is_primary_provider or is_sglang_url
                 
-                # v8.0: max_tokens ADAPTATIVO baseado no input
+                # v9.1: max_tokens ADAPTATIVO mais conservador (caps reduzidos no schema)
+                # Com maxItems reduzidos, modelo não precisa de tanto espaço de output
                 # Input pequeno/médio → max_tokens menor (reduz risco de runaway)
-                # Input grande → max_tokens maior (permite resposta completa)
+                # Input grande → max_tokens moderado (caps do schema já limitam)
                 max_output_tokens_limit = self._rate_limiter.get_max_output_tokens(provider)
                 
                 if estimated_tokens < 3000:
-                    # Input pequeno: limitar output a 1200 tokens (evita runaway)
-                    max_output_tokens = min(1200, max_output_tokens_limit)
+                    # Input pequeno: limitar output a 900 tokens (v9.1: era 1200)
+                    max_output_tokens = min(900, max_output_tokens_limit)
                     logger.debug(
                         f"{ctx_label}ProviderManager: Input pequeno ({estimated_tokens} tokens), "
-                        f"limitando max_tokens a {max_output_tokens}"
+                        f"limitando max_tokens a {max_output_tokens} (v9.1)"
                     )
                 elif estimated_tokens < 8000:
-                    # Input médio: limitar output a 2000 tokens
-                    max_output_tokens = min(2000, max_output_tokens_limit)
+                    # Input médio: limitar output a 1400 tokens (v9.1: era 2000)
+                    max_output_tokens = min(1400, max_output_tokens_limit)
                     logger.debug(
                         f"{ctx_label}ProviderManager: Input médio ({estimated_tokens} tokens), "
-                        f"limitando max_tokens a {max_output_tokens}"
+                        f"limitando max_tokens a {max_output_tokens} (v9.1)"
                     )
                 else:
-                    # Input grande: usar limite do provider (aceita risco de runaway)
-                    max_output_tokens = max_output_tokens_limit
+                    # Input grande: limitar a 2200 tokens (v9.1: era 4096)
+                    # Caps no schema já limitam output, não precisa de muito espaço
+                    max_output_tokens = min(2200, max_output_tokens_limit)
                     logger.debug(
                         f"{ctx_label}ProviderManager: Input grande ({estimated_tokens} tokens), "
-                        f"usando max_tokens padrão: {max_output_tokens}"
+                        f"limitando max_tokens a {max_output_tokens} (v9.1)"
                     )
-
+                
+                # v9.1: Aplicar fator de redução se for retry anti-loop
+                if max_tokens_factor != 1.0:
+                    max_output_tokens = int(max_output_tokens * max_tokens_factor)
+                    logger.info(
+                        f"{ctx_label}ProviderManager: Aplicando fator de redução {max_tokens_factor} "
+                        f"(max_tokens final: {max_output_tokens})"
+                    )
                 
                 request_params = {
                     "model": config.model,
@@ -661,16 +670,19 @@ class ProviderManager:
                     "max_tokens": max_output_tokens,  # Garantir valor explícito e válido
                     "presence_penalty": presence_penalty,
                     "frequency_penalty": frequency_penalty,
-                    "seed": seed
+                    "seed": seed,
+                    "top_p": 0.9  # v9.1: Novo parâmetro para constrained decoding
                 }
                 
-                # v3.6: Parâmetros anti-repetição HABILITADOS (OpenAI-compatible)
+                # v9.1: Parâmetros de controle (presence/frequency zerados por padrão)
                 # SGLang suporta presence_penalty e frequency_penalty via /v1/chat/completions
+                # v9.1: Controle de repetição via schema (maxItems) + loop detector + retry
                 # Referência: https://www.aidoczh.com/sglang/backend/openai_api_completions.html
                 logger.debug(
-                    f"{ctx_label}ProviderManager: Parâmetros anti-repetição habilitados "
-                    f"(provider={provider}, presence_penalty={presence_penalty}, "
-                    f"frequency_penalty={frequency_penalty}, seed={seed})"
+                    f"{ctx_label}ProviderManager: Parâmetros v9.1 "
+                    f"(provider={provider}, temp={temperature}, "
+                    f"presence={presence_penalty}, frequency={frequency_penalty}, "
+                    f"top_p=0.9, seed={seed}, max_tokens={max_output_tokens})"
                 )
                 
                 # v4.0: SGLang com XGrammar suporta json_schema nativo

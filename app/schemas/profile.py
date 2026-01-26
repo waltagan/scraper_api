@@ -11,6 +11,11 @@ v9.0: Constraints estruturais para qualidade
       - ProductCategory.category_name: obrigatório (não-null) → elimina categorias sem nome
       - ServiceDetail.name: obrigatório (não-null) → elimina objetos vazios em service_details
       - Melhora qualidade sem aumentar latência
+
+v9.1: Caps reduzidos + espaço de degeneração menor
+      - maxItems alinhados com realidade (menos runaway generation)
+      - Reduz latência e melhora estabilidade
+      - Menos tokens de output permitido = menos loops
 """
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
@@ -39,14 +44,14 @@ class TeamProfile(BaseModel):
     size_range: Optional[str] = Field(None, description="Tamanho da equipe")
     key_roles: List[str] = Field(
         default_factory=list, 
-        max_length=50,
-        description="Principais funções/cargos ÚNICOS na equipe (sem duplicatas)",
+        max_length=30,  # v9.1: Reduzido de 50 → 30
+        description="Principais funções/cargos ÚNICOS na equipe (sem duplicatas, máx. 30)",
         json_schema_extra={"uniqueItems": True}  # Hint para o modelo (não garantido por XGrammar)
     )
     team_certifications: List[str] = Field(
         default_factory=list, 
-        max_length=30,
-        description="Certificações ÚNICAS da equipe (sem duplicatas)",
+        max_length=20,  # v9.1: Reduzido de 30 → 20
+        description="Certificações ÚNICAS da equipe (sem duplicatas, máx. 20)",
         json_schema_extra={"uniqueItems": True}  # Hint para o modelo (não garantido por XGrammar)
     )
     
@@ -69,15 +74,16 @@ class TeamProfile(BaseModel):
 class ServiceDetail(BaseModel):
     """Detalhes de um serviço oferecido.
     
-    v9: name é obrigatório (não-null) para evitar objetos vazios em service_details.
+    v9.0: name é obrigatório (não-null) para evitar objetos vazios em service_details.
+    v9.1: deliverables reduzido para 20 itens
     """
     name: str = Field(..., description="Nome do serviço (obrigatório para evitar objetos vazios)")
     description: Optional[str] = Field(None, description="Descrição do serviço")
     methodology: Optional[str] = Field(None, description="Metodologia utilizada")
     deliverables: List[str] = Field(
         default_factory=list, 
-        max_length=30,
-        description="Entregáveis ÚNICOS do serviço (sem duplicatas)",
+        max_length=20,  # v9.1: Reduzido de 30 → 20
+        description="Entregáveis ÚNICOS do serviço (sem duplicatas, máx. 20)",
         json_schema_extra={"uniqueItems": True}
     )
     ideal_client_profile: Optional[str] = Field(None, description="Perfil ideal de cliente")
@@ -134,39 +140,42 @@ class ProductCategory(BaseModel):
 
 
 class Offerings(BaseModel):
-    """Produtos e serviços oferecidos pela empresa."""
+    """Produtos e serviços oferecidos pela empresa.
+    
+    v9.1: Caps reduzidos para reduzir espaço de degeneração e melhorar latência
+    """
     products: List[str] = Field(
         default_factory=list, 
-        max_length=200,
-        description="Lista ÚNICA de produtos gerais (sem duplicatas, máx. 200)",
+        max_length=60,  # v9.1: Reduzido de 200 → 60
+        description="Lista ÚNICA de produtos gerais (sem duplicatas, máx. 60)",
         json_schema_extra={"uniqueItems": True}
     )
     product_categories: List[ProductCategory] = Field(
         default_factory=list, 
-        max_length=80,
-        description="Categorias de produtos com itens específicos ÚNICOS (máx. 80)"
+        max_length=40,  # v9.1: Reduzido de 80 → 40
+        description="Categorias de produtos com itens específicos ÚNICOS (máx. 40)"
     )
     services: List[str] = Field(
         default_factory=list, 
-        max_length=100,
-        description="Lista ÚNICA de serviços (sem duplicatas, máx. 100)",
+        max_length=60,  # v9.1: Reduzido de 100 → 60
+        description="Lista ÚNICA de serviços (sem duplicatas, máx. 60)",
         json_schema_extra={"uniqueItems": True}
     )
     service_details: List[ServiceDetail] = Field(
         default_factory=list, 
-        max_length=30,
-        description="Detalhes dos principais serviços (máx. 30)"
+        max_length=20,  # v9.1: Reduzido de 30 → 20
+        description="Detalhes dos principais serviços (máx. 20)"
     )
     engagement_models: List[str] = Field(
         default_factory=list, 
-        max_length=20,
-        description="Modelos ÚNICOS de contratação (sem duplicatas, máx. 20)",
+        max_length=15,  # v9.1: Reduzido de 20 → 15
+        description="Modelos ÚNICOS de contratação (sem duplicatas, máx. 15)",
         json_schema_extra={"uniqueItems": True}
     )
     key_differentiators: List[str] = Field(
         default_factory=list, 
-        max_length=30,
-        description="Diferenciais ÚNICOS (sem duplicatas, máx. 30)",
+        max_length=20,  # v9.1: Reduzido de 30 → 20
+        description="Diferenciais ÚNICOS (sem duplicatas, máx. 20)",
         json_schema_extra={"uniqueItems": True}
     )
     
@@ -197,35 +206,38 @@ class CaseStudy(BaseModel):
 
 
 class Reputation(BaseModel):
-    """Reputação e prova social da empresa."""
+    """Reputação e prova social da empresa.
+    
+    v9.1: Caps reduzidos para reduzir runaway generation
+    """
     certifications: List[str] = Field(
         default_factory=list, 
-        max_length=50,
-        description="Certificações ÚNICAS (ISO, ANVISA, etc.) - sem duplicatas (máx. 50)",
+        max_length=30,  # v9.1: Reduzido de 50 → 30
+        description="Certificações ÚNICAS (ISO, ANVISA, etc.) - sem duplicatas (máx. 30)",
         json_schema_extra={"uniqueItems": True}
     )
     awards: List[str] = Field(
         default_factory=list, 
-        max_length=50,
-        description="Prêmios ÚNICOS - sem duplicatas (máx. 50)",
+        max_length=20,  # v9.1: Reduzido de 50 → 20
+        description="Prêmios ÚNICOS - sem duplicatas (máx. 20)",
         json_schema_extra={"uniqueItems": True}
     )
     partnerships: List[str] = Field(
         default_factory=list, 
-        max_length=100,
-        description="Parcerias ÚNICAS - sem duplicatas (máx. 100)",
+        max_length=50,  # v9.1: Reduzido de 100 → 50
+        description="Parcerias ÚNICAS - sem duplicatas (máx. 50)",
         json_schema_extra={"uniqueItems": True}
     )
     client_list: List[str] = Field(
         default_factory=list, 
-        max_length=200,
-        description="Clientes ÚNICOS de referência (deduplicados, sem locais/sufixos, máx. 200)",
+        max_length=80,  # v9.1: Reduzido de 200 → 80
+        description="Clientes ÚNICOS de referência (deduplicados, sem locais/sufixos, máx. 80)",
         json_schema_extra={"uniqueItems": True}
     )
     case_studies: List[CaseStudy] = Field(
         default_factory=list, 
-        max_length=30,
-        description="Casos de sucesso detalhados (máx. 30)"
+        max_length=15,  # v9.1: Reduzido de 30 → 15
+        description="Casos de sucesso detalhados (máx. 15)"
     )
     
     @field_validator('certifications', 'awards', 'partnerships', 'client_list')
@@ -245,17 +257,20 @@ class Reputation(BaseModel):
 
 
 class Contact(BaseModel):
-    """Informações de contato."""
+    """Informações de contato.
+    
+    v9.1: Caps reduzidos para otimização
+    """
     emails: List[str] = Field(
         default_factory=list, 
-        max_length=20,
-        description="Emails ÚNICOS de contato (sem duplicatas, máx. 20)",
+        max_length=10,  # v9.1: Reduzido de 20 → 10
+        description="Emails ÚNICOS de contato (sem duplicatas, máx. 10)",
         json_schema_extra={"uniqueItems": True}
     )
     phones: List[str] = Field(
         default_factory=list, 
-        max_length=20,
-        description="Telefones ÚNICOS (sem duplicatas, máx. 20)",
+        max_length=10,  # v9.1: Reduzido de 20 → 10
+        description="Telefones ÚNICOS (sem duplicatas, máx. 10)",
         json_schema_extra={"uniqueItems": True}
     )
     linkedin_url: Optional[str] = Field(None, description="URL do LinkedIn")
@@ -263,8 +278,8 @@ class Contact(BaseModel):
     headquarters_address: Optional[str] = Field(None, description="Endereço da sede")
     locations: List[str] = Field(
         default_factory=list, 
-        max_length=50,
-        description="Localizações ÚNICAS (sem duplicatas, máx. 50)",
+        max_length=25,  # v9.1: Reduzido de 50 → 25
+        description="Localizações ÚNICAS (sem duplicatas, máx. 25)",
         json_schema_extra={"uniqueItems": True}
     )
     

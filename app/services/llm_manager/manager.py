@@ -274,28 +274,40 @@ class LLMCallManager:
                 adjusted_max_tokens = None
                 
                 # Se já tentamos e falhou por degeneração, ajustar
-                # v8.2: Penalidades moderadas (não muito altas para evitar sub-preenchimento)
+                # v9.1: Reduzir max_tokens ao invés de subir penalidades (evita sub-preenchimento)
+                # Controle de repetição via schema (maxItems) + loop detector + retry com menos espaço
                 if attempt > 0 and last_error and isinstance(last_error, ProviderDegenerationError):
                     adjusted_temperature = 0.2   # Aumentar levemente
-                    adjusted_presence = 0.25     # v8.2: Moderado (era 0.6)
-                    adjusted_frequency = 0.35    # v8.2: Moderado (era 0.8)
+                    # v9.1: Manter penalidades baixas (eram 0.25/0.35, agora 0.0/0.0)
+                    adjusted_presence = 0.0      # v9.1: Zero (evita sub-preenchimento)
+                    adjusted_frequency = 0.0     # v9.1: Zero (evita colapso para [])
+                    # v9.1: NOVO - Reduzir max_tokens no retry (foco em tamanho, não em criatividade)
+                    adjusted_max_tokens = 0.75   # Reduzir para 75% do max_tokens calculado
                     logger.info(
                         f"{ctx_label}LLMCallManager: Retry anti-loop (attempt={attempt+1}): "
-                        f"temp=0.2, presence=0.25, frequency=0.35"
+                        f"temp=0.2, presence=0.0, frequency=0.0, max_tokens=75% (v9.1)"
                     )
                 
-                content, latency_ms = await self.provider_manager.call(
-                    provider=selected_provider,
-                    messages=messages,
-                    timeout=timeout,
-                    temperature=adjusted_temperature,
-                    presence_penalty=adjusted_presence,
-                    frequency_penalty=adjusted_frequency,
-                    seed=seed,
-                    response_format=response_format,
-                    ctx_label=ctx_label,
-                    priority=priority
-                )
+                # v9.1: Se retry anti-loop, passar adjusted_max_tokens para o provider manager
+                # O provider manager vai multiplicar seu max_tokens calculado por esse fator
+                call_kwargs = {
+                    "provider": selected_provider,
+                    "messages": messages,
+                    "timeout": timeout,
+                    "temperature": adjusted_temperature,
+                    "presence_penalty": adjusted_presence,
+                    "frequency_penalty": adjusted_frequency,
+                    "seed": seed,
+                    "response_format": response_format,
+                    "ctx_label": ctx_label,
+                    "priority": priority
+                }
+                
+                # v9.1: Passar fator de redução de max_tokens se for retry
+                if adjusted_max_tokens is not None:
+                    call_kwargs["max_tokens_factor"] = adjusted_max_tokens
+                
+                content, latency_ms = await self.provider_manager.call(**call_kwargs)
                 
                 # Registrar sucesso
                 self.health_monitor.record_success(selected_provider, latency_ms)

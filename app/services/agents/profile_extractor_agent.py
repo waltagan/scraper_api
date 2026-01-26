@@ -7,6 +7,11 @@ de empresa em formato estruturado.
 v8.0: Solução definitiva anti-loop com 4 camadas
 v8.2: Balanceamento qualidade + anti-loop (truncamento determinístico)
 v9.0: Roteamento fechado + micro-shots cirúrgicos (qualidade máxima)
+v9.1: Caps reduzidos + parâmetros mais estáveis (menos degeneração)
+      - presence_penalty = 0.0, frequency_penalty = 0.0
+      - temperature = 0.15, top_p = 0.9
+      - max_tokens mais conservador (900/1400/2200)
+      - Schema sem ser colado no user prompt (reduz contexto)
 """
 
 import json
@@ -55,9 +60,10 @@ class ProfileExtractorAgent(BaseAgent):
     v8.0: Solução definitiva anti-loop (não depende de XGrammar)
     v8.2: Balanceamento qualidade + anti-loop
     v9.0: Roteamento fechado + micro-shots cirúrgicos
-          - Regra dura: serviços NUNCA em products
-          - Schema: category_name e service_details.name obrigatórios
-          - Micro-shots para fixação rápida
+    v9.1: Parâmetros mais estáveis + schema reduzido
+          - Zera presence/frequency (evita sub-preenchimento)
+          - Caps menores no schema (menos runaway)
+          - User prompt sem schema (economia de tokens)
     
     Usa prioridade NORMAL por padrão pois roda após Discovery e LinkSelector.
     """
@@ -67,27 +73,28 @@ class ProfileExtractorAgent(BaseAgent):
     DEFAULT_TIMEOUT = _CFG.get("timeout", 120.0)
     DEFAULT_MAX_RETRIES = _CFG.get("max_retries", 3)
     
-    # Parâmetros otimizados para structured output (balanceado qualidade + anti-loop)
-    # v8.2: Penalidades reduzidas para evitar sub-preenchimento e colapso para []
-    # v9.0: Mantido (foco no prompt + schema para qualidade)
-    DEFAULT_TEMPERATURE: float = 0.1         # 0.1 reduz loops (0.0 aumenta risco em catálogos)
-    DEFAULT_PRESENCE_PENALTY: float = 0.15   # v8.2: Reduzido de 0.3 → 0.15 (evita sub-preenchimento)
-    DEFAULT_FREQUENCY_PENALTY: float = 0.20  # v8.2: Reduzido de 0.4 → 0.20 (evita colapso para [])
+    # Parâmetros otimizados para structured output v9.1 (estabilidade máxima)
+    # v9.1: Zerar presence/frequency para evitar sub-preenchimento e perda de fidelidade
+    #       Controle de repetição via schema (maxItems reduzidos) + loop detector + retry
+    DEFAULT_TEMPERATURE: float = 0.15        # v9.1: Ligeiramente aumentado (0.1 → 0.15)
+    DEFAULT_TOP_P: float = 0.9               # v9.1: Novo parâmetro para constrained decoding
+    DEFAULT_PRESENCE_PENALTY: float = 0.0    # v9.1: Zerado (era 0.15) - evita sub-preenchimento
+    DEFAULT_FREQUENCY_PENALTY: float = 0.0   # v9.1: Zerado (era 0.20) - evita colapso para []
     DEFAULT_SEED: int = 42                   # Reprodutibilidade
     
     # =========================================================================
-    # SYSTEM_PROMPT v9.0 - Roteamento fechado + micro-shots cirúrgicos
+    # SYSTEM_PROMPT v9.1 - Caps explícitos + roteamento fechado
     # =========================================================================
-    # ATUALIZAÇÃO v9.0: Prompt mais curto e cirúrgico para máxima qualidade
-    # - Roteamento fechado: serviços NUNCA em products (regra dura)
-    # - Micro-shots específicos: services≠products, sem objeto vazio, locations≠phones, client_list só nomes
-    # - Evidência mínima para campos sensíveis
-    # - Mantém anti-loop e truncamento determinístico
-    # - Schema v9.0: category_name e service_details.name obrigatórios (não-null)
+    # ATUALIZAÇÃO v9.1: Prompt com caps explícitos alinhados ao schema reduzido
+    # - Caps explícitos por campo (reforço de estabilidade)
+    # - Roteamento fechado mantido (serviços NUNCA em products)
+    # - Micro-shots mantidos
+    # - Evidência mínima mantida
+    # - Schema v9.1: maxItems reduzidos (menos degeneração)
     # =========================================================================
     
     SYSTEM_PROMPT = """Você é um extrator de dados B2B. Gere APENAS um JSON válido.
-A resposta deve começar com `{` e terminar com `}`.
+A resposta deve começar com "{" e terminar com "}".
 Proibido markdown, explicações, texto extra.
 
 ## 1) Evidência e anti-alucinação (duro)
@@ -95,7 +102,6 @@ Preencha valores SOMENTE quando houver evidência explícita no texto fornecido.
 Se não houver evidência:
 - strings: null
 - listas: []
-
 Proibido inventar: clientes, certificações, prêmios, parcerias, produtos, números, datas, métricas.
 
 ## 2) Idioma
@@ -104,83 +110,89 @@ Saída em Português (Brasil). Manter em inglês apenas termos técnicos globais
 ## 3) Roteamento fechado (evita troca de campos)
 - identity.*: nome, CNPJ, slogan, descrição institucional, ano, faixa funcionários.
 - contact.*: emails, telefones, site, linkedin, endereço, locations (cidades/estados/unidades).
-- offerings.services: atividades/serviços (portaria, limpeza, recepção, segurança, etc.).
-- offerings.service_details: detalhes reais (quando houver metodologia/entregáveis/como funciona).
+- offerings.services: atividades/serviços.
+- offerings.service_details: detalhes reais (metodologia, entregáveis, como funciona).
 - offerings.products: SOMENTE produtos nomeados (modelo/código/versão/medida/marca+modelo).
 - offerings.product_categories: SOMENTE quando houver categoria nomeável + itens válidos.
-- team.*: cargos/funções/equipe explicitamente descritos (ex.: "profissionais que disponibilizamos: ...").
-- reputation.*: prova social da empresa (certificações, prêmios, parcerias, clientes, cases).
+- team.*: equipe/cargos/funções explícitas.
+- reputation.*: certificações, prêmios, parcerias, clientes, cases com evidência.
 
-**REGRA CRÍTICA: serviço/atividade NUNCA pode ir em offerings.products.**
+REGRA CRÍTICA: serviço/atividade NUNCA pode ir em offerings.products.
 
 ## 4) Anti-repetição (obrigatório)
 Em TODAS as listas: valores estritamente únicos, manter só a primeira ocorrência.
+Se detectar padrão repetitivo durante a geração, encerre imediatamente a lista e mantenha apenas os primeiros itens únicos.
 
-Se detectar padrão repetitivo durante a geração, interrompa a lista e mantenha apenas os primeiros itens únicos.
+## 5) Caps explícitos (reforço de estabilidade/latência)
+- emails: máximo 10
+- phones: máximo 10
+- locations: máximo 25
+- offerings.services: máximo 60
+- offerings.service_details: máximo 20
+- offerings.products: máximo 60
+- offerings.product_categories: máximo 40
+- ProductCategory.items: máximo 80
+- reputation.client_list: máximo 80
+- reputation.partnerships: máximo 50
+- reputation.certifications: máximo 30
+- reputation.awards: máximo 20
+- reputation.case_studies: máximo 15
+- team.key_roles: máximo 30
+- team.team_certifications: máximo 20
+- engagement_models: máximo 15
+- key_differentiators: máximo 20
 
-## 5) Products e Product Categories (anti-loop forte)
+## 6) Products e Product Categories (anti-loop forte)
 Produto válido exige identificador claro (modelo/código/versão/medida/marca+modelo).
-
 - Se NÃO houver produtos nomeados:
   - offerings.products = []
   - offerings.product_categories = []
 
 Product categories:
-- PROIBIDO criar categoria sem category_name válido (não pode ser null).
+- PROIBIDO criar categoria sem category_name válido.
 - PROIBIDO criar categoria sem item válido.
-- Para items genéricos ("RCA", "P2", "P10", "XLR"):
+- Para termos genéricos (ex.: "RCA", "P2", "P10", "XLR"):
   - listar cada termo no máximo 1 vez
-  - NÃO combinar ("2 RCA + 2 RCA" etc.)
   - NÃO expandir variações mínimas
+  - Se começar a repetir padrão, parar imediatamente
 
-## 6) Clientes (prioridade alta, mas com evidência mínima)
+## 7) Clientes (prioridade alta, evidência mínima)
 Preencher reputation.client_list SOMENTE se houver nomes próprios explícitos em seção/trecho do tipo:
 "CLIENTES", "Nossos clientes", "Quem confia", "Projetos realizados", "Cases", "Algumas obras executadas".
-
 Depoimentos sem nomes ⇒ client_list = [].
+Ignore placeholders como <NAME>, <EMAIL>, "(redacted)".
 
-Ignore placeholders/redações como `<NAME>`, `<EMAIL>`, "(redacted)": isso NÃO é evidência.
-
-## 7) service_details (anti-vazio)
-Se não houver detalhe real de serviços, service_details deve ser [].
+## 8) service_details (anti-vazio)
+Se não houver detalhe real, service_details deve ser [].
 PROIBIDO inserir objeto de service_details com todos os campos nulos/vazios.
-Se criar objeto de service_details, name é OBRIGATÓRIO (não pode ser null).
+Se criar objeto de service_details, name é OBRIGATÓRIO.
 
-## 8) locations (anti-erro)
+## 9) locations (anti-erro)
 contact.locations: somente cidades/estados/unidades/endereço.
 PROIBIDO incluir telefone ou email em locations.
 
-## Micro-shots (fixação rápida)
-
-### SHOT 1 — Serviços ≠ Produtos
-Entrada:
-"Serviços: Portaria, Limpeza e Conservação, Recepção"
+## Micro-shots
+SHOT 1 — Serviços ≠ Produtos
+Entrada: "Serviços: Portaria, Limpeza e Conservação, Recepção"
 Saída:
 "services": ["Portaria", "Limpeza e Conservação", "Recepção"],
 "products": [],
 "product_categories": []
 
-### SHOT 2 — Sem detalhe => sem objeto vazio
-Entrada:
-"Serviços: Portaria e Recepção" (sem explicar como funciona)
-Saída:
-"service_details": []
+SHOT 2 — Sem detalhe => sem objeto vazio
+Entrada: "Serviços: Portaria e Recepção" (sem explicar como funciona)
+Saída: "service_details": []
 
-### SHOT 3 — Locations ≠ Phones/Emails
-Entrada:
-"Matriz RJ: Rua X... / Tel: (21) 0000-0000"
+SHOT 3 — Locations ≠ Phones/Emails
+Entrada: "Matriz RJ: Rua X... / Tel: (21) 0000-0000"
 Saída:
 "phones": ["(21) 0000-0000"],
 "locations": ["RJ"],
 "headquarters_address": "Rua X..."
 
-### SHOT 4 — Clientes só com nomes explícitos
-Entrada:
-"Depoimentos: 'Ótimo serviço...'"
-Saída:
-"client_list": []
-
-Agora gere o JSON exatamente no schema fornecido pelo usuário.
+SHOT 4 — Clientes só com nomes explícitos
+Entrada: "Depoimentos: 'Ótimo serviço...'"
+Saída: "client_list": []
 """
     
     def _get_json_schema(self) -> Optional[Dict[str, Any]]:
@@ -208,30 +220,20 @@ Agora gere o JSON exatamente no schema fornecido pelo usuário.
         """
         Constrói prompt com conteúdo para análise.
         
-        v9.0: Schema incluído para guiar roteamento e constraints
+        v9.1: Schema NÃO é mais incluído no user prompt (já está em response_format)
+              Isso reduz tokens de contexto e melhora latência
         
         Args:
             content: Conteúdo scraped para análise
         
         Returns:
-            Prompt formatado com schema JSON
+            Prompt formatado SEM schema (economia de tokens)
         """
-        # Incluir schema JSON completo para guiar o modelo
-        schema = _get_company_profile_schema()
-        
-        # Formatar schema de forma legível
-        import json
-        schema_str = json.dumps(schema, indent=2, ensure_ascii=False)
-        
-        return f"""Extraia o perfil completo desta empresa:
+        return f"""Extraia o perfil completo desta empresa a partir do conteúdo abaixo (texto pode conter ruído e duplicações).
+Use apenas evidência explícita.
 
-{content}
-
----
-
-Gere o JSON exatamente no seguinte schema:
-
-{schema_str}"""
+CONTEÚDO:
+{content}"""
     
     def _parse_response(self, response: str, **kwargs) -> CompanyProfile:
         """
@@ -240,6 +242,7 @@ Gere o JSON exatamente no seguinte schema:
         v8.0: Com structured output via XGrammar, o JSON é garantido válido.
               Pós-processamento robusto aplica deduplicação determinística.
         v9.0: Schema com constraints não-null reduz erros estruturais
+        v9.1: Caps reduzidos melhoram estabilidade
         
         Args:
             response: Resposta JSON do LLM
@@ -313,6 +316,7 @@ Gere o JSON exatamente no seguinte schema:
         Pós-processamento robusto: deduplicação + filtro anti-template.
         
         v8.0: Não depende de uniqueItems (pode ser ignorado pelo XGrammar)
+        v9.1: Caps reduzidos no schema já limitam espaço de degeneração
         
         Args:
             data: Dados extraídos pelo LLM
@@ -343,9 +347,7 @@ Gere o JSON exatamente no seguinte schema:
             """
             Filtro anti-template: detecta e remove itens com mesmo molde repetido.
             
-            Hard cap: máximo 80 itens por categoria (alinhado com PROMPT v8.2)
-            Anti-template: se 5 itens seguidos compartilham mesmo prefixo/padrão,
-            manter apenas os primeiros 5 únicos desse molde.
+            v9.1: Hard cap 80 (alinhado com schema)
             """
             if not items or len(items) <= 5:
                 return items[:max_items]
@@ -388,7 +390,7 @@ Gere o JSON exatamente no seguinte schema:
                     if isinstance(category, dict) and 'items' in category:
                         # Passo 1: Deduplicate
                         category['items'] = deduplicate_list(category['items'])
-                        # Passo 2: Filter anti-template (hard cap 80, alinhado com PROMPT v8.2)
+                        # Passo 2: Filter anti-template (hard cap 80, alinhado com schema v9.1)
                         category['items'] = filter_template_items(category['items'], max_items=80)
             
             # Deduplicate engagement_models
@@ -454,6 +456,7 @@ Gere o JSON exatamente no seguinte schema:
         Normaliza a resposta do LLM para o formato esperado.
         
         v8.0: Aplica deduplicação robusta antes de normalizar
+        v9.1: Caps já são menores no schema
         
         Args:
             data: Dados extraídos pelo LLM
