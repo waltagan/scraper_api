@@ -51,20 +51,43 @@ def setup_phoenix_tracing(project_name: str):
             from phoenix.otel import register
             from openinference.instrumentation.openai import OpenAIInstrumentor
             from opentelemetry.sdk.resources import Resource
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
             
-            # CRÍTICO: O register() do Phoenix já configura o project_name corretamente
-            # O project_name passado para register() é usado para criar o Resource internamente
-            # Não precisamos criar Resource manualmente, o Phoenix faz isso automaticamente
-            tracer_provider = register(
-                project_name=project_name,
-                endpoint=f"{settings.PHOENIX_COLLECTOR_URL}/v1/traces",
+            # CRÍTICO: Configuração robusta do Phoenix com BatchSpanProcessor
+            # BatchSpanProcessor não bloqueia o loop de eventos (melhor performance)
+            # SimpleSpanProcessor (padrão) pode bloquear em alta carga
+            
+            # Criar Resource explícito com isolamento de projeto
+            resource = Resource.create({
+                "service.name": "scraper-api",
+                "openinference.project.name": project_name,  # Segregação de projeto
+            })
+            
+            # Criar TracerProvider com Resource customizado
+            tracer_provider = TracerProvider(resource=resource)
+            
+            # Usar BatchSpanProcessor para não bloquear performance
+            # BatchSpanProcessor agrupa spans e envia em lotes, reduzindo overhead
+            otlp_exporter = OTLPSpanExporter(
+                endpoint=f"{settings.PHOENIX_COLLECTOR_URL}/v1/traces"
             )
+            batch_processor = BatchSpanProcessor(otlp_exporter)
+            tracer_provider.add_span_processor(batch_processor)
             
+            # Registrar como global (opcional, mas garante compatibilidade)
+            from opentelemetry import trace
+            trace.set_tracer_provider(tracer_provider)
+            
+            # Instrumentar OpenAI (captura chamadas via AsyncOpenAI)
             OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
+            
             _tracer_providers[project_name] = tracer_provider
             logger.info(
                 f"✅ Phoenix tracing configurado para projeto: {project_name} "
-                f"(endpoint: {settings.PHOENIX_COLLECTOR_URL}/v1/traces)"
+                f"(endpoint: {settings.PHOENIX_COLLECTOR_URL}/v1/traces, "
+                f"processor: BatchSpanProcessor)"
             )
         except ImportError as e:
             logger.warning(f"⚠️ Bibliotecas Phoenix não instaladas: {e}")

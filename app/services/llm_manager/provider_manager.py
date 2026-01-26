@@ -701,16 +701,31 @@ class ProviderManager:
                     response_format_type = response_format.get("type", "")
                     
                     if is_sglang:
-                        # SGLang: suporta json_schema e json_object via XGrammar
+                        # SGLang: suporta json_schema via extra_body (nativo) ou response_format
+                        # Preferir extra_body para json_schema (mais direto para SGLang)
                         if response_format_type == "json_schema":
-                            # json_schema: usar diretamente (XGrammar garante formato)
-                            request_params["response_format"] = response_format
+                            # SGLang Native JSON support via extra_body
+                            # Isso permite usar json_schema diretamente + repetition_penalty
+                            json_schema_data = response_format.get("json_schema", {})
+                            
+                            # Usar extra_body para json_schema nativo do SGLang
+                            # Isso é mais eficiente que response_format para SGLang
+                            if "extra_body" not in request_params:
+                                request_params["extra_body"] = {}
+                            
+                            # Adicionar json_schema ao extra_body
+                            request_params["extra_body"]["json_schema"] = json_schema_data.get("schema", {})
+                            
+                            # Adicionar repetition_penalty no nível do motor (anti-loop)
+                            # repetition_penalty=1.1 é efetivo para evitar loops sem perder qualidade
+                            request_params["extra_body"]["repetition_penalty"] = 1.1
+                            
                             logger.debug(
-                                f"{ctx_label}ProviderManager: {provider} usando json_schema "
-                                f"(SGLang/XGrammar structured output)"
+                                f"{ctx_label}ProviderManager: {provider} usando json_schema via extra_body "
+                                f"(SGLang Native JSON support + repetition_penalty=1.1)"
                             )
                         elif response_format_type == "json_object":
-                            # json_object: SGLang também suporta
+                            # json_object: usar response_format normalmente
                             request_params["response_format"] = response_format
                             logger.debug(
                                 f"{ctx_label}ProviderManager: {provider} usando json_object "
