@@ -393,6 +393,27 @@ def update_llm_span_response(
         span.set_attribute("llm.token_count.completion", completion_tokens)
         span.set_attribute("llm.token_count.total", total_tokens)
         
+        # v10.0: Métricas avançadas para SGLang/Vast.ai
+        # TTFT (Time to First Token) - latência de preenchimento de cache
+        # SGLang pode retornar ttft_ms na resposta se disponível
+        ttft_ms = response_data.get("ttft_ms") or response_data.get("ttft") or None
+        if ttft_ms is not None:
+            span.set_attribute("llm.ttft_ms", float(ttft_ms))
+            span.set_attribute("llm.vast.ttft", float(ttft_ms))
+            logger.debug(f"TTFT capturado: {ttft_ms}ms")
+        
+        # Prefix Cache Hit (SGLang reutiliza KV Cache quando system_prompt é idêntico)
+        # SGLang pode retornar prefix_cache_hit na resposta se disponível
+        prefix_cache_hit = response_data.get("prefix_cache_hit") or response_data.get("cache_hit") or None
+        if prefix_cache_hit is not None:
+            span.set_attribute("llm.vast.prefix_cache_hit", bool(prefix_cache_hit))
+            logger.debug(f"Prefix cache hit: {prefix_cache_hit}")
+        
+        # Node ID (Vast.ai específico)
+        vast_node_id = response_data.get("node_id") or response_data.get("vast_node_id") or None
+        if vast_node_id:
+            span.set_attribute("llm.vast.node_id", str(vast_node_id))
+        
         # Métricas adicionais
         span.set_attribute("llm.response.content_length", len(content))
         span.set_attribute("llm.response.status_code", http_status_code)
@@ -477,4 +498,82 @@ async def trace_llm_call(project_name: str, operation_name: str):
             span.end()
     except Exception as e:
         logger.warning(f"⚠️ Erro ao criar span Phoenix: {e}")
+        yield None
+
+
+@asynccontextmanager
+async def trace_workflow(project_name: str, workflow_name: str):
+    """
+    Context manager assíncrono para tracing de workflows completos.
+    
+    v10.0: Span pai que engloba múltiplas operações (chunking, LLM calls, merge)
+    
+    Uso:
+        async with trace_workflow("profile-llm", "company_profiling_workflow") as workflow_span:
+            # Chunking
+            chunks = process_chunks(...)
+            if workflow_span:
+                workflow_span.set_attribute("workflow.chunks_count", len(chunks))
+            
+            # LLM calls (criarão spans filhos automaticamente)
+            profiles = await process_llm_calls(...)
+            
+            # Merge
+            final_profile = merge_profiles(profiles)
+    
+    Args:
+        project_name: Nome do projeto no Phoenix
+        workflow_name: Nome do workflow (ex: 'company_profiling_workflow')
+    
+    Yields:
+        Span do OpenTelemetry ou None se tracing desabilitado
+    """
+    if not _tracing_enabled:
+        yield None
+        return
+    
+    tracer_provider = setup_phoenix_tracing(project_name)
+    
+    if tracer_provider is None:
+        yield None
+        return
+    
+    try:
+        from opentelemetry import trace as otel_trace
+        from opentelemetry import context as otel_context
+        from opentelemetry.trace import set_span_in_context, SpanKind
+        
+        tracer_instance = otel_trace.get_tracer(__name__, tracer_provider=tracer_provider)
+        
+        # v10.0: Span pai com kind INTERNAL (workflow interno)
+        span = tracer_instance.start_span(
+            workflow_name,
+            kind=SpanKind.INTERNAL
+        )
+        
+        # Marcar como workflow
+        try:
+            from openinference.semconv import SpanAttributes
+            span.set_attribute("workflow.name", workflow_name)
+            span.set_attribute("workflow.project", project_name)
+        except ImportError:
+            span.set_attribute("workflow.name", workflow_name)
+            span.set_attribute("workflow.project", project_name)
+        
+        try:
+            token = otel_context.attach(set_span_in_context(span))
+            try:
+                yield span
+            finally:
+                otel_context.detach(token)
+        except Exception as e:
+            if span:
+                span.set_attribute("workflow.error", str(e))
+                span.set_attribute("workflow.error.type", type(e).__name__)
+            span.end()
+            raise
+        else:
+            span.end()
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao criar workflow span Phoenix: {e}")
         yield None

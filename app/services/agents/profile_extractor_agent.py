@@ -73,128 +73,53 @@ class ProfileExtractorAgent(BaseAgent):
     DEFAULT_TIMEOUT = _CFG.get("timeout", 120.0)
     DEFAULT_MAX_RETRIES = _CFG.get("max_retries", 3)
     
-    # Parâmetros otimizados para structured output v9.1 (estabilidade máxima)
-    # v9.1: Zerar presence/frequency para evitar sub-preenchimento e perda de fidelidade
-    #       Controle de repetição via schema (maxItems reduzidos) + loop detector + retry
-    DEFAULT_TEMPERATURE: float = 0.15        # v9.1: Ligeiramente aumentado (0.1 → 0.15)
-    DEFAULT_TOP_P: float = 0.9               # v9.1: Novo parâmetro para constrained decoding
-    DEFAULT_PRESENCE_PENALTY: float = 0.0    # v9.1: Zerado (era 0.15) - evita sub-preenchimento
-    DEFAULT_FREQUENCY_PENALTY: float = 0.0   # v9.1: Zerado (era 0.20) - evita colapso para []
+    # Parâmetros otimizados para Qwen3-8B + SGLang Guided Decoding v10.0
+    # v10.0: Otimizado para precisão máxima com Guided Decoding
+    #       - temperature=0.1 para precisão (Qwen3-8B)
+    #       - top_p=0.95 para nucleus sampling otimizado
+    #       - repetition_penalty via extra_body (mais efetivo)
+    #       - Controle de repetição via schema (uniqueItems + maxItems)
+    DEFAULT_TEMPERATURE: float = 0.1         # v10.0: Precisão máxima para Qwen3-8B
+    DEFAULT_TOP_P: float = 0.95              # v10.0: Nucleus sampling otimizado
+    DEFAULT_PRESENCE_PENALTY: float = 0.0    # v10.0: Zerado (repetition_penalty via extra_body)
+    DEFAULT_FREQUENCY_PENALTY: float = 0.0   # v10.0: Zerado (repetition_penalty via extra_body)
     DEFAULT_SEED: int = 42                   # Reprodutibilidade
     
     # =========================================================================
-    # SYSTEM_PROMPT v9.1 - Caps explícitos + roteamento fechado
+    # SYSTEM_PROMPT v10.0 - XML Structured + Chain-of-Thought
     # =========================================================================
-    # ATUALIZAÇÃO v9.1: Prompt com caps explícitos alinhados ao schema reduzido
-    # - Caps explícitos por campo (reforço de estabilidade)
-    # - Roteamento fechado mantido (serviços NUNCA em products)
-    # - Micro-shots mantidos
-    # - Evidência mínima mantida
-    # - Schema v9.1: maxItems reduzidos (menos degeneração)
+    # v10.0: Refatoração para "LLM como motor de computação estruturada"
+    # - Prompts XML estruturados (Qwen3 processa melhor dados estruturados)
+    # - Chain-of-Thought para raciocínio explícito
+    # - Removidas instruções de formato JSON (SGLang Guided Decoding cuida disso)
+    # - Foco em lógica de extração, não em formatação
     # =========================================================================
     
-    SYSTEM_PROMPT = """Você é um extrator de dados B2B. Gere APENAS um JSON válido.
-A resposta deve começar com "{" e terminar com "}".
-Proibido markdown, explicações, texto extra.
+    SYSTEM_PROMPT = """<role>Você é um Analista de Dados B2B Especialista em extração estruturada.</role>
 
-## 1) Evidência e anti-alucinação (duro)
-Preencha valores SOMENTE quando houver evidência explícita no texto fornecido.
-Se não houver evidência:
-- strings: null
-- listas: []
-Proibido inventar: clientes, certificações, prêmios, parcerias, produtos, números, datas, métricas.
+<task>Extrair informações corporativas precisas do conteúdo fornecido em <raw_content>.</task>
 
-## 2) Idioma
-Saída em Português (Brasil). Manter em inglês apenas termos técnicos globais e nomes próprios.
+<extraction_logic>
+1. IDENTIDADE: Extraia o nome comercial e CNPJ (se houver).
+2. CLASSIFICAÇÃO: Determine o setor com base no core business.
+3. PRODUTOS vs SERVIÇOS: 
+   - Produtos: Itens físicos, softwares com SKU, modelos ou versões.
+   - Serviços: Consultoria, manutenção, treinamentos.
+</extraction_logic>
 
-## 3) Roteamento fechado (evita troca de campos)
-- identity.company_name: **OBRIGATÓRIO** - Nome legal ou comercial da empresa. Se não houver explícito, use o primeiro nome próprio encontrado no texto (título, cabeçalho, ou primeira menção clara).
-- identity.*: CNPJ, slogan, descrição institucional, ano, faixa funcionários.
-- contact.*: emails, telefones, site, linkedin, endereço, locations (cidades/estados/unidades).
-- offerings.services: atividades/serviços.
-- offerings.service_details: detalhes reais (metodologia, entregáveis, como funciona).
-- offerings.products: SOMENTE produtos nomeados (modelo/código/versão/medida/marca+modelo).
-- offerings.product_categories: SOMENTE quando houver categoria nomeável + itens válidos.
-- team.*: equipe/cargos/funções explícitas.
-- reputation.*: certificações, prêmios, parcerias, clientes, cases com evidência.
+<constraints>
+- Use null para dados não encontrados.
+- Mantenha a terminologia técnica original.
+- Máxima fidelidade às evidências: não invente clientes ou prêmios.
+- Idioma: Português (Brasil), exceto termos técnicos globais.
+</constraints>
 
-REGRA CRÍTICA: serviço/atividade NUNCA pode ir em offerings.products.
-REGRA CRÍTICA: identity.company_name DEVE ser preenchido. Se não houver nome explícito, use o primeiro nome próprio identificável no texto (ex: título da página, cabeçalho principal, ou primeira menção clara da empresa).
-
-## 4) Anti-repetição (obrigatório)
-Em TODAS as listas: valores estritamente únicos, manter só a primeira ocorrência.
-Se detectar padrão repetitivo durante a geração, encerre imediatamente a lista e mantenha apenas os primeiros itens únicos.
-
-## 5) Caps explícitos (reforço de estabilidade/latência)
-- emails: máximo 10
-- phones: máximo 10
-- locations: máximo 25
-- offerings.services: máximo 60
-- offerings.service_details: máximo 20
-- offerings.products: máximo 60
-- offerings.product_categories: máximo 40
-- ProductCategory.items: máximo 80
-- reputation.client_list: máximo 80
-- reputation.partnerships: máximo 50
-- reputation.certifications: máximo 30
-- reputation.awards: máximo 20
-- reputation.case_studies: máximo 15
-- team.key_roles: máximo 30
-- team.team_certifications: máximo 20
-- engagement_models: máximo 15
-- key_differentiators: máximo 20
-
-## 6) Products e Product Categories (anti-loop forte)
-Produto válido exige identificador claro (modelo/código/versão/medida/marca+modelo).
-- Se NÃO houver produtos nomeados:
-  - offerings.products = []
-  - offerings.product_categories = []
-
-Product categories:
-- PROIBIDO criar categoria sem category_name válido.
-- PROIBIDO criar categoria sem item válido.
-- Para termos genéricos (ex.: "RCA", "P2", "P10", "XLR"):
-  - listar cada termo no máximo 1 vez
-  - NÃO expandir variações mínimas
-  - Se começar a repetir padrão, parar imediatamente
-
-## 7) Clientes (prioridade alta, evidência mínima)
-Preencher reputation.client_list SOMENTE se houver nomes próprios explícitos em seção/trecho do tipo:
-"CLIENTES", "Nossos clientes", "Quem confia", "Projetos realizados", "Cases", "Algumas obras executadas".
-Depoimentos sem nomes ⇒ client_list = [].
-Ignore placeholders como <NAME>, <EMAIL>, "(redacted)".
-
-## 8) service_details (anti-vazio)
-Se não houver detalhe real, service_details deve ser [].
-PROIBIDO inserir objeto de service_details com todos os campos nulos/vazios.
-Se criar objeto de service_details, name é OBRIGATÓRIO.
-
-## 9) locations (anti-erro)
-contact.locations: somente cidades/estados/unidades/endereço.
-PROIBIDO incluir telefone ou email em locations.
-
-## Micro-shots
-SHOT 1 — Serviços ≠ Produtos
-Entrada: "Serviços: Portaria, Limpeza e Conservação, Recepção"
-Saída:
-"services": ["Portaria", "Limpeza e Conservação", "Recepção"],
-"products": [],
-"product_categories": []
-
-SHOT 2 — Sem detalhe => sem objeto vazio
-Entrada: "Serviços: Portaria e Recepção" (sem explicar como funciona)
-Saída: "service_details": []
-
-SHOT 3 — Locations ≠ Phones/Emails
-Entrada: "Matriz RJ: Rua X... / Tel: (21) 0000-0000"
-Saída:
-"phones": ["(21) 0000-0000"],
-"locations": ["RJ"],
-"headquarters_address": "Rua X..."
-
-SHOT 4 — Clientes só com nomes explícitos
-Entrada: "Depoimentos: 'Ótimo serviço...'"
-Saída: "client_list": []
+<reasoning>
+Antes de preencher o JSON, identifique mentalmente:
+1. Seções de Produtos e Serviços no conteúdo
+2. Nomes próprios explícitos (clientes, certificações)
+3. Diferenciação clara entre produtos físicos e serviços intangíveis
+</reasoning>
 """
     
     def _get_json_schema(self) -> Optional[Dict[str, Any]]:
@@ -220,34 +145,35 @@ Saída: "client_list": []
     
     def _build_user_prompt(self, content: str = "", **kwargs) -> str:
         """
-        Constrói prompt com conteúdo para análise.
+        Constrói prompt com conteúdo para análise usando tags XML.
         
-        v9.1: Schema NÃO é mais incluído no user prompt (já está em response_format)
-              Isso reduz tokens de contexto e melhora latência
+        v10.0: XML structured prompts para melhor processamento pelo Qwen3-8B
+              - Conteúdo envolto em <raw_content> para estruturação clara
+              - Chain-of-Thought implícito via estrutura XML
         
         Args:
             content: Conteúdo scraped para análise
         
         Returns:
-            Prompt formatado SEM schema (economia de tokens)
+            Prompt formatado em XML (sem schema - Guided Decoding cuida disso)
         """
-        return f"""Extraia o perfil completo desta empresa a partir do conteúdo abaixo (texto pode conter ruído e duplicações).
-Use apenas evidência explícita.
+        return f"""<raw_content>
+{content}
+</raw_content>
 
-CONTEÚDO:
-{content}"""
+<instruction>Extraia o perfil completo desta empresa. Use apenas evidência explícita do conteúdo acima.</instruction>"""
     
     def _parse_response(self, response: str, **kwargs) -> CompanyProfile:
         """
         Processa resposta e cria CompanyProfile.
         
-        v8.0: Com structured output via XGrammar, o JSON é garantido válido.
-              Pós-processamento robusto aplica deduplicação determinística.
-        v9.0: Schema com constraints não-null reduz erros estruturais
-        v9.1: Caps reduzidos melhoram estabilidade
+        v10.0: SGLang Guided Decoding garante JSON válido
+              - Removidas lógicas de fallback de parsing (não são mais necessárias)
+              - Confiança total no Guided Decoding do SGLang
+              - Pós-processamento mínimo (apenas normalização)
         
         Args:
-            response: Resposta JSON do LLM
+            response: Resposta JSON do LLM (garantida válida pelo Guided Decoding)
         
         Returns:
             CompanyProfile com dados extraídos
@@ -255,58 +181,40 @@ CONTEÚDO:
         try:
             content = response.strip()
             
-            # Limpar markdown (caso provider não suporte structured output)
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
-            
-            # Com structured output, JSON deve ser válido na primeira tentativa
-            data = None
-            
-            # Tentativa 1: Parse direto (esperado funcionar com XGrammar)
+            # v10.0: SGLang Guided Decoding garante JSON válido
+            # Parse direto sem fallbacks defensivos
             try:
                 data = json.loads(content)
-                logger.debug("ProfileExtractorAgent: JSON parseado com sucesso (structured output)")
+                logger.debug("ProfileExtractorAgent: JSON parseado (Guided Decoding)")
             except json.JSONDecodeError as e:
-                # Structured output falhou - pode ser provider sem suporte
-                logger.warning(
-                    f"ProfileExtractorAgent: JSON inválido apesar de structured output: {e}. "
-                    f"Primeiros 200 chars: {content[:200]}"
+                # Isso NÃO deveria acontecer com Guided Decoding
+                # Log crítico para investigação
+                logger.error(
+                    f"ProfileExtractorAgent: JSON inválido apesar de Guided Decoding: {e}. "
+                    f"Primeiros 500 chars: {content[:500]}"
                 )
-                
-                # Tentativa 2: json_repair como fallback
-                try:
-                    data = json_repair.loads(content)
-                    logger.info("ProfileExtractorAgent: JSON reparado com sucesso")
-                except Exception as repair_error:
-                    logger.error(f"ProfileExtractorAgent: Falha crítica no parse JSON: {repair_error}")
-                    return CompanyProfile()
+                return CompanyProfile()
             
-            # Normalizar estrutura
+            # Normalizar estrutura (array → dict)
             if isinstance(data, list):
                 data = data[0] if data and isinstance(data[0], dict) else {}
             if not isinstance(data, dict):
                 logger.warning(f"ProfileExtractorAgent: Resposta não é dict, tipo: {type(data)}")
                 data = {}
             
-            # Normalizar resposta
+            # Normalizar resposta (validação de tipos e estruturas)
             data = self._normalize_response(data)
             
             # Criar perfil usando validação Pydantic
             try:
-                # model_validate é mais robusto que **kwargs
                 return CompanyProfile.model_validate(data)
             except Exception as e:
-                logger.warning(f"ProfileExtractorAgent: Validação Pydantic falhou: {e}, usando fallback")
-                # Fallback: construtor direto
+                logger.warning(f"ProfileExtractorAgent: Validação Pydantic falhou: {e}")
+                # Fallback mínimo: construtor direto
                 try:
                     return CompanyProfile(**data)
-                except Exception as fallback_error:
-                    logger.error(f"ProfileExtractorAgent: Fallback também falhou: {fallback_error}")
+                except Exception:
+                    logger.error(f"ProfileExtractorAgent: Falha crítica na criação do perfil")
                     return CompanyProfile()
                 
         except Exception as e:
@@ -315,16 +223,17 @@ CONTEÚDO:
     
     def _deduplicate_and_filter_lists(self, data: dict) -> dict:
         """
-        Pós-processamento robusto: deduplicação + filtro anti-template.
+        Pós-processamento leve: deduplicação básica (safety net).
         
-        v8.0: Não depende de uniqueItems (pode ser ignorado pelo XGrammar)
-        v9.1: Caps reduzidos no schema já limitam espaço de degeneração
+        v10.0: Guided Decoding + schema constraints devem prevenir duplicatas
+              - Mantido apenas como safety net para casos extremos
+              - Deduplicação básica (sem filtro anti-template pesado)
         
         Args:
             data: Dados extraídos pelo LLM
         
         Returns:
-            Dados com listas deduplicadas e filtradas
+            Dados com listas deduplicadas (leve)
         """
         if not isinstance(data, dict):
             return data
@@ -345,34 +254,9 @@ CONTEÚDO:
                     unique.append(item)
             return unique
         
-        def filter_template_items(items: list, max_items: int = 80) -> list:
-            """
-            Filtro anti-template: detecta e remove itens com mesmo molde repetido.
-            
-            v9.1: Hard cap 80 (alinhado com schema)
-            """
-            if not items or len(items) <= 5:
-                return items[:max_items]
-            
-            filtered = []
-            pattern_counts = {}
-            
-            for item in items:
-                if len(filtered) >= max_items:
-                    break
-                
-                # Extrair "molde" do item (primeiras 2-3 palavras)
-                words = item.split()[:3]
-                pattern = ' '.join(words) if len(words) >= 2 else item[:20]
-                
-                # Contar ocorrências desse padrão
-                pattern_counts[pattern] = pattern_counts.get(pattern, 0) + 1
-                
-                # Se padrão aparece > 5 vezes, parar de adicionar variações dele
-                if pattern_counts[pattern] <= 5:
-                    filtered.append(item)
-            
-            return filtered
+        # v10.0: Removido filter_template_items pesado
+        # Guided Decoding + schema constraints devem prevenir loops
+        # Apenas deduplicação básica mantida
         
         # Processar offerings (crítico)
         if 'offerings' in data and isinstance(data['offerings'], dict):
@@ -386,14 +270,12 @@ CONTEÚDO:
             if 'services' in offerings and isinstance(offerings['services'], list):
                 offerings['services'] = deduplicate_list(offerings['services'])
             
-            # Deduplicate + filter product_categories[].items (CRÍTICO)
+            # Deduplicate product_categories[].items (leve)
             if 'product_categories' in offerings and isinstance(offerings['product_categories'], list):
                 for category in offerings['product_categories']:
                     if isinstance(category, dict) and 'items' in category:
-                        # Passo 1: Deduplicate
+                        # v10.0: Apenas deduplicação básica (schema cuida do resto)
                         category['items'] = deduplicate_list(category['items'])
-                        # Passo 2: Filter anti-template (hard cap 80, alinhado com schema v9.1)
-                        category['items'] = filter_template_items(category['items'], max_items=80)
             
             # Deduplicate engagement_models
             if 'engagement_models' in offerings and isinstance(offerings['engagement_models'], list):

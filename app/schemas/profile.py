@@ -16,8 +16,13 @@ v9.1: Caps reduzidos + espaço de degeneração menor
       - maxItems alinhados com realidade (menos runaway generation)
       - Reduz latência e melhora estabilidade
       - Menos tokens de output permitido = menos loops
+
+v10.0: Guided Decoding - Schema como "guarda-rail"
+      - maxItems explícitos no schema (SGLang Guided Decoding respeita)
+      - Literal types para reduzir alucinações (business_model)
+      - Descrições claras para guiar geração (SGLang usa descrições)
 """
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -32,11 +37,31 @@ class Identity(BaseModel):
 
 
 class Classification(BaseModel):
-    """Classificação e posicionamento de mercado."""
-    industry: Optional[str] = Field(None, description="Setor/indústria de atuação")
-    business_model: Optional[str] = Field(None, description="Modelo: B2B, B2C, Distribuidor, Fabricante, etc.")
-    target_audience: Optional[str] = Field(None, description="Público-alvo ou segmento atendido")
-    geographic_coverage: Optional[str] = Field(None, description="Abrangência: Nacional, Regional, São Paulo, etc.")
+    """Classificação e posicionamento de mercado.
+    
+    v10.0: business_model com Literal type para reduzir alucinações
+          - SGLang Guided Decoding força escolha apenas entre opções válidas
+    """
+    industry: Optional[str] = Field(
+        None, 
+        description="Setor/indústria de atuação da empresa (ex: Tecnologia, Construção, Saúde)"
+    )
+    business_model: Optional[Literal[
+        "B2B", "B2C", "B2B2C", 
+        "Distribuidor", "Fabricante", "Revendedor",
+        "Prestador de Serviços", "Marketplace", "SaaS"
+    ]] = Field(
+        None, 
+        description="Modelo de negócio: B2B (empresa para empresa), B2C (empresa para consumidor), Distribuidor, Fabricante, etc."
+    )
+    target_audience: Optional[str] = Field(
+        None, 
+        description="Público-alvo ou segmento atendido (ex: Pequenas empresas, Grandes corporações, Consumidores finais)"
+    )
+    geographic_coverage: Optional[str] = Field(
+        None, 
+        description="Abrangência geográfica: Nacional, Regional, Internacional, ou estados/cidades específicos"
+    )
 
 
 class TeamProfile(BaseModel):
@@ -44,15 +69,15 @@ class TeamProfile(BaseModel):
     size_range: Optional[str] = Field(None, description="Tamanho da equipe")
     key_roles: List[str] = Field(
         default_factory=list, 
-        max_length=30,  # v9.1: Reduzido de 50 → 30
-        description="Principais funções/cargos ÚNICOS na equipe (sem duplicatas, máx. 30)",
-        json_schema_extra={"uniqueItems": True}  # Hint para o modelo (não garantido por XGrammar)
+        max_length=30,  # v10.0: Alinhado com Guided Decoding
+        description="Principais funções/cargos ÚNICOS na equipe. Máximo 30 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 30}  # v10.0: maxItems explícito para Guided Decoding
     )
     team_certifications: List[str] = Field(
         default_factory=list, 
-        max_length=20,  # v9.1: Reduzido de 30 → 20
-        description="Certificações ÚNICAS da equipe (sem duplicatas, máx. 20)",
-        json_schema_extra={"uniqueItems": True}  # Hint para o modelo (não garantido por XGrammar)
+        max_length=20,  # v10.0: Alinhado com Guided Decoding
+        description="Certificações ÚNICAS da equipe. Máximo 20 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 20}  # v10.0: maxItems explícito para Guided Decoding
     )
     
     @field_validator('key_roles', 'team_certifications')
@@ -112,15 +137,13 @@ class ProductCategory(BaseModel):
     category_name: str = Field(..., description="Nome da categoria de produtos (obrigatório)")
     items: List[str] = Field(
         default_factory=list, 
-        max_length=200,  # Hint (não garantido por XGrammar), pós-processamento usa hard cap 80
+        max_length=80,  # v10.0: Alinhado com Guided Decoding (hard cap)
         description=(
             "PRODUTOS ESPECÍFICOS ÚNICOS: nomes, modelos, códigos, versões, medidas. "
-            "DEDUPLICAÇÃO OBRIGATÓRIA: cada item deve aparecer APENAS UMA VEZ. "
-            "ANTI-LOOP: não repita variações do mesmo padrão. "
-            "Se detectar repetição, interrompa imediatamente. "
-            "HARD CAP: máximo 80 itens por categoria (PROMPT v8.2)."
+            "Máximo 80 itens por categoria. Cada item deve aparecer APENAS UMA VEZ. "
+            "Não repita variações do mesmo padrão."
         ),
-        json_schema_extra={"uniqueItems": True, "minLength": 2}  # Hints (não garantidos)
+        json_schema_extra={"uniqueItems": True, "maxItems": 80, "minItems": 0}  # v10.0: maxItems explícito para Guided Decoding
     )
     
     @field_validator('items')
@@ -146,37 +169,39 @@ class Offerings(BaseModel):
     """
     products: List[str] = Field(
         default_factory=list, 
-        max_length=60,  # v9.1: Reduzido de 200 → 60
-        description="Lista ÚNICA de produtos gerais (sem duplicatas, máx. 60)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=60,  # v10.0: Alinhado com Guided Decoding
+        description="Lista ÚNICA de produtos gerais. Máximo 60 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 60}  # v10.0: maxItems explícito
     )
     product_categories: List[ProductCategory] = Field(
         default_factory=list, 
-        max_length=40,  # v9.1: Reduzido de 80 → 40
-        description="Categorias de produtos com itens específicos ÚNICOS (máx. 40)"
+        max_length=40,  # v10.0: Alinhado com Guided Decoding
+        description="Categorias de produtos com itens específicos. Máximo 40 categorias.",
+        json_schema_extra={"maxItems": 40}  # v10.0: maxItems explícito
     )
     services: List[str] = Field(
         default_factory=list, 
-        max_length=60,  # v9.1: Reduzido de 100 → 60
-        description="Lista ÚNICA de serviços (sem duplicatas, máx. 60)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=60,  # v10.0: Alinhado com Guided Decoding
+        description="Lista ÚNICA de serviços. Máximo 60 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 60}  # v10.0: maxItems explícito
     )
     service_details: List[ServiceDetail] = Field(
         default_factory=list, 
-        max_length=20,  # v9.1: Reduzido de 30 → 20
-        description="Detalhes dos principais serviços (máx. 20)"
+        max_length=20,  # v10.0: Alinhado com Guided Decoding
+        description="Detalhes dos principais serviços. Máximo 20 serviços detalhados.",
+        json_schema_extra={"maxItems": 20}  # v10.0: maxItems explícito
     )
     engagement_models: List[str] = Field(
         default_factory=list, 
-        max_length=15,  # v9.1: Reduzido de 20 → 15
-        description="Modelos ÚNICOS de contratação (sem duplicatas, máx. 15)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=15,  # v10.0: Alinhado com Guided Decoding
+        description="Modelos ÚNICOS de contratação. Máximo 15 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 15}  # v10.0: maxItems explícito
     )
     key_differentiators: List[str] = Field(
         default_factory=list, 
-        max_length=20,  # v9.1: Reduzido de 30 → 20
-        description="Diferenciais ÚNICOS (sem duplicatas, máx. 20)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=20,  # v10.0: Alinhado com Guided Decoding
+        description="Diferenciais ÚNICOS. Máximo 20 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 20}  # v10.0: maxItems explícito
     )
     
     @field_validator('products', 'services', 'engagement_models', 'key_differentiators')
@@ -212,32 +237,33 @@ class Reputation(BaseModel):
     """
     certifications: List[str] = Field(
         default_factory=list, 
-        max_length=30,  # v9.1: Reduzido de 50 → 30
-        description="Certificações ÚNICAS (ISO, ANVISA, etc.) - sem duplicatas (máx. 30)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=30,  # v10.0: Alinhado com Guided Decoding
+        description="Certificações ÚNICAS (ISO, ANVISA, etc.). Máximo 30 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 30}  # v10.0: maxItems explícito
     )
     awards: List[str] = Field(
         default_factory=list, 
-        max_length=20,  # v9.1: Reduzido de 50 → 20
-        description="Prêmios ÚNICOS - sem duplicatas (máx. 20)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=20,  # v10.0: Alinhado com Guided Decoding
+        description="Prêmios ÚNICOS. Máximo 20 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 20}  # v10.0: maxItems explícito
     )
     partnerships: List[str] = Field(
         default_factory=list, 
-        max_length=50,  # v9.1: Reduzido de 100 → 50
-        description="Parcerias ÚNICAS - sem duplicatas (máx. 50)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=50,  # v10.0: Alinhado com Guided Decoding
+        description="Parcerias ÚNICAS. Máximo 50 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 50}  # v10.0: maxItems explícito
     )
     client_list: List[str] = Field(
         default_factory=list, 
-        max_length=80,  # v9.1: Reduzido de 200 → 80
-        description="Clientes ÚNICOS de referência (deduplicados, sem locais/sufixos, máx. 80)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=80,  # v10.0: Alinhado com Guided Decoding
+        description="Clientes ÚNICOS de referência. Máximo 80 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 80}  # v10.0: maxItems explícito
     )
     case_studies: List[CaseStudy] = Field(
         default_factory=list, 
-        max_length=15,  # v9.1: Reduzido de 30 → 15
-        description="Casos de sucesso detalhados (máx. 15)"
+        max_length=15,  # v10.0: Alinhado com Guided Decoding
+        description="Casos de sucesso detalhados. Máximo 15 casos.",
+        json_schema_extra={"maxItems": 15}  # v10.0: maxItems explícito
     )
     
     @field_validator('certifications', 'awards', 'partnerships', 'client_list')
@@ -263,24 +289,24 @@ class Contact(BaseModel):
     """
     emails: List[str] = Field(
         default_factory=list, 
-        max_length=10,  # v9.1: Reduzido de 20 → 10
-        description="Emails ÚNICOS de contato (sem duplicatas, máx. 10)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=10,  # v10.0: Alinhado com Guided Decoding
+        description="Emails ÚNICOS de contato. Máximo 10 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 10}  # v10.0: maxItems explícito
     )
     phones: List[str] = Field(
         default_factory=list, 
-        max_length=10,  # v9.1: Reduzido de 20 → 10
-        description="Telefones ÚNICOS (sem duplicatas, máx. 10)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=10,  # v10.0: Alinhado com Guided Decoding
+        description="Telefones ÚNICOS. Máximo 10 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 10}  # v10.0: maxItems explícito
     )
-    linkedin_url: Optional[str] = Field(None, description="URL do LinkedIn")
-    website_url: Optional[str] = Field(None, description="URL do site")
-    headquarters_address: Optional[str] = Field(None, description="Endereço da sede")
+    linkedin_url: Optional[str] = Field(None, description="URL completa do perfil LinkedIn da empresa")
+    website_url: Optional[str] = Field(None, description="URL completa do site oficial da empresa")
+    headquarters_address: Optional[str] = Field(None, description="Endereço completo da sede principal")
     locations: List[str] = Field(
         default_factory=list, 
-        max_length=25,  # v9.1: Reduzido de 50 → 25
-        description="Localizações ÚNICAS (sem duplicatas, máx. 25)",
-        json_schema_extra={"uniqueItems": True}
+        max_length=25,  # v10.0: Alinhado com Guided Decoding
+        description="Localizações ÚNICAS (cidades, estados, unidades). Máximo 25 itens. Cada item deve aparecer apenas uma vez.",
+        json_schema_extra={"uniqueItems": True, "maxItems": 25}  # v10.0: maxItems explícito
     )
     
     @field_validator('emails', 'phones', 'locations')

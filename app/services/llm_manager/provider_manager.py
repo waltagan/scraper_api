@@ -684,67 +684,94 @@ class ProviderManager:
                     from app.core.phoenix_tracer import _inject_sglang_stream_options
                     request_params = _inject_sglang_stream_options(request_params)
                 
-                # v9.1: Parâmetros de controle (presence/frequency zerados por padrão)
-                # SGLang suporta presence_penalty e frequency_penalty via /v1/chat/completions
-                # v9.1: Controle de repetição via schema (maxItems) + loop detector + retry
-                # Referência: https://www.aidoczh.com/sglang/backend/openai_api_completions.html
-                logger.debug(
-                    f"{ctx_label}ProviderManager: Parâmetros v9.1 "
-                    f"(provider={provider}, temp={temperature}, "
-                    f"presence={presence_penalty}, frequency={frequency_penalty}, "
-                    f"top_p=0.9, seed={seed}, max_tokens={max_output_tokens})"
-                )
+                # ============================================================
+                # v10.0: SGLang Native - Guided Decoding Otimizado
+                # ============================================================
+                # 1. Prefix Caching: Garantir system_prompt idêntico para reutilização de KV Cache
+                # 2. Parâmetros Qwen3-8B: temperature=0.1, top_p=0.95, repetition_penalty=1.05
+                # 3. json_schema via extra_body: Guided Decoding elimina necessidade de parsing defensivo
+                # ============================================================
                 
-                # v4.0: SGLang com XGrammar suporta json_schema nativo
-                # Habilitar response_format para todos os providers que suportam
-                if response_format:
-                    response_format_type = response_format.get("type", "")
+                if is_sglang:
+                    # Detectar modelo Qwen para otimizações específicas
+                    is_qwen = "qwen" in config.model.lower()
                     
-                    if is_sglang:
-                        # SGLang: suporta json_schema via extra_body (nativo) ou response_format
-                        # Preferir extra_body para json_schema (mais direto para SGLang)
+                    # v10.0: Parâmetros otimizados para Qwen3-8B
+                    if is_qwen:
+                        # Qwen3-8B: precisão máxima com guided decoding
+                        request_params["temperature"] = 0.1  # Precisão (era 0.15)
+                        request_params["top_p"] = 0.95  # Nucleus sampling otimizado
+                        
+                        # Inicializar extra_body se não existir
+                        if "extra_body" not in request_params:
+                            request_params["extra_body"] = {}
+                        
+                        # repetition_penalty via extra_body (mais efetivo que presence/frequency)
+                        request_params["extra_body"]["repetition_penalty"] = 1.05
+                        
+                        logger.debug(
+                            f"{ctx_label}ProviderManager: {provider} (Qwen3-8B) - "
+                            f"temp=0.1, top_p=0.95, repetition_penalty=1.05"
+                        )
+                    
+                    # v10.0: Prefix Caching - Normalizar system_prompt para reutilização de KV Cache
+                    # SGLang reutiliza KV Cache quando system_prompt é idêntico entre chamadas
+                    # Normalizar espaços e quebras de linha para garantir cache hit
+                    if messages and len(messages) > 0:
+                        system_msg = next((m for m in messages if m.get("role") == "system"), None)
+                        if system_msg:
+                            # Normalizar: remover espaços extras, normalizar quebras de linha
+                            original_content = system_msg.get("content", "")
+                            normalized_content = "\n".join(
+                                line.strip() for line in original_content.split("\n") if line.strip()
+                            )
+                            system_msg["content"] = normalized_content
+                            
+                            logger.debug(
+                                f"{ctx_label}ProviderManager: {provider} - System prompt normalizado "
+                                f"para prefix caching ({len(normalized_content)} chars)"
+                            )
+                    
+                    # v10.0: json_schema via extra_body (Guided Decoding nativo)
+                    # SGLang garante JSON válido, eliminando necessidade de parsing defensivo
+                    if response_format:
+                        response_format_type = response_format.get("type", "")
+                        
                         if response_format_type == "json_schema":
-                            # SGLang Native JSON support via extra_body
-                            # Isso permite usar json_schema diretamente + repetition_penalty
                             json_schema_data = response_format.get("json_schema", {})
                             
-                            # Usar extra_body para json_schema nativo do SGLang
-                            # Isso é mais eficiente que response_format para SGLang
+                            # Inicializar extra_body se não existir
                             if "extra_body" not in request_params:
                                 request_params["extra_body"] = {}
                             
-                            # Adicionar json_schema ao extra_body
+                            # json_schema via extra_body (Guided Decoding)
                             request_params["extra_body"]["json_schema"] = json_schema_data.get("schema", {})
                             
-                            # Adicionar repetition_penalty no nível do motor (anti-loop)
-                            # repetition_penalty=1.1 é efetivo para evitar loops sem perder qualidade
-                            request_params["extra_body"]["repetition_penalty"] = 1.1
+                            # repetition_penalty já configurado acima (se Qwen)
+                            if not is_qwen:
+                                request_params["extra_body"]["repetition_penalty"] = 1.05
                             
                             logger.debug(
-                                f"{ctx_label}ProviderManager: {provider} usando json_schema via extra_body "
-                                f"(SGLang Native JSON support + repetition_penalty=1.1)"
+                                f"{ctx_label}ProviderManager: {provider} - Guided Decoding ativado "
+                                f"(json_schema via extra_body, {len(str(json_schema_data.get('schema', {})))} chars)"
                             )
                         elif response_format_type == "json_object":
-                            # json_object: usar response_format normalmente
+                            # Fallback: json_object genérico
                             request_params["response_format"] = response_format
                             logger.debug(
                                 f"{ctx_label}ProviderManager: {provider} usando json_object "
-                                f"(SGLang structured output)"
+                                f"(fallback para structured output)"
                             )
-                        else:
-                            # Formato desconhecido: fallback para reforço de prompt
-                            if messages and messages[-1].get("role") == "user":
-                                user_msg = messages[-1]["content"]
-                                messages[-1]["content"] = f"""{user_msg}
-
-IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicações."""
-                            logger.debug(
-                                f"{ctx_label}ProviderManager: {provider} usando reforço de prompt "
-                                f"(formato {response_format_type} não suportado)"
-                            )
-                    else:
-                        # Outros providers: usar response_format normalmente
+                else:
+                    # Outros providers: usar response_format normalmente
+                    if response_format:
                         request_params["response_format"] = response_format
+                    
+                    # Parâmetros padrão para não-SGLang
+                    logger.debug(
+                        f"{ctx_label}ProviderManager: {provider} (não-SGLang) - "
+                        f"temp={temperature}, top_p={request_params.get('top_p', 0.9)}"
+                    )
                 
                 # Log dos parâmetros da requisição para debug
                 logger.debug(
@@ -838,6 +865,7 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                             response_data = http_response.json()
                             
                             # Atualizar span com resposta usando função helper nativa do Phoenix
+                            # v10.0: response_data contém TTFT e prefix_cache_hit do SGLang
                             if span:
                                 try:
                                     update_llm_span_response(
@@ -845,6 +873,16 @@ IMPORTANTE: Retorne APENAS um objeto JSON válido. Sem markdown, sem explicaçõ
                                         response_data=response_data,
                                         http_status_code=http_response.status_code
                                     )
+                                    
+                                    # v10.0: Log de métricas SGLang para debug
+                                    if "ttft_ms" in response_data:
+                                        logger.debug(
+                                            f"{ctx_label}ProviderManager: {provider} TTFT={response_data['ttft_ms']}ms"
+                                        )
+                                    if "prefix_cache_hit" in response_data:
+                                        logger.debug(
+                                            f"{ctx_label}ProviderManager: {provider} prefix_cache_hit={response_data['prefix_cache_hit']}"
+                                        )
                                 except Exception as e:
                                     logger.debug(f"{ctx_label}Erro ao atualizar span com resposta: {e}")
                     finally:
