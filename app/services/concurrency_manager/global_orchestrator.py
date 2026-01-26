@@ -73,12 +73,13 @@ class GlobalOrchestrator:
         # Configurações padrão
         # NOTA: O controle de taxa do Serper é feito pelo TokenBucketRateLimiter (190 req/s)
         # Os semáforos aqui controlam RECURSOS (concorrência), não TAXA
-        # v11.2: LLM reduzido para 8 para evitar sobrecarga de VRAM na Vast.ai (SGLang)
+        # v11.3: LLM reduzido para 6 para evitar sobrecarga de VRAM na Vast.ai (SGLang)
         # Com contextos de 10k+ tokens, GPU precisa de espaço suficiente para KV Cache
+        # Picos de 30+ requisições simultâneas esgotam VRAM e causam content=None
         self._default_capacities = {
             ResourceType.SCRAPER: 1000,        # Sites em paralelo
             ResourceType.DISCOVERY: 1000,      # Buscas simultâneas (rate limit pelo TokenBucket)
-            ResourceType.LLM: 8,               # Chamadas LLM (v11.2: reduzido de 900 para 8)
+            ResourceType.LLM: 6,               # Chamadas LLM (v11.3: reduzido para 6 com wait list)
             ResourceType.PROXY: 1000,          # Proxies ativos
             ResourceType.HTTP_CONNECTION: 1000, # Conexões HTTP
         }
@@ -111,12 +112,16 @@ class GlobalOrchestrator:
         request_id: Optional[str] = None
     ) -> bool:
         """
-        Adquire recursos de um tipo específico.
+        Adquire recursos de um tipo específico com wait list e logging.
+        
+        v11.3: Wait list implementada para LLM com timeout de 45s
+              - Loga quando requisição está aguardando slot de GPU
+              - Timeout específico para LLM (45s) para evitar sobrecarga
         
         Args:
             resource_type: Tipo de recurso
             amount: Quantidade de recursos
-            timeout: Tempo máximo de espera
+            timeout: Tempo máximo de espera (padrão 30s, LLM usa 45s)
             request_id: ID da requisição para rastreamento de fila (opcional)
             
         Returns:
@@ -128,6 +133,19 @@ class GlobalOrchestrator:
         if not semaphore or not allocation:
             logger.warning(f"Tipo de recurso desconhecido: {resource_type}")
             return False
+        
+        # v11.3: Timeout específico para LLM (45s para evitar sobrecarga)
+        if resource_type == ResourceType.LLM:
+            timeout = 45.0
+        
+        # Verificar se semáforo está cheio (requisição vai esperar)
+        available = semaphore._value
+        if available < amount:
+            logger.info(
+                f"[WAIT] Aguardando slot de {resource_type.value}... "
+                f"(disponível: {available}, necessário: {amount}, "
+                f"request_id: {request_id or 'N/A'})"
+            )
         
         # Medir tempo real de espera
         start_time = time.time()
@@ -142,6 +160,12 @@ class GlobalOrchestrator:
             # Medir tempo de espera
             wait_ms = (time.time() - start_time) * 1000
             
+            # Log se esperou significativamente
+            if wait_ms > 100:
+                logger.debug(
+                    f"[Orchestrator] {resource_type.value} adquirido após {wait_ms:.0f}ms de espera "
+                    f"(request_id: {request_id or 'N/A'})"
+                )
             
             async with self._lock:
                 allocation.current_usage += amount
@@ -153,8 +177,10 @@ class GlobalOrchestrator:
         except asyncio.TimeoutError:
             async with self._lock:
                 self._blocked_requests += 1
-            logger.warning(
-                f"[Orchestrator] Timeout ao adquirir {amount} {resource_type.value}"
+            logger.error(
+                f"[Orchestrator] Timeout ao adquirir {amount} {resource_type.value} "
+                f"após {timeout}s (request_id: {request_id or 'N/A'}). "
+                f"Possível sobrecarga - reduzir concorrência ou aumentar timeout."
             )
             return False
     

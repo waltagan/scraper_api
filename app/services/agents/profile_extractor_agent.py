@@ -165,62 +165,93 @@ Begin immediately with the opening brace '{' without any prefix, explanation, or
     
     def _extract_json_from_response(self, raw_response: str) -> tuple[str, str]:
         """
-        Extrai JSON da resposta, removendo tags <think> se presentes.
+        Extrai JSON da resposta com resiliência total a reasoning e ruídos.
         
-        v10.1: Resiliência ao comportamento de reasoning do Qwen3-8B
-              - Detecta e extrai conteúdo de <think> tags para debug
-              - Retorna apenas o JSON válido para parsing
-              - Procura primeira { e última } para extrair JSON completo
+        v11.3: Lógica de extração "blindada" (Elite Refactoring)
+              - Extrai reasoning de <think> tags para instrumentação Phoenix
+              - Remove ruído e busca JSON mesmo com texto antes/depois
+              - Busca primeira { e última } para extrair JSON completo
+              - Retorna None se não encontrar JSON válido (permite retry)
         
         Args:
-            raw_response: Resposta bruta do LLM (pode conter <think> tags)
+            raw_response: Resposta bruta do LLM (pode conter <think> tags, texto explicativo, etc)
         
         Returns:
             Tuple de (json_content, reasoning_content)
-            - json_content: JSON limpo para parsing
-            - reasoning_content: Conteúdo de <think> tags (vazio se não houver)
+            - json_content: JSON limpo para parsing (None se inválido)
+            - reasoning_content: Conteúdo de <think> tags (None se não houver)
         """
+        import re
+        import json
+        
+        if not raw_response or not raw_response.strip():
+            return None, None
+        
         content = raw_response.strip()
-        reasoning = ""
+        reasoning = None
         
-        # v10.1: Detectar e extrair <think> tags (comportamento de reasoning)
-        if "<think>" in content.lower():
-            # Extrair reasoning (conteúdo entre <think> e </think>)
-            import re
-            think_pattern = r'<think>(.*?)</think>'
-            think_matches = re.findall(think_pattern, content, re.DOTALL | re.IGNORECASE)
+        # v11.3: Extração do Raciocínio (para o Phoenix)
+        think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL | re.IGNORECASE)
+        if think_match:
+            reasoning = think_match.group(1).strip()
+            logger.debug(f"ProfileExtractorAgent: Reasoning detectado ({len(reasoning)} chars)")
+        
+        # v11.3: Limpeza de ruído e busca pelo bloco JSON
+        # Remove tags <think> e qualquer texto explicativo
+        clean_text = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE).strip()
+        
+        # Remove markdown code blocks se presentes
+        clean_text = re.sub(r'```json\s*', '', clean_text, flags=re.IGNORECASE)
+        clean_text = re.sub(r'```\s*$', '', clean_text, flags=re.IGNORECASE)
+        
+        # Busca a primeira ocorrência de '{' e a última de '}'
+        try:
+            start_idx = clean_text.find('{')
+            end_idx = clean_text.rfind('}') + 1
             
-            if think_matches:
-                reasoning = "\n".join(think_matches).strip()
-                logger.debug(f"ProfileExtractorAgent: Reasoning detectado ({len(reasoning)} chars)")
-            
-            # Remover todas as tags <think>...</think>
-            content = re.sub(think_pattern, '', content, flags=re.DOTALL | re.IGNORECASE).strip()
+            if start_idx != -1 and end_idx != 0 and start_idx < end_idx:
+                json_str = clean_text[start_idx:end_idx]
+                
+                # Tentar validar JSON antes de retornar
+                try:
+                    json.loads(json_str)  # Validação
+                    logger.debug(
+                        f"ProfileExtractorAgent: JSON extraído com sucesso "
+                        f"(antes: {start_idx} chars, depois: {len(clean_text) - end_idx} chars)"
+                    )
+                    return json_str, reasoning
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"ProfileExtractorAgent: JSON extraído é inválido: {e}. "
+                        f"Tentando recuperação..."
+                    )
+                    # Tentar encontrar JSON válido com busca mais agressiva
+                    # Buscar por padrões de objetos JSON aninhados
+                    brace_count = 0
+                    valid_start = start_idx
+                    for i in range(start_idx, len(clean_text)):
+                        if clean_text[i] == '{':
+                            brace_count += 1
+                        elif clean_text[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                # Encontrou JSON completo
+                                json_str = clean_text[valid_start:i+1]
+                                try:
+                                    json.loads(json_str)
+                                    logger.debug("ProfileExtractorAgent: JSON recuperado com busca agressiva")
+                                    return json_str, reasoning
+                                except json.JSONDecodeError:
+                                    continue
+        except Exception as e:
+            logger.error(f"ProfileExtractorAgent: Erro ao extrair JSON: {e}")
         
-        # v10.1: Extrair JSON robusto (primeira { até última })
-        # Isso garante que mesmo com texto antes/depois, extraímos o JSON completo
-        first_brace = content.find('{')
-        last_brace = content.rfind('}')
-        
-        if first_brace == -1 or last_brace == -1 or first_brace >= last_brace:
-            # Não encontrou JSON válido
-            logger.warning(
-                f"ProfileExtractorAgent: JSON não encontrado na resposta. "
-                f"Primeiros 500 chars: {content[:500]}"
-            )
-            return content, reasoning
-        
-        # Extrair JSON (do primeiro { até o último })
-        json_content = content[first_brace:last_brace + 1]
-        
-        # Log se havia texto antes/depois do JSON
-        if first_brace > 0 or last_brace < len(content) - 1:
-            logger.debug(
-                f"ProfileExtractorAgent: JSON extraído com texto extra "
-                f"(antes: {first_brace} chars, depois: {len(content) - last_brace - 1} chars)"
-            )
-        
-        return json_content, reasoning
+        # Não encontrou JSON válido
+        logger.warning(
+            f"ProfileExtractorAgent: JSON não encontrado na resposta. "
+            f"Primeiros 500 chars: {clean_text[:500]}"
+        )
+        return None, reasoning
     
     def _parse_response(self, response: str, **kwargs) -> CompanyProfile:
         """
@@ -238,15 +269,31 @@ Begin immediately with the opening brace '{' without any prefix, explanation, or
             CompanyProfile com dados extraídos
         """
         try:
-            # v10.1: Extrair JSON e reasoning separadamente
+            # v11.3: Extrair JSON e reasoning separadamente (lógica blindada)
             json_content, reasoning = self._extract_json_from_response(response)
             
-            # Salvar reasoning para atributo do span (se disponível)
+            # v11.3: Se não encontrou JSON válido, retornar perfil vazio (permite retry)
+            if json_content is None:
+                logger.error(
+                    f"ProfileExtractorAgent: Não foi possível extrair JSON válido da resposta. "
+                    f"Resposta original (primeiros 1000 chars): {response[:1000]}"
+                )
+                if reasoning:
+                    logger.debug(f"ProfileExtractorAgent: Reasoning capturado mas JSON inválido ({len(reasoning)} chars)")
+                return CompanyProfile()
+            
+            # v11.3: Salvar reasoning para atributo do span (instrumentação Phoenix)
             if reasoning and 'span' in kwargs and kwargs['span']:
                 try:
-                    kwargs['span'].set_attribute("llm.reasoning", reasoning[:5000])  # Limitar tamanho
-                except Exception:
-                    pass
+                    span = kwargs['span']
+                    # Usar atributos padrão do OpenInference/Phoenix
+                    reasoning_limited = reasoning[:5000]  # Limitar tamanho
+                    span.set_attribute("llm.reasoning", reasoning_limited)
+                    span.set_attribute("gen_ai.reasoning", reasoning_limited)  # Compatibilidade
+                    span.set_attribute("llm.has_reasoning", True)
+                    logger.debug(f"ProfileExtractorAgent: Reasoning enviado ao Phoenix ({len(reasoning_limited)} chars)")
+                except Exception as e:
+                    logger.debug(f"ProfileExtractorAgent: Erro ao salvar reasoning no span: {e}")
             
             # Parse JSON
             try:

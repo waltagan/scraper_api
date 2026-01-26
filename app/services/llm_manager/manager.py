@@ -366,6 +366,24 @@ class LLMCallManager:
                     await asyncio.sleep(delay)
                 continue
             
+            except LLMEmptyResponseError as e:
+                # v11.3: Tratamento específico para respostas vazias (reasoning interrompido)
+                # Não marcar como falha crítica - é problema de modelo tentando usar <think>
+                logger.warning(
+                    f"{ctx_label}LLMCallManager: Resposta vazia com {selected_provider} "
+                    f"(possível reasoning interrompido): {e}"
+                )
+                last_error = e
+                # Retry com backoff (modelo pode gerar resposta válida na próxima tentativa)
+                if attempt < max_retries - 1:
+                    delay = retry_base_delay * (2 ** attempt)
+                    logger.info(
+                        f"{ctx_label}LLMCallManager: Retry após resposta vazia "
+                        f"{attempt + 1}/{max_retries} após {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+                continue
+            
             except ProviderError as e:
                 self.health_monitor.record_failure(selected_provider, FailureType.ERROR)
                 logger.warning(f"{ctx_label}LLMCallManager: Erro com {selected_provider}: {e}")

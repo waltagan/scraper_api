@@ -384,10 +384,14 @@ def update_llm_span_response(
                 logger.debug(f"Phoenix Tracer: Reasoning extraído de <think> tags ({len(reasoning_content)} chars)")
         
         if reasoning_content:
-            _set_attribute_safe(span, "llm.output.reasoning", reasoning_content)
-            _set_attribute_safe(span, "llm.reasoning", reasoning_content)  # Alias para compatibilidade
+            # v11.3: Instrumentação completa de reasoning para Phoenix
+            # Limitar tamanho para evitar spans muito grandes
+            reasoning_limited = reasoning_content[:5000] if len(reasoning_content) > 5000 else reasoning_content
+            _set_attribute_safe(span, "llm.output.reasoning", reasoning_limited)
+            _set_attribute_safe(span, "llm.reasoning", reasoning_limited)  # Alias para compatibilidade
+            _set_attribute_safe(span, "gen_ai.reasoning", reasoning_limited)  # v11.3: Atributo padrão OpenTelemetry GenAI
             span.set_attribute("llm.has_reasoning", True)
-            logger.debug(f"Capturado reasoning_content: {len(reasoning_content)} caracteres")
+            logger.debug(f"Phoenix Tracer: Reasoning capturado ({len(reasoning_limited)} chars, total: {len(reasoning_content)})")
         else:
             span.set_attribute("llm.has_reasoning", False)
         
