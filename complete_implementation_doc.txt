@@ -1,0 +1,1024 @@
+Abaixo vai um **guia completo (e prático)** para você consumir a API do **SGLang rodando no Vast.ai** (como no seu log: `Uvicorn running on http://0.0.0.0:8000`).
+
+---
+
+## 1) A regra #1 no Vast.ai: qual é a sua Base URL?
+
+No Vast, o container escuta **dentro** em `:8000`, mas você acessa por fora via **porta pública mapeada**.
+
+No seu log aparece algo assim:
+
+* `--env PUBLIC_IPADDR=80.188.223.202`
+* `-p 14077:8000/tcp`
+
+Então sua **Base URL** é:
+
+* `http://80.188.223.202:14077`
+
+E o “/v1” é só quando você usar os endpoints OpenAI-compatíveis:
+
+* `http://80.188.223.202:14077/v1`
+
+---
+
+## 2) Endpoints disponíveis (o “mapa” da API)
+
+Você tem **dois conjuntos de APIs**:
+
+### A) OpenAI-Compatible (recomendado p/ produção)
+
+Você chama endpoints “iguais ao OpenAI”, tipo:
+
+* `POST /v1/chat/completions`
+* `POST /v1/completions`
+* (dependendo do modelo) `POST /v1/embeddings`
+
+O SGLang documenta que ele “implementa a OpenAI API” e mostra exemplo usando o SDK do `openai` com `base_url=http://.../v1`. ([SGLang][1])
+
+### B) SGLang Native APIs (ótimo p/ debug/controle)
+
+O SGLang também expõe endpoints nativos, incluindo:
+`/generate`, `/model_info`, `/get_server_info`, `/health`, `/flush_cache`, `/update_weights`, etc. ([SGLang][2])
+
+**Lista (principais) conforme doc oficial:**
+
+* `POST /generate` (geração simples por texto) ([SGLang][2])
+* `GET /model_info` (info do modelo; `/get_model_info` é legado/deprecated) ([SGLang][2])
+* `GET /get_server_info` (args, limites, pool de memória etc.) ([SGLang][2])
+* `GET /health` e `GET /health_generate` ([SGLang][2])
+* `POST /flush_cache` (limpa cache) ([SGLang][2])
+* `POST /update_weights` (recarregar pesos) ([SGLang][2])
+* `POST /encode` (embedding model) ([SGLang][2])
+* `POST /v1/rerank`, `POST /v1/score`, `POST /classify` (outros tipos de modelos) ([SGLang][2])
+* `/tokenize` e `/detokenize` ([SGLang][2])
+
+---
+
+## 3) Checklist rápido: “está no ar mesmo?”
+
+Use estes 3 testes (em ordem):
+
+### (1) Health
+
+```bash
+curl -s http://80.188.223.202:14077/health
+```
+
+### (2) Model info (preferir /model_info)
+
+```bash
+curl -s http://80.188.223.202:14077/model_info
+```
+
+### (3) Teste geração nativa (/generate)
+
+```bash
+curl -s http://80.188.223.202:14077/generate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Diga oi em uma frase."}'
+```
+
+O endpoint `/generate` é documentado como API nativa, semelhante ao `/v1/completions`. ([SGLang][2])
+
+---
+
+## 4) Exemplos em Python (completo)
+
+### 4.1) OpenAI SDK (Chat Completions) — o caminho “padrão”
+
+Instale:
+
+```bash
+pip install openai
+```
+
+Código:
+
+```python
+import openai
+
+BASE_URL = "http://80.188.223.202:14077/v1"
+
+client = openai.Client(
+    base_url=BASE_URL,
+    api_key="None",  # SGLang geralmente ignora, mas o SDK exige algum valor
+)
+
+resp = client.chat.completions.create(
+    model="Qwen/Qwen2.5-3B-Instruct",  # ou o nome que aparecer em /v1/models
+    messages=[
+        {"role": "system", "content": "Responda em português do Brasil."},
+        {"role": "user", "content": "Explique o que é SGLang em 2 frases."},
+    ],
+    temperature=0.2,
+    max_tokens=200,
+)
+
+print(resp.choices[0].message.content)
+```
+
+Esse formato (OpenAI client + `base_url=/v1`) é exatamente o padrão descrito na doc do SGLang para `/v1/chat/completions`. ([SGLang][1])
+
+> Dica importante: se der erro de “model not found”, faça:
+
+```bash
+curl -s http://80.188.223.202:14077/v1/models
+```
+
+e use um `model` que apareça ali.
+
+---
+
+### 4.2) OpenAI-style “Completions” (prompt simples)
+
+```python
+import requests
+
+BASE_URL = "http://80.188.223.202:14077/v1"
+
+payload = {
+    "model": "Qwen/Qwen2.5-3B-Instruct",
+    "prompt": "Escreva um slogan curto para uma empresa chamada Busca Fornecedor.",
+    "max_tokens": 60,
+    "temperature": 0.7,
+}
+
+r = requests.post(f"{BASE_URL}/completions", json=payload, timeout=120)
+r.raise_for_status()
+print(r.json()["choices"][0]["text"])
+```
+
+---
+
+### 4.3) Native API `/generate` (simples e muito útil pra testar)
+
+```python
+import requests
+
+BASE = "http://80.188.223.202:14077"
+
+payload = {
+    "text": "Liste 3 benefícios de usar GPU para inferência de LLM."
+    # Você também pode passar parâmetros de amostragem aqui (temperature, top_p etc.)
+}
+
+r = requests.post(f"{BASE}/generate", json=payload, timeout=120)
+r.raise_for_status()
+print(r.json())
+```
+
+O `/generate` está na documentação oficial de APIs nativas. ([SGLang][2])
+
+---
+
+### 4.4) Sampling params (temperatura, top_p, stop etc.)
+
+O SGLang documenta os “sampling parameters” como `max_new_tokens`, `stop`, `stop_token_ids`, `stop_regex`, `temperature`, `top_p`, `top_k`, `min_p`, penalidades etc. ([SGLang][3])
+
+Exemplo (OpenAI chat):
+
+```python
+resp = client.chat.completions.create(
+    model="Qwen/Qwen2.5-3B-Instruct",
+    messages=[{"role": "user", "content": "Gere um JSON com nome e cidade."}],
+    temperature=0,
+    max_tokens=200,
+    stop=["\n\n"],  # se quiser parar cedo
+)
+```
+
+Exemplo (native /generate):
+
+```python
+payload = {
+    "text": "Escreva uma frase curta.",
+    "temperature": 0.3,
+    "top_p": 0.9,
+    "max_new_tokens": 40,  # nome do parâmetro na doc de sampling
+}
+requests.post(f"{BASE}/generate", json=payload).json()
+```
+
+---
+
+### 4.5) Streaming (quando você quiser tokens “pingando”)
+
+Em OpenAI-compatible, normalmente o streaming é `stream=true`. A implementação exata pode variar por versão, mas o caminho correto é testar com:
+
+* `POST /v1/chat/completions` com `"stream": true`
+
+Exemplo (requests, consumindo “linhas”):
+
+```python
+import requests, json
+
+url = "http://80.188.223.202:14077/v1/chat/completions"
+payload = {
+    "model": "Qwen/Qwen2.5-3B-Instruct",
+    "messages": [{"role": "user", "content": "Conte uma história em 5 linhas."}],
+    "stream": True,
+    "max_tokens": 200,
+}
+
+with requests.post(url, json=payload, stream=True, timeout=300) as r:
+    r.raise_for_status()
+    for line in r.iter_lines(decode_unicode=True):
+        if not line:
+            continue
+        # muitos servidores mandam no formato "data: {...}"
+        if line.startswith("data: "):
+            data = line[len("data: "):]
+            if data == "[DONE]":
+                break
+            evt = json.loads(data)
+            # delta pode variar; imprima o bruto primeiro
+            print(evt)
+```
+
+---
+
+## 5) Variáveis/ajustes que importam no SGLang (sem complicar)
+
+### Sampling defaults (defaults do modelo vs defaults OpenAI)
+
+O SGLang tem flag de server para escolher defaults (útil para padronizar comportamento). ([SGLang][3])
+
+### Env vars úteis (quando você precisar)
+
+A doc lista várias env vars; exemplos:
+
+* `SGLANG_HOST_IP`, `SGLANG_PORT` ([SGLang][4])
+* `SGLANG_DISABLE_CONSECUTIVE_PREFILL_OVERLAP` (conceitualmente relacionado ao “overlap”) ([SGLang][4])
+
+> No Vast, você normalmente não precisa mexer nessas para “fazer funcionar”. Só use se estiver ajustando performance/comportamento.
+
+---
+
+## 6) Dicas práticas (para não “quebrar” no Vast)
+
+1. **Sempre use o IP público + porta pública mapeada** (ex.: `80.188.223.202:14077`).
+2. Se o modelo é do HF e privado, você precisa de token HF (senão ele tenta baixar e falha).
+3. Antes de testar “chat”, teste `GET /health` e `GET /model_info`.
+4. Se você quer compatibilidade máxima com ferramentas (n8n, LangChain, OpenAI client), use **OpenAI-compatible** (`/v1/...`). ([SGLang][1])
+5. Se você quer depurar e ver “o motor” funcionando, use **/generate** e **/get_server_info**. ([SGLang][2])
+
+---
+
+Se você me disser **se você está chamando `/v1/chat/completions` ou `/generate`** e qual **BASE_URL (IP:porta)** você está usando no Postman, eu te devolvo um **request exato (headers + body)** já no formato certo para o seu caso (chat vs completions) e com parâmetros recomendados pro Qwen 2.5 3B.
+
+[1]: https://docs.sglang.io/basic_usage/openai_api_completions.html "OpenAI APIs - Completions — SGLang"
+[2]: https://docs.sglang.io/basic_usage/native_api.html "SGLang Native APIs — SGLang"
+[3]: https://docs.sglang.io/basic_usage/sampling_params.html "Sampling Parameters — SGLang"
+[4]: https://docs.sglang.io/references/environment_variables.html "Environment Variables — SGLang"
+
+
+Camada Phoenix Arise:
+
+A seguir vai um **guia de implementação completo** para colocar uma camada forte de observabilidade no seu fluxo **Cliente → SGLang (Vast.ai) → Phoenix (Railway)**, cobrindo exatamente: **tokens usados, tempo de inferência, prompt, input, output** — tudo aparecendo no Phoenix.
+
+Vou dividir em: **(A) arquitetura**, **(B) configuração correta de endpoints**, **(C) instrumentação (Python) com OpenTelemetry + OpenInference**, **(D) como enriquecer com prompt template/variáveis**, **(E) como consultar/automatizar via API do Phoenix**.
+
+---
+
+## A) Arquitetura recomendada (o “caminho certo”)
+
+**Você não instrumenta o SGLang diretamente.**
+Você instrumenta o **cliente** que faz a request para o SGLang (seja seu backend, worker, n8n custom node, etc.).
+
+Motivo: Phoenix recebe traces via **OpenTelemetry (OTLP)**, e o lugar certo para capturar **prompt/input/output/tokens/latência** é onde você monta a chamada e recebe a resposta.
+
+Phoenix aceita traces em OpenTelemetry OTLP e expõe collector HTTP e gRPC. ([Arize AI][1])
+
+---
+
+## B) Endpoints do Phoenix que você vai usar (Railway)
+
+Sua instância Phoenix (UI + API):
+
+* **Base URL (UI e REST API):**
+  `https://arize-phoenix-buscafornecedor.up.railway.app/`
+
+### 1) Collector OTLP (para enviar traces)
+
+Em self-host, Phoenix expõe o collector HTTP no caminho **`/v1/traces`**. ([Arize AI][1])
+
+✅ Como você está no Railway (HTTPS), use:
+
+* **`PHOENIX_COLLECTOR_ENDPOINT = https://arize-phoenix-buscafornecedor.up.railway.app/v1/traces`**
+
+> Isso é o endpoint para “subir traces” (telemetria). Phoenix é “all-in-one”, com UI e collector no mesmo serviço. ([Arize AI][1])
+
+### 2) REST API (para consultar traces, spans, prompts, datasets etc.)
+
+O Phoenix tem REST API para **projetos, traces, spans, prompts, datasets, experiments, annotations**. ([Arize AI][2])
+
+✅ Use:
+
+* **`PHOENIX_BASE_URL = https://arize-phoenix-buscafornecedor.up.railway.app`**
+
+---
+
+## C) Instrumentação completa em Python (SGLang no Vast via OpenAI-compatible)
+
+### 1) Instale libs
+
+A própria doc do Phoenix recomenda esses pacotes para tracing e instrumentação. ([Arize AI][3])
+
+```bash
+pip install arize-phoenix-otel arize-phoenix-client openai openinference-instrumentation-openai requests
+```
+
+### 2) Configure variáveis de ambiente
+
+No seu caso você disse que **não tem API key** (instância aberta), então não precisa `PHOENIX_API_KEY`.
+
+```python
+import os
+
+os.environ["PHOENIX_PROJECT_NAME"] = "sglang-qwen-vast"   # projeto no Phoenix
+os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = "https://arize-phoenix-buscafornecedor.up.railway.app/v1/traces"
+os.environ["PHOENIX_BASE_URL"] = "https://arize-phoenix-buscafornecedor.up.railway.app"
+```
+
+Essas env vars são as suportadas oficialmente pelos pacotes Phoenix (collector/base url/projeto/headers). ([Arize AI][4])
+
+### 3) Código: tracing + chamada ao SGLang (OpenAI-compatible)
+
+O SGLang expõe API OpenAI-compatible; a doc do Phoenix mostra o padrão de usar OpenTelemetry + instrumentor para capturar **inputs, outputs, tokens e latência**. ([Arize AI][3])
+
+```python
+import time
+from openai import OpenAI
+
+from phoenix.otel import register
+from openinference.instrumentation.openai import OpenAIInstrumentor
+
+# 1) Registra exporter OTEL -> Phoenix (usa PHOENIX_COLLECTOR_ENDPOINT por padrão)
+tracer_provider = register()  # Phoenix-aware defaults :contentReference[oaicite:7]{index=7}
+
+# 2) Auto-instrumenta o OpenAI SDK (vai capturar prompt/messages, output, tokens, latência)
+OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
+
+# 3) Cliente OpenAI apontando para o seu SGLang no Vast
+SGLANG_BASE_URL = "http://80.188.223.202:14077/v1"  # troque para seu IP:PORT atual
+client = OpenAI(base_url=SGLANG_BASE_URL, api_key="dummy")  # SGLang geralmente ignora
+
+def call_qwen(prompt: str):
+    t0 = time.perf_counter()
+
+    resp = client.chat.completions.create(
+        model="Qwen/Qwen2.5-3B-Instruct",
+        messages=[
+            {"role": "system", "content": "Responda em pt-BR."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.2,
+        max_tokens=200,
+    )
+
+    dt_ms = (time.perf_counter() - t0) * 1000.0
+
+    # Você ainda pode logar isso localmente; no Phoenix a latência aparece pelo span duration
+    text = resp.choices[0].message.content
+    usage = getattr(resp, "usage", None)  # dependendo do servidor, pode existir
+
+    return {"text": text, "latency_ms": dt_ms, "usage": usage}
+
+print(call_qwen("Explique o que é SGLang em 2 frases."))
+```
+
+**O que vai aparecer no Phoenix:**
+
+* um **trace** por chamada
+* um **LLM span** com:
+
+  * prompt/messages (input)
+  * output gerado
+  * tempo (span duration)
+  * tokens (quando disponíveis via instrumentação/usage)
+
+---
+
+## D) Capturar “Prompt template” + “Variáveis” (muito recomendado)
+
+Isso é ouro para observabilidade porque você consegue comparar versões de prompt e variáveis no Phoenix.
+
+Phoenix oferece um `using_prompt_template` context manager; os auto-instrumentors leem isso e gravam como atributos seguindo convenções OpenInference. ([Arize AI][5])
+
+```python
+from openinference.instrumentation import using_prompt_template
+
+template = (
+    "Você é um assistente B2B.\n"
+    "Tarefa: Responder objetivamente.\n"
+    "Pergunta: {pergunta}\n"
+)
+
+with using_prompt_template(
+    template=template,
+    version="v1.0.0",
+    variables={"pergunta": "Quais as vantagens de usar SGLang no Vast.ai?"}
+):
+    resp = client.chat.completions.create(
+        model="Qwen/Qwen2.5-3B-Instruct",
+        messages=[{"role": "user", "content": template.format(pergunta="Quais as vantagens de usar SGLang no Vast.ai?")}],
+        max_tokens=180,
+        temperature=0.3,
+    )
+
+print(resp.choices[0].message.content)
+```
+
+No Phoenix você passa a enxergar:
+
+* **template**
+* **versão**
+* **variáveis**
+* output e métricas por versão
+
+---
+
+## E) “Usar todos os endpoints úteis do Phoenix”: o que faz sentido de verdade
+
+Você pediu “usar todos os endpoints possíveis e recomendados”. O que é recomendável (e realmente útil) é:
+
+### 1) REST API para leitura/automação (observabilidade programática)
+
+O REST API do Phoenix existe exatamente para:
+
+* listar projetos
+* consultar traces/spans
+* acessar prompts
+* automatizar análises ([Arize AI][2])
+
+Principais recursos (categorias oficiais):
+
+* `projects`, `traces`, `spans`, `prompts`, `datasets`, `experiments`, `annotations` ([Arize AI][4])
+
+Você pode usar `arize-phoenix-client` (cliente Python oficial). ([Arize AI][4])
+
+Exemplo base (padrão):
+
+```python
+from phoenix.client import Client
+
+phoenix = Client(base_url="https://arize-phoenix-buscafornecedor.up.railway.app")
+
+# exemplos típicos:
+# - listar projetos
+# - consultar spans filtrando por nome/modelo/status
+# (os métodos exatos variam por versão; a doc oficial do client é a fonte)
+```
+
+### 2) Annotations/Feedback (humano ou automático)
+
+Phoenix permite anexar feedback/labels/score a spans/traces (útil para “qualidade” e triagem). ([Arize AI][6])
+
+### 3) Evals/Experiments (opcional, mas poderoso)
+
+Se você quiser evoluir para “observabilidade + qualidade”, Phoenix tem datasets/experiments/evals (ex.: LLM-as-a-judge). ([Arize AI][4])
+
+---
+
+## O que você ganha (exatamente no seu caso SGLang/Qwen no Vast)
+
+✅ **Tokens**: quando o endpoint OpenAI-compatible retornar usage, o instrumentor captura; e mesmo sem usage, você ainda tem latência/dados e pode adicionar contadores customizados. ([Arize AI][3])
+✅ **Tempo de inferência**: pelo span duration (e você pode adicionar `latency_ms` manualmente)
+✅ **Prompt/input/output**: capturados pelo instrumentor e/ou por prompt template metadata ([Arize AI][5])
+✅ **Organização por projeto**: `PHOENIX_PROJECT_NAME` ([Arize AI][4])
+
+---
+
+## Importante: um detalhe prático para seu setup Railway
+
+Como você disse que Phoenix está “aberto e sem chaves”, ótimo. Mas se um dia você habilitar autenticação, Phoenix bloqueia coleta/API até criar keys. ([arizeai-433a7140.mintlify.app][7])
+
+---
+
+## Próximo passo (pra eu deixar isso “redondo” no seu ambiente)
+
+Me diga **como você faz as chamadas hoje** para o SGLang:
+
+1. um backend Python/Node?
+2. n8n?
+3. Postman/manual?
+
+Com isso eu te devolvo **um wrapper pronto** com:
+
+* trace_id por request
+* parent span (“request do usuário”)
+* child span (“chamada SGLang”)
+* anexando: `model`, `vast_instance_id`, `base_url`, `context_length=32768`, `disable_overlap=true`
+* e export OTLP certinho pro seu Phoenix no Railway.
+
+[1]: https://arize.com/docs/phoenix/self-hosting/configuration "Overview - Phoenix"
+[2]: https://arize.com/docs/phoenix/sdk-api-reference/rest-api/overview "REST API Overview - Phoenix"
+[3]: https://arize.com/docs/phoenix/tracing/tutorial/your-first-traces "Your First Traces - Phoenix"
+[4]: https://arize.com/docs/phoenix/sdk-api-reference "Python SDK - Phoenix"
+[5]: https://arize.com/docs/phoenix/tracing/how-to-tracing/add-metadata/instrumenting-prompt-templates-and-prompt-variables "Instrument Prompt Templates and Prompt Variables - Phoenix"
+[6]: https://arize.com/docs/phoenix/tracing/how-to-tracing/feedback-and-annotations/capture-feedback?utm_source=chatgpt.com "Annotating via the Client - Phoenix"
+[7]: https://arizeai-433a7140.mintlify.app/docs/phoenix/self-hosting/features/authentication?utm_source=chatgpt.com "Authentication - Phoenix - Arize Phoenix"
+
+
+Prompt+chunk processement:
+
+Excelente — esse detalhamento do **chunking real** muda completamente a refatoração.
+Agora dá para desenhar um pipeline **industrial**, compatível com o que vocês já têm, sem jogar fora o investimento.
+
+Vou estruturar em:
+
+1. **Diagnóstico técnico do seu chunking atual** (pontos fortes e riscos)
+2. **Nova arquitetura de montagem de perfis compatível com esse chunker**
+3. **Refatoração do fluxo de extração (A → B → C)** já adaptada aos seus `Chunk`s
+4. **Prompts novos (extract + build)** já pensando em grande escala
+5. **Como usar `page_source`, `chunk_index`, `token_count` como sinais de qualidade e merge**
+6. **Métricas e otimizações de throughput**
+
+---
+
+# 1) Diagnóstico técnico do seu chunking atual (muito bom, mas perigoso para LLM monolítico)
+
+Antes de tudo:
+**Seu chunker é excelente** para ingestão em larga escala.
+Pouca gente faz isso direito.
+
+Pontos fortes reais:
+
+* dedupe de linhas antes do chunking (isso reduz 40–70% de ruído)
+* controle rigoroso de tokens com overhead realista
+* agrupamento inteligente de páginas pequenas (reduz chamadas downstream)
+* preservação de URLs via `page_source` (isso é OURO para evidência)
+* revalidação final de limites
+
+Isso é nível produção sério.
+
+---
+
+### O problema não está no chunker
+
+O problema estava em **como você usava os chunks com o LLM**.
+
+Hoje, implicitamente, você faz:
+
+```
+for chunk in chunks:
+    manda chunk_content inteiro para prompt final de CompanyProfile
+    pede perfil completo
+```
+
+Isso gera:
+
+* repetição entre chunks
+* competição de evidências
+* listas explodindo
+* serviços repetidos 10x
+* produtos replicados
+* clientes replicados
+* latência imprevisível
+
+E o modelo tenta “resolver tudo” em cada chunk.
+
+---
+
+# 2) Nova arquitetura (compatível 100% com seu pipeline atual)
+
+Nós NÃO vamos mudar:
+
+* `process_content`
+* `Chunk` dataclass
+* persistência em `scraped_chunks`
+* chunk_index / total_chunks / page_source / token_count
+
+Nós só mudamos **o uso downstream**.
+
+---
+
+## Arquitetura final proposta
+
+```
+scraped_chunks
+      |
+      v
+[Estágio A]  LLM: FACT EXTRACTION POR CHUNK
+      |
+      v
+fact_chunks (nova tabela / coleção)
+      |
+      v
+[Estágio B]  MERGE DETERMINÍSTICO (sem LLM)
+      |
+      v
+merged_facts (objeto compacto)
+      |
+      v
+[Estágio C]  LLM: BUILD COMPANY PROFILE FINAL
+      |
+      v
+CompanyProfile
+```
+
+Isso mantém:
+
+* seu chunker
+* seu banco
+* sua escalabilidade
+
+E remove:
+
+* loops
+* explosões de lista
+* latência p99 absurda
+* inferência “criativa”
+
+---
+
+# 3) Estágio A — Extração de fatos por chunk (refatoração principal)
+
+Agora cada `Chunk` vira **uma unidade de mineração de fatos**, não de “perfil”.
+
+### Entrada real (o que você já tem no DB)
+
+De `db_service.get_chunks(cnpj_basico)` você recebe:
+
+* `chunk_index`
+* `total_chunks`
+* `chunk_content`
+* `token_count`
+* `page_source` (até 5 URLs)
+
+Isso é perfeito para:
+
+* contexto curto
+* rastreabilidade automática
+* evidência natural
+
+---
+
+## Prompt A — Fact Extraction (novo, crítico)
+
+### System Prompt A (novo, otimizado para escala)
+
+```text
+Você é um minerador de fatos B2B.
+
+Gere APENAS um JSON válido.
+Proibido markdown, texto extra ou explicações.
+
+OBJETIVO:
+Extrair SOMENTE fatos explícitos contidos neste chunk.
+NÃO monte perfil final.
+NÃO combine informações de outras páginas.
+NÃO deduza nada que não esteja literalmente presente.
+
+REGRAS DE EVIDÊNCIA:
+Todo item extraído deve conter:
+- value
+- evidence_quote (trecho literal curto do texto, máx 160 caracteres)
+
+Se não houver evidência clara, NÃO extraia.
+
+REGRAS DE SEGURANÇA:
+- Proibido inventar clientes, certificações, prêmios, parcerias, produtos, números, datas.
+- Serviço ≠ produto.
+- Produto só é válido se tiver identificador claro (modelo, código, versão, medida, marca+modelo).
+
+NORMALIZAÇÃO:
+- Emails em lowercase.
+- Telefones sem espaços duplicados.
+- URLs completas.
+
+ANTI-LOOP:
+- Cada lista máx 20 itens.
+- Valores estritamente únicos.
+- Se detectar repetição de padrão, pare imediatamente.
+
+IDIOMA:
+Saída em Português (Brasil).
+```
+
+---
+
+### User Prompt A (gerado por você programaticamente)
+
+```text
+CHUNK METADATA:
+- chunk_index: {chunk_index} / {total_chunks}
+- token_count: {token_count}
+- page_source: {page_source}
+
+CONTEÚDO DO CHUNK:
+{chunk_content}
+```
+
+---
+
+## Output A — FactBundle (schema novo recomendado)
+
+Esse JSON você salva em uma nova tabela, por exemplo: `scraped_fact_chunks`.
+
+### Estrutura mínima (suficiente e rápida)
+
+```json
+{
+  "source": {
+    "chunk_index": 3,
+    "page_source": ["https://site.com/sobre", "https://site.com/servicos"]
+  },
+
+  "identity_facts": {
+    "company_name": [
+      {"value": "Fort Securité", "evidence_quote": "A Fort Securité atua no segmento de segurança", "confidence": 0.9}
+    ],
+    "cnpj": [],
+    "tagline": [],
+    "founding_year": [],
+    "employee_range": []
+  },
+
+  "contact_facts": {
+    "emails": [
+      {"value": "contato@fortsecurite.com.br", "evidence_quote": "Email: contato@fortsecurite.com.br", "confidence": 1.0}
+    ],
+    "phones": [],
+    "addresses": [],
+    "locations": [],
+    "linkedin_urls": [],
+    "website_urls": []
+  },
+
+  "offerings_facts": {
+    "services": [
+      {"value": "Portaria", "evidence_quote": "Serviços: Portaria, Limpeza e Conservação", "confidence": 0.9}
+    ],
+    "service_details": [],
+    "products": [],
+    "product_categories": []
+  },
+
+  "reputation_facts": {
+    "certifications": [],
+    "awards": [],
+    "partnerships": [],
+    "clients": [],
+    "case_studies": []
+  }
+}
+```
+
+---
+
+## Por que isso escala MUITO melhor
+
+* Cada chunk gera **poucos fatos** (não centenas de tokens de saída)
+* Quase nunca estoura `max_tokens`
+* Zero loops (listas pequenas, foco em fatos)
+* Latência previsível (p95 cai drasticamente)
+
+---
+
+# 4) Estágio B — Merge determinístico (onde você ganha estabilidade)
+
+Aqui você NÃO usa LLM.
+
+Você percorre todos os `FactBundle` daquele `cnpj_basico` e constrói:
+
+## Regras de merge (chave do sucesso)
+
+### 4.1 Deduplicação com normalização
+
+* chave: `normalized(value)`
+* mantém:
+
+  * maior `confidence`
+  * ou mais ocorrências em chunks distintos
+  * ou vindo de páginas “prioritárias” (Sobre / Contato)
+
+### 4.2 Priorização por página
+
+Você já tem `page_source`.
+
+Crie ranking de confiança:
+
+1. URLs contendo: `sobre`, `quem-somos`, `institucional`, `/empresa`
+2. `/contato`, `/footer`
+3. homepage `/`
+4. páginas de serviços
+5. resto
+
+Isso resolve:
+
+* nome errado vindo de header
+* endereço errado vindo de rodapé secundário
+* slogan duplicado em hero e footer
+
+---
+
+### 4.3 Routing definitivo
+
+Agora você garante definitivamente:
+
+* tudo que não passa no validador de produto → vai para serviços ou é descartado
+* `locations` só cidade/estado/unidade
+* clientes só se evidence_quote vier de página com “clientes”, “cases”, “quem confia”
+
+---
+
+## Output B — MergedFacts (compacto e limpo)
+
+Exemplo:
+
+```json
+{
+  "identity": {
+    "company_name": "Fort Securité",
+    "cnpj": null,
+    "tagline": null,
+    "description_candidates": [
+      "Empresa especializada em serviços de segurança e limpeza"
+    ],
+    "founding_year": null,
+    "employee_count_range": null
+  },
+
+  "classification": {
+    "industry": "Serviços de Segurança",
+    "business_model": "B2B",
+    "target_audience": "Empresas e condomínios",
+    "geographic_coverage": ["RJ"]
+  },
+
+  "contact": {
+    "emails": ["contato@fortsecurite.com.br"],
+    "phones": ["(21) 3848-0141"],
+    "website_url": "https://fortsecurite.com.br",
+    "linkedin_url": null,
+    "headquarters_address": null,
+    "locations": ["Rio de Janeiro - RJ"]
+  },
+
+  "offerings": {
+    "services": ["Portaria", "Controle de Acesso", "Limpeza e Conservação"],
+    "service_details": [],
+    "products": [],
+    "product_categories": [],
+    "engagement_models": [],
+    "key_differentiators": []
+  },
+
+  "reputation": {
+    "certifications": ["ANVISA"],
+    "awards": [],
+    "partnerships": [],
+    "client_list": [],
+    "case_studies": []
+  },
+
+  "evidence_map": {
+    "contact.emails:contato@fortsecurite.com.br": [
+      {"url": "https://fortsecurite.com.br/contato", "quote": "Email: contato@fortsecurite.com.br"}
+    ],
+    "offerings.services:Portaria": [
+      {"url": "https://fortsecurite.com.br/servicos", "quote": "Serviços: Portaria, Limpeza e Conservação"}
+    ]
+  }
+}
+```
+
+---
+
+# 5) Estágio C — Build final do CompanyProfile (agora fácil e estável)
+
+Agora o LLM recebe **pouco texto, limpo e sem duplicação**.
+
+### System Prompt C (novo, simples e muito robusto)
+
+```text
+Você é um montador de perfis B2B.
+
+Gere APENAS um JSON válido no formato CompanyProfile.
+Proibido markdown, texto extra ou explicações.
+
+REGRAS:
+- Use SOMENTE dados presentes em MergedFacts.
+- Proibido criar novos valores.
+- Se campo não existir em MergedFacts, use null ou [] conforme o tipo.
+- Respeite estritamente a separação: serviço ≠ produto.
+- Todas as listas devem conter valores únicos.
+
+IDIOMA:
+Português (Brasil).
+```
+
+### User Prompt C
+
+```text
+MERGED_FACTS:
+{json_do_merged_facts}
+```
+
+Com `response_format: json_schema` estrito, isso vira quase determinístico.
+
+---
+
+# 6) Impacto direto em escala (latência, custo, qualidade)
+
+### Antes (monolito)
+
+* tokens_in: 8k–20k por chunk
+* tokens_out: 2k–6k
+* chamadas: N chunks
+* p95 imprevisível
+* loop_rate alto
+
+### Depois (refatorado)
+
+#### Estágio A
+
+* tokens_in: 3k–10k
+* tokens_out: 300–800
+* chamadas: N chunks
+* latência estável
+* loop_rate ~ zero
+
+#### Estágio C
+
+* tokens_in: 1k–2k
+* tokens_out: 800–2k
+* chamadas: 1
+* altíssima estabilidade
+
+**Resultado prático:**
+
+* custo ↓ 30–60%
+* p95 ↓ brutalmente
+* qualidade ↑ (menos alucinação, menos repetição)
+* auditoria fácil (evidence_map)
+
+---
+
+# 7) Métricas novas recomendadas (além das que você já tem)
+
+Como você já usa Phoenix, agora dá para medir de verdade:
+
+### Por chunk (Estágio A)
+
+* `facts_extracted_count`
+* `services_count`, `products_count`, `clients_count`
+* `tokens_in`, `tokens_out`, `latency_ms`
+* `empty_fact_rate` (chunks que não geram fatos úteis)
+
+### Merge
+
+* `dedupe_delta` (itens removidos / itens brutos)
+* `conflict_resolution_count`
+* `routing_error_count`
+
+### Final
+
+* `fill_rate_identity/contact/offerings/reputation`
+* `cap_hit_rate`
+* `evidence_coverage`
+  (quantos campos do perfil têm pelo menos 1 evidência associada)
+
+Isso fecha perfeitamente o ciclo qualidade × custo × estabilidade.
+
+---
+
+# 8) Conclusão (o ponto mais importante da conversa)
+
+O que você construiu até agora é **excelente infraestrutura de ingestão**.
+O que estava te prejudicando era **arquitetura de extração monolítica**.
+
+Com essa refatoração:
+
+* você preserva 100% do chunker atual
+* ganha estabilidade industrial
+* elimina loops estruturalmente (não por prompt)
+* reduz custo e latência
+* ganha auditabilidade por evidência
+* fica pronto para avaliação automática no Phoenix
+
+---
+
+## Próximo passo ideal (para eu te entregar a versão final “pronta”)
+
+Para fechar isso no nível que você quer, eu preciso só de:
+
+1. Um exemplo real de `chunk_content` + `page_source` (1 ou 2 chunks reais)
+2. O **jsonschema real** do `CompanyProfile` que vocês usam hoje no `response_format`
+
+Com isso eu te devolvo:
+
+* Prompt A final calibrado para o seu scraping real
+* Schema completo do `FactBundle`
+* Regras de merge em pseudocódigo (ou Python pronto)
+* Prompt C final alinhado ao seu schema
+* Checklist de métricas para Phoenix (chaves de span + atributos exatos)
+
+Esse desenho é exatamente o que times grandes usam para extração estruturada em escala com LLM.
+
+Enpoints:
+
+Phoenix:https://arize-phoenix-buscafornecedor.up.railway.app
+sglang_vastai:http://80.188.223.202:14077
+

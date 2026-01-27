@@ -12,59 +12,21 @@ Para gerenciamento de chamadas LLM (rate limiting, health monitoring, etc),
 use o módulo app.services.llm_manager
 """
 
-# Serviço principal
-from .llm_service import analyze_content, get_llm_service, LLMService
+"""
+Módulo Profile Builder (versão sem LLM).
 
-# Processamento de conteúdo
-# NOTA: chunk_content e estimate_tokens foram movidos para app.core.chunking
-# Use: from app.core.chunking import process_content
-#      from app.core.token_utils import estimate_tokens
+Antes, este pacote centralizava serviços de LLM (`LLMService`, `provider_caller`,
+configurações de modelo etc.) para montagem de perfil. Essa responsabilidade foi
+descontinuada: **nenhuma funcionalidade de LLM é mais exposta por aqui**.
+
+Por enquanto, mantemos apenas utilitários puramente determinísticos relacionados
+à fusão/normalização de perfis, caso ainda sejam úteis em outros fluxos.
+"""
+
 from .profile_merger import merge_profiles
 from .response_normalizer import normalize_llm_response
 
-# Configuração local
-from .constants import llm_config, LLMConfig, SYSTEM_PROMPT
-
-# Caller legado (para compatibilidade)
-from .provider_caller import (
-    call_llm,
-    analyze_content_with_fallback,
-    process_chunk_with_retry
-)
-
 __all__ = [
-    # Função principal
-    'analyze_content',
-    'get_llm_service',
-    'LLMService',
-    
-    # Configuração
-    'llm_config',
-    'LLMConfig',
-    'SYSTEM_PROMPT',
-    
-    # Merge
     'merge_profiles',
-    
-    # Normalização
     'normalize_llm_response',
-    
-    # Caller legado
-    'call_llm',
-    'analyze_content_with_fallback',
-    'process_chunk_with_retry',
 ]
-
-
-def configure_llm(**kwargs):
-    """
-    Configura dinamicamente os parâmetros do LLM.
-    
-    Parâmetros aceitos:
-        max_chunk_tokens: int
-        chars_per_token: int
-        group_target_tokens: int
-        min_chunk_chars: int
-        similarity_threshold: float
-    """
-    llm_config.update(**kwargs)

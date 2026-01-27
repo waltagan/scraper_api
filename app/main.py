@@ -27,7 +27,6 @@ except ImportError:
 
 from app.schemas.profile import CompanyProfile
 from app.services.scraper import scrape_url
-from app.services.profile_builder import analyze_content
 from app.services.discovery import find_company_website
 from app.core.security import get_api_key
 from app.core.logging_utils import setup_logging
@@ -237,29 +236,11 @@ async def process_analysis(url: str, ctx_label: str = "", request_id: str = "") 
     if not markdown:
         raise Exception("Failed to scrape content from the URL")
     
-    # 2. Prepare content for LLM
-    combined_text = f"--- WEB CRAWL START ({url}) ---\n{markdown}\n--- WEB CRAWL END ---\n\n"
-
-    # 3. LLM Analysis
-    # Extrair informações do ctx_label para debug
-    import re
-    cnpj_match = re.search(r'CNPJ: ([^-]+)', ctx_label) if ctx_label else None
-    name_match = re.search(r'CNPJ: [^-]+ - (.+)\]', ctx_label) if ctx_label else None
-    extracted_cnpj = cnpj_match.group(1).strip() if cnpj_match else None
-    extracted_name = name_match.group(1).strip() if name_match else None
-    
-    profile = await analyze_content(
-        combined_text, 
-        ctx_label=ctx_label, 
-        request_id=request_id,
-        url=url,
-        cnpj=extracted_cnpj,
-        company_name=extracted_name
-    )
-    
-    # 4. Add Sources
+    # 2. Construir perfil básico **sem uso de LLM**
+    #    Neste estágio, apenas registramos as fontes coletadas.
+    profile = CompanyProfile()
     profile.sources = list(set(scraped_urls))
-    
+
     return profile
 
 
