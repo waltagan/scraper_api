@@ -128,7 +128,7 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", req
     # 1. PROBE URL (sob controle de concorrência)
     probe_start = time.perf_counter()
     try:
-        async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="probe"):
+        async with concurrency_manager.acquire(url, timeout=60.0, request_id=request_id, substage="probe"):
             best_url, probe_time = await url_prober.probe(url)
         url = best_url
     except URLNotReachable as e:
@@ -244,7 +244,7 @@ async def scrape_all_subpages(
         )
         try:
             t0 = time.perf_counter()
-            async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="probe"):
+            async with concurrency_manager.acquire(url, timeout=60.0, request_id=request_id, substage="probe"):
                 best_url, probe_time = await url_prober.probe(url)
             phases['probe'] = (time.perf_counter() - t0) * 1000
             used_probe = True

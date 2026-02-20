@@ -86,73 +86,86 @@ def _classify_probe_error(error: Exception, url: str) -> Tuple[ProbeErrorType, s
     return ProbeErrorType.UNKNOWN, str(error)
 
 
+RETRYABLE_PROBE_ERRORS = frozenset({
+    ProbeErrorType.CONNECTION_TIMEOUT,
+    ProbeErrorType.UNKNOWN,
+    ProbeErrorType.BLOCKED,
+})
+
+
 class URLProber:
     """
     Testa variações de URL em paralelo para encontrar a melhor.
-    Retorna a primeira URL que responde com sucesso.
-    
-    Otimizado para alta concorrência (500 empresas simultâneas).
+    Com retry automático usando proxies diferentes para erros de timeout.
     """
     
-    def __init__(self, timeout: float = 7.0, max_concurrent: int = 500):
+    def __init__(self, timeout: float = 20.0, max_concurrent: int = 500, max_retries: int = 2):
         self.timeout = timeout
+        self.max_retries = max_retries
         self.semaphore = asyncio.Semaphore(max_concurrent)
-        self._cache: dict = {}  # Cache de URLs já validadas
-        self._last_errors: dict = {}  # Armazena últimos erros para diagnóstico
+        self._cache: dict = {}
     
     async def probe(self, base_url: str) -> Tuple[str, float]:
         """
-        Testa variações de URL em paralelo.
-        Otimizado: testa URL original primeiro, só testa variações se falhar.
-        
-        Args:
-            base_url: URL base para gerar variações
+        Testa variações de URL com retry automático em erros de timeout.
+        Cada tentativa usa proxies diferentes (round-robin).
         
         Returns:
             Tuple de (melhor_url, tempo_resposta_ms)
         
         Raises:
-            URLNotReachable: Se nenhuma variação responder (com detalhes do erro)
+            URLNotReachable: Se todas tentativas falharem
         """
-        # Verificar cache
         if base_url in self._cache:
             cached = self._cache[base_url]
             return cached['url'], cached['time']
         
-        # Normalizar URL
         if not base_url.startswith(('http://', 'https://')):
             base_url = 'https://' + base_url
         
-        # Coletar erros para diagnóstico
+        last_error: Optional[URLNotReachable] = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                url, resp_time = await self._probe_once(base_url)
+                self._cache[base_url] = {'url': url, 'time': resp_time}
+                return url, resp_time
+            except URLNotReachable as e:
+                last_error = e
+                if e.error_type not in RETRYABLE_PROBE_ERRORS:
+                    raise
+                if attempt < self.max_retries - 1:
+                    logger.info(
+                        f"🔄 Probe retry {attempt+2}/{self.max_retries} para {base_url} "
+                        f"({e.error_type.value})"
+                    )
+        
+        raise last_error  # type: ignore[misc]
+    
+    async def _probe_once(self, base_url: str) -> Tuple[str, float]:
+        """
+        Uma tentativa de probe: testa URL original, depois variações em paralelo.
+        Cada chamada usa proxies diferentes via round-robin.
+        """
         collected_errors: List[Tuple[str, ProbeErrorType, str]] = []
         
-        # OTIMIZAÇÃO: Tentar URL original primeiro (mais rápido)
         result, error_info = await self._test_url_with_error(base_url)
         if result and result[1] < 400:
-            self._cache[base_url] = {'url': base_url, 'time': result[0]}
             return base_url, result[0]
         
         if error_info:
             collected_errors.append((base_url, error_info[0], error_info[1]))
         
-        # Se falhou, tentar variações
         variations = self._generate_variations(base_url)
-        # Remover a URL original já testada
         variations = [v for v in variations if v != base_url]
         
         if not variations:
             error_type, error_msg = self._get_best_error_diagnosis(collected_errors, base_url)
-            raise URLNotReachable(
-                f"{error_msg}",
-                error_type=error_type,
-                url=base_url
-            )
+            raise URLNotReachable(error_msg, error_type=error_type, url=base_url)
         
-        # Criar tasks para variações restantes
         tasks = [self._test_url_with_error(url) for url in variations]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Filtrar resultados bem-sucedidos e coletar erros
         successful = []
         for url, result in zip(variations, results):
             if isinstance(result, Exception):
@@ -174,22 +187,12 @@ class URLProber:
         
         if not successful:
             error_type, error_msg = self._get_best_error_diagnosis(collected_errors, base_url)
-            raise URLNotReachable(
-                f"{error_msg}",
-                error_type=error_type,
-                url=base_url
-            )
+            raise URLNotReachable(error_msg, error_type=error_type, url=base_url)
         
-        # Ordenar por status (2xx primeiro) e depois por tempo
         successful.sort(key=lambda x: (x[2] >= 300, x[1]))
-        
         best_url, best_time, best_status = successful[0]
         
-        # Cachear resultado
-        self._cache[base_url] = {'url': best_url, 'time': best_time}
-        
         logger.info(f"🎯 Melhor URL: {best_url} ({best_time:.0f}ms, status {best_status})")
-        
         return best_url, best_time
     
     def _get_best_error_diagnosis(
