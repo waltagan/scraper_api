@@ -3,9 +3,12 @@ Constantes e configurações do módulo de scraping.
 """
 
 import asyncio
+import logging
 
 from app.services.concurrency_manager.config_loader import get_section as get_config
 from app.configs.config_loader import load_config
+
+logger = logging.getLogger(__name__)
 
 # Headers que imitam um navegador real para evitar bloqueios WAF (externalizados)
 _HEADERS_CFG = load_config("scraper/headers.json").get("default_headers", {})
@@ -23,7 +26,24 @@ DEFAULT_HEADERS = _HEADERS_CFG or {
     "Cache-Control": "max-age=0"
 }
 
-FAST_TRACK_CONFIG = get_config("scraper/scraper_fast_track", {}) or {
+_fast_track_from_json = get_config("scraper/scraper_fast_track", {})
+if _fast_track_from_json:
+    logger.info(
+        f"[ScraperConfig] ✅ FAST_TRACK carregado do JSON: "
+        f"intra_batch_delay={_fast_track_from_json.get('intra_batch_delay')}, "
+        f"batch_size={_fast_track_from_json.get('batch_size')}, "
+        f"per_domain_limit={_fast_track_from_json.get('per_domain_limit')}, "
+        f"batch_min_delay={_fast_track_from_json.get('batch_min_delay')}, "
+        f"batch_max_delay={_fast_track_from_json.get('batch_max_delay')}"
+    )
+else:
+    logger.warning(
+        "[ScraperConfig] ⚠️ FAST_TRACK JSON não encontrado! "
+        "Usando fallback hardcoded (intra_batch_delay=0.9, batch_size=30). "
+        "Verifique se app/configs/scraper/scraper_fast_track.json existe."
+    )
+
+FAST_TRACK_CONFIG = _fast_track_from_json or {
     'site_semaphore_limit': 5000,
     'circuit_breaker_threshold': 5,
     'page_timeout': 20000,
@@ -53,7 +73,13 @@ FAST_TRACK_CONFIG = get_config("scraper/scraper_fast_track", {}) or {
 DEFAULT_CONFIG = FAST_TRACK_CONFIG.copy()
 
 # Perfil Robusto - Retry Track apontando para configs centralizadas
-RETRY_TRACK_CONFIG = get_config("scraper/scraper_retry_track", {}) or {
+_retry_track_from_json = get_config("scraper/scraper_retry_track", {})
+if _retry_track_from_json:
+    logger.info(f"[ScraperConfig] ✅ RETRY_TRACK carregado do JSON")
+else:
+    logger.warning("[ScraperConfig] ⚠️ RETRY_TRACK JSON não encontrado, usando fallback hardcoded")
+
+RETRY_TRACK_CONFIG = _retry_track_from_json or {
     'site_semaphore_limit': 500,
     'circuit_breaker_threshold': 8,
     'page_timeout': 20000,

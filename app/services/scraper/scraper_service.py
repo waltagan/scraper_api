@@ -794,11 +794,12 @@ async def _scrape_subpages_batch(
             )
 
             if batch_idx < len(batches) - 1:
-                delay = random.uniform(
+                base_delay = random.uniform(
                     scraper_config.batch_min_delay,
                     scraper_config.batch_max_delay
                 )
-                await asyncio.sleep(delay)
+                jitter = base_delay + random.gauss(0, base_delay * 0.3)
+                await asyncio.sleep(max(0.02, jitter))
     finally:
         if shared_session:
             try:
@@ -823,7 +824,9 @@ async def _scrape_batch_parallel(
 
     async def scrape_with_delay(i: int, url: str) -> ScrapedPage:
         if i > 0:
-            await asyncio.sleep(scraper_config.intra_batch_delay)
+            base = scraper_config.intra_batch_delay
+            jitter = base * random.uniform(0.5, 2.0) + random.gauss(0, base * 0.2)
+            await asyncio.sleep(max(0.01, jitter))
 
         if is_circuit_open(url):
             return ScrapedPage(url=url, content="", error="Circuit open")

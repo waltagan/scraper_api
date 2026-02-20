@@ -129,6 +129,7 @@ class BatchInstance:
             result = await self._process_company(item, worker_id)
             self.in_progress -= 1
 
+            pending_flush = None
             async with self._buffer_lock:
                 self._buffer.append(result)
                 self.processed += 1
@@ -138,7 +139,11 @@ class BatchInstance:
                     self.error_count += 1
 
                 if len(self._buffer) >= self.flush_size:
-                    await self._flush_buffer()
+                    pending_flush = self._buffer
+                    self._buffer = []
+
+            if pending_flush is not None:
+                await self._flush_buffer_data(pending_flush)
 
     async def _process_company(
         self, company: Dict[str, Any], worker_id: int
@@ -226,6 +231,7 @@ class BatchInstance:
         )
 
     async def _flush_buffer(self, force: bool = False):
+        """Flush chamado em contextos onde o buffer ainda não foi extraído."""
         if not force:
             to_flush = self._buffer
             self._buffer = []
@@ -234,6 +240,11 @@ class BatchInstance:
                 to_flush = self._buffer
                 self._buffer = []
 
+        if to_flush:
+            await self._flush_buffer_data(to_flush)
+
+    async def _flush_buffer_data(self, to_flush: list):
+        """Escreve resultados no DB — executa FORA do lock para não bloquear workers."""
         if not to_flush:
             return
 
