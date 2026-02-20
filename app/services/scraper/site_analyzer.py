@@ -51,7 +51,7 @@ class SiteAnalyzer:
         "javascript required"
     ]
     
-    def __init__(self, timeout: float = 7.0, probe_attempts: int = 1):
+    def __init__(self, timeout: float = 15.0, probe_attempts: int = 1):
         self.timeout = timeout
         self.probe_attempts = probe_attempts
     

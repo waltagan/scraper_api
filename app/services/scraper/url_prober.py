@@ -99,7 +99,7 @@ class URLProber:
     Com retry automático usando proxies diferentes para erros de timeout.
     """
     
-    def __init__(self, timeout: float = 20.0, max_concurrent: int = 500, max_retries: int = 2):
+    def __init__(self, timeout: float = 30.0, max_concurrent: int = 500, max_retries: int = 2):
         self.timeout = timeout
         self.max_retries = max_retries
         self.semaphore = asyncio.Semaphore(max_concurrent)

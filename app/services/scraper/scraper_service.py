@@ -128,7 +128,7 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", req
     # 1. PROBE URL (sob controle de concorrência)
     probe_start = time.perf_counter()
     try:
-        async with concurrency_manager.acquire(url, timeout=60.0, request_id=request_id, substage="probe"):
+        async with concurrency_manager.acquire(url, timeout=90.0, request_id=request_id, substage="probe"):
             best_url, probe_time = await url_prober.probe(url)
         url = best_url
     except URLNotReachable as e:
@@ -140,7 +140,7 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", req
 
     # 2. ANALISAR SITE (sob controle de concorrência)
     analysis_start = time.perf_counter()
-    async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="analyze"):
+    async with concurrency_manager.acquire(url, timeout=75.0, request_id=request_id, substage="analyze"):
         site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
     analysis_time_ms = (time.perf_counter() - analysis_start) * 1000
 
@@ -232,7 +232,7 @@ async def scrape_all_subpages(
 
     # 1. ANALYZE DIRETO (sob controle de concorrência)
     t0 = time.perf_counter()
-    async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="analyze"):
+    async with concurrency_manager.acquire(url, timeout=75.0, request_id=request_id, substage="analyze"):
         site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
     phases['analyze'] = (time.perf_counter() - t0) * 1000
 
@@ -245,14 +245,14 @@ async def scrape_all_subpages(
         )
         try:
             t0 = time.perf_counter()
-            async with concurrency_manager.acquire(url, timeout=60.0, request_id=request_id, substage="probe"):
+            async with concurrency_manager.acquire(url, timeout=90.0, request_id=request_id, substage="probe"):
                 best_url, probe_time = await url_prober.probe(url)
             phases['probe'] = (time.perf_counter() - t0) * 1000
             used_probe = True
             if best_url != url:
                 url = best_url
                 t0 = time.perf_counter()
-                async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="analyze_retry"):
+                async with concurrency_manager.acquire(url, timeout=75.0, request_id=request_id, substage="analyze_retry"):
                     site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
                 phases['analyze_retry'] = (time.perf_counter() - t0) * 1000
         except URLNotReachable as e:
@@ -635,7 +635,7 @@ async def _scrape_main_page(
         config = strategy_selector.get_strategy_config(strategy)
         
         try:
-            async with concurrency_manager.acquire(url, timeout=90.0, request_id=request_id, substage="main_page"):
+            async with concurrency_manager.acquire(url, timeout=120.0, request_id=request_id, substage="main_page"):
                 page = await _execute_strategy(url, strategy, config, ctx_label)
             
             if page and page.success:
@@ -890,10 +890,10 @@ async def _scrape_batch_parallel(
 
         for attempt in range(1 + max_retries):
             try:
-                if not await domain_rate_limiter.acquire(url, timeout=10.0):
+                if not await domain_rate_limiter.acquire(url, timeout=20.0):
                     return ScrapedPage(url=normalized_url, content="", error="Rate limit timeout")
 
-                async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="subpages"):
+                async with concurrency_manager.acquire(url, timeout=75.0, request_id=request_id, substage="subpages"):
                     used_proxy = (
                         proxy_pool.get_proxy_excluding(failed_proxies)
                         if failed_proxies else proxy_pool.get_next_proxy()
