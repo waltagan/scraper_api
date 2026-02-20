@@ -6,6 +6,7 @@ processando partições diferentes das empresas pendentes.
 """
 
 import asyncio
+import bisect
 import concurrent.futures
 import logging
 import time
@@ -31,10 +32,45 @@ PERMANENT_KEYWORDS = frozenset([
     "certificate", "cloudflare", "captcha",
 ])
 
+ERROR_CATEGORIES = {
+    "dns": ["dns", "resolve", "name resolution"],
+    "timeout": ["timeout", "timed out"],
+    "connection": ["connection reset", "connection refused", "connection error", "connect"],
+    "ssl": ["ssl", "certificate"],
+    "cloudflare": ["cloudflare", "challenge"],
+    "captcha": ["captcha"],
+    "rate_limit": ["429", "rate limit", "too many"],
+    "empty_content": ["nenhum conteudo", "empty", "soft 404", "insuficiente"],
+    "server_error": ["502", "503", "504", "server error"],
+    "blocked": ["403", "forbidden", "blocked"],
+}
+
 
 def _is_transient(error_msg: str) -> bool:
     lower = error_msg.lower()
     return any(kw in lower for kw in TRANSIENT_KEYWORDS)
+
+
+def _classify_error(error_msg: str) -> str:
+    if not error_msg:
+        return "unknown"
+    lower = error_msg.lower()
+    for category, keywords in ERROR_CATEGORIES.items():
+        if any(kw in lower for kw in keywords):
+            return category
+    return "other"
+
+
+def _percentiles(sorted_values: List[float], pcts: List[int]) -> Dict[str, float]:
+    n = len(sorted_values)
+    if n == 0:
+        return {f"p{p}": 0 for p in pcts}
+    result = {}
+    for p in pcts:
+        idx = int(n * p / 100)
+        idx = min(idx, n - 1)
+        result[f"p{p}"] = round(sorted_values[idx], 1)
+    return result
 
 
 @dataclass
@@ -45,6 +81,10 @@ class CompanyResult:
     chunks: List[Any] = field(default_factory=list)
     error: Optional[str] = None
     success: bool = False
+    processing_time_ms: float = 0
+    pages_scraped: int = 0
+    total_pages_attempted: int = 0
+    retries_used: int = 0
 
 
 class BatchInstance:
@@ -77,6 +117,12 @@ class BatchInstance:
         self.last_errors: List[dict] = []
         self.status = "idle"
         self._start_time: float = 0
+
+        self._processing_times_sorted: List[float] = []
+        self._error_categories: Dict[str, int] = {}
+        self._pages_per_company: List[int] = []
+        self._retries_total: int = 0
+        self._peak_in_progress: int = 0
 
     async def run(self):
         """Executa esta instância: carrega queue, roda workers, flush final."""
@@ -126,17 +172,31 @@ class BatchInstance:
                 break
 
             self.in_progress += 1
+            self._peak_in_progress = max(self._peak_in_progress, self.in_progress)
+
+            t0 = time.perf_counter()
             result = await self._process_company(item, worker_id)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            result.processing_time_ms = elapsed_ms
+
             self.in_progress -= 1
 
             pending_flush = None
             async with self._buffer_lock:
                 self._buffer.append(result)
                 self.processed += 1
+
+                bisect.insort(self._processing_times_sorted, elapsed_ms)
+                if result.pages_scraped > 0:
+                    self._pages_per_company.append(result.pages_scraped)
+                self._retries_total += result.retries_used
+
                 if result.success:
                     self.success_count += 1
                 else:
                     self.error_count += 1
+                    cat = _classify_error(result.error or "")
+                    self._error_categories[cat] = self._error_categories.get(cat, 0) + 1
 
                 if len(self._buffer) >= self.flush_size:
                     pending_flush = self._buffer
@@ -161,6 +221,7 @@ class BatchInstance:
                     request_id=cnpj,
                 )
 
+                total_pages = len(pages) if pages else 0
                 successful_pages = [p for p in (pages or []) if p.success]
 
                 if not successful_pages:
@@ -177,6 +238,7 @@ class BatchInstance:
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
                         website_url=url, error=error_msg[:500],
+                        total_pages_attempted=total_pages, retries_used=attempt,
                     )
 
                 parts = []
@@ -193,6 +255,8 @@ class BatchInstance:
                         cnpj_basico=cnpj, discovery_id=discovery_id,
                         website_url=url,
                         error=f"Conteudo agregado insuficiente ({len(aggregated)} chars)",
+                        pages_scraped=len(successful_pages),
+                        total_pages_attempted=total_pages, retries_used=attempt,
                     )
 
                 chunks = process_content(aggregated)
@@ -200,6 +264,8 @@ class BatchInstance:
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
                         website_url=url, error="Nenhum chunk gerado apos processamento",
+                        pages_scraped=len(successful_pages),
+                        total_pages_attempted=total_pages, retries_used=attempt,
                     )
 
                 for chunk in chunks:
@@ -209,6 +275,8 @@ class BatchInstance:
                 return CompanyResult(
                     cnpj_basico=cnpj, discovery_id=discovery_id,
                     website_url=url, chunks=chunks, success=True,
+                    pages_scraped=len(successful_pages),
+                    total_pages_attempted=total_pages, retries_used=attempt,
                 )
 
             except Exception as e:
@@ -223,11 +291,13 @@ class BatchInstance:
                 return CompanyResult(
                     cnpj_basico=cnpj, discovery_id=discovery_id,
                     website_url=url, error=f"{error_msg} | {short_tb}"[:500],
+                    retries_used=attempt,
                 )
 
         return CompanyResult(
             cnpj_basico=cnpj, discovery_id=discovery_id,
             website_url=url, error="Maximo de retries atingido",
+            retries_used=max_retries,
         )
 
     async def _flush_buffer(self, force: bool = False):
@@ -489,6 +559,12 @@ class BatchScrapeProcessor:
         remaining = self.total - processed
         eta = (remaining / (throughput / 60)) / 60 if throughput > 0 else None
 
+        all_times: List[float] = []
+        all_error_cats: Dict[str, int] = {}
+        all_pages: List[int] = []
+        total_retries = 0
+        peak_in_progress = 0
+
         instance_stats = []
         for inst in self._instances:
             inst_elapsed = time.time() - inst._start_time if inst._start_time else 0
@@ -502,6 +578,27 @@ class BatchScrapeProcessor:
                 "throughput_per_min": round(inst_tp, 1),
             })
 
+            all_times.extend(inst._processing_times_sorted)
+            all_pages.extend(inst._pages_per_company)
+            total_retries += inst._retries_total
+            peak_in_progress = max(peak_in_progress, inst._peak_in_progress)
+            for cat, count in inst._error_categories.items():
+                all_error_cats[cat] = all_error_cats.get(cat, 0) + count
+
+        all_times.sort()
+
+        pct_levels = [50, 60, 70, 80, 90, 95, 99]
+        time_percentiles = _percentiles(all_times, pct_levels)
+
+        avg_time = round(sum(all_times) / len(all_times), 1) if all_times else 0
+        min_time = round(all_times[0], 1) if all_times else 0
+        max_time = round(all_times[-1], 1) if all_times else 0
+        avg_pages = round(sum(all_pages) / len(all_pages), 1) if all_pages else 0
+
+        success_rate = round(self.success_count / processed * 100, 1) if processed > 0 else 0
+
+        infra = self._get_infrastructure_stats()
+
         return {
             "batch_id": self.batch_id,
             "status": self.status,
@@ -509,15 +606,53 @@ class BatchScrapeProcessor:
             "processed": processed,
             "success_count": self.success_count,
             "error_count": self.error_count,
+            "success_rate_pct": success_rate,
             "remaining": remaining,
             "in_progress": self.in_progress,
+            "peak_in_progress": peak_in_progress,
             "throughput_per_min": round(throughput, 1),
             "eta_minutes": round(eta, 1) if eta else None,
+            "elapsed_seconds": round(elapsed, 1),
             "flushes_done": self.flushes_done,
             "buffer_size": self.buffer_size,
+            "processing_time_ms": {
+                "avg": avg_time,
+                "min": min_time,
+                "max": max_time,
+                **time_percentiles,
+            },
+            "error_breakdown": dict(sorted(all_error_cats.items(), key=lambda x: -x[1])),
+            "pages_per_company_avg": avg_pages,
+            "total_retries": total_retries,
+            "infrastructure": infra,
             "last_errors": self.last_errors,
             "instances": instance_stats,
         }
+
+    def _get_infrastructure_stats(self) -> dict:
+        """Coleta métricas dos componentes de infraestrutura."""
+        stats: Dict[str, Any] = {}
+        try:
+            from app.services.scraper_manager.proxy_manager import proxy_pool
+            stats["proxy_pool"] = proxy_pool.get_status()
+        except Exception:
+            stats["proxy_pool"] = {"error": "unavailable"}
+        try:
+            from app.services.scraper_manager import concurrency_manager
+            stats["concurrency"] = concurrency_manager.get_status()
+        except Exception:
+            stats["concurrency"] = {"error": "unavailable"}
+        try:
+            from app.services.scraper_manager import domain_rate_limiter
+            stats["rate_limiter"] = domain_rate_limiter.get_status()
+        except Exception:
+            stats["rate_limiter"] = {"error": "unavailable"}
+        try:
+            from app.services.scraper_manager import circuit_breaker
+            stats["circuit_breaker"] = circuit_breaker.get_status()
+        except Exception:
+            stats["circuit_breaker"] = {"error": "unavailable"}
+        return stats
 
     async def cancel(self):
         if self._task and not self._task.done():
