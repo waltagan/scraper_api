@@ -28,7 +28,7 @@ from .models import (
 from enum import Enum
 
 from .constants import (
-    scraper_config, DEFAULT_HEADERS, FAST_TRACK_CONFIG, RETRY_TRACK_CONFIG,
+    scraper_config, FAST_TRACK_CONFIG, RETRY_TRACK_CONFIG,
     build_headers, get_random_impersonate, smart_referer,
 )
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, parse_html
@@ -69,15 +69,6 @@ class FailureType(Enum):
     DNS_ERROR = "dns_error"
     UNKNOWN = "unknown"
 
-
-# User-Agents para rotação
-USER_AGENTS = [
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-]
 
 
 def _try_reuse_analyzer_html(
@@ -139,10 +130,11 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", req
     """
     overall_start = time.perf_counter()
 
-    # 1. PROBE URL
+    # 1. PROBE URL (sob controle de concorrência)
     probe_start = time.perf_counter()
     try:
-        best_url, probe_time = await url_prober.probe(url)
+        async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="probe"):
+            best_url, probe_time = await url_prober.probe(url)
         url = best_url
     except URLNotReachable as e:
         log_msg = e.get_log_message() if hasattr(e, 'get_log_message') else str(e)
@@ -151,9 +143,10 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", req
     except Exception as e:
         logger.warning(f"{ctx_label} ⚠️ Erro no probe, usando URL original: {e}")
 
-    # 2. ANALISAR SITE
+    # 2. ANALISAR SITE (sob controle de concorrência)
     analysis_start = time.perf_counter()
-    site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
+    async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="analyze"):
+        site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
     analysis_time_ms = (time.perf_counter() - analysis_start) * 1000
 
     # 3. SELECIONAR ESTRATÉGIAS
@@ -241,13 +234,14 @@ async def scrape_all_subpages(
     phases = {}
     meta = ScrapeResult()
 
-    # 1. ANALYZE DIRETO
+    # 1. ANALYZE DIRETO (sob controle de concorrência)
     t0 = time.perf_counter()
-    site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
+    async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="analyze"):
+        site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
     phases['analyze'] = (time.perf_counter() - t0) * 1000
 
     used_probe = False
-    # 2. SE ANALYZER FALHOU, FALLBACK PARA PROBE
+    # 2. SE ANALYZER FALHOU, FALLBACK PARA PROBE (sob controle de concorrência)
     if not site_profile.raw_html or (site_profile.status_code and site_profile.status_code >= 400):
         logger.info(
             f"{ctx_label}📡 Analyzer falhou (html={bool(site_profile.raw_html)}, "
@@ -255,13 +249,15 @@ async def scrape_all_subpages(
         )
         try:
             t0 = time.perf_counter()
-            best_url, probe_time = await url_prober.probe(url)
+            async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="probe"):
+                best_url, probe_time = await url_prober.probe(url)
             phases['probe'] = (time.perf_counter() - t0) * 1000
             used_probe = True
             if best_url != url:
                 url = best_url
                 t0 = time.perf_counter()
-                site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
+                async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="analyze_retry"):
+                    site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
                 phases['analyze_retry'] = (time.perf_counter() - t0) * 1000
         except URLNotReachable as e:
             log_msg = e.get_log_message() if hasattr(e, 'get_log_message') else str(e)
@@ -629,9 +625,9 @@ async def _scrape_main_page(
     for idx, strategy in enumerate(strategies):
         config = strategy_selector.get_strategy_config(strategy)
         
-        
         try:
-            page = await _execute_strategy(url, strategy, config, ctx_label)
+            async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="main_page"):
+                page = await _execute_strategy(url, strategy, config, ctx_label)
             
             if page and page.success:
                 page.response_time_ms = (time.perf_counter() - main_start) * 1000
@@ -676,10 +672,7 @@ async def _execute_strategy(
     ctx_label: str = ""
 ) -> Optional[ScrapedPage]:
     """Executa estratégia de scraping (SEMPRE via proxy)."""
-    headers = DEFAULT_HEADERS.copy()
-
-    if config.get("rotate_ua"):
-        headers["User-Agent"] = random.choice(USER_AGENTS)
+    headers, impersonate = build_headers()
 
     proxy = proxy_pool.get_next_proxy()
     if not proxy:
@@ -861,17 +854,19 @@ async def _scrape_batch_parallel(
                         return page
 
                     if attempt < max_retries:
-                        await asyncio.sleep(0.1 * (attempt + 1))
+                        await asyncio.sleep(random.uniform(1.0, 2.0))
                         continue
 
                     return page
 
             except TimeoutError:
                 if attempt < max_retries:
+                    await asyncio.sleep(random.uniform(1.0, 2.0))
                     continue
                 return ScrapedPage(url=normalized_url, content="", error="Timeout acquiring slot")
             except Exception as e:
                 if attempt < max_retries:
+                    await asyncio.sleep(random.uniform(1.0, 2.0))
                     continue
                 return ScrapedPage(url=normalized_url, content="", error=str(e))
 
