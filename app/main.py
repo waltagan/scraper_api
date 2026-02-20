@@ -279,7 +279,7 @@ async def health_check():
 
 @app.get("/debug/network-test")
 async def network_test():
-    """Testa bandwidth e latência de rede do container."""
+    """Testa bandwidth, latência e proxies do container."""
     import subprocess, os, platform
 
     results = {
@@ -289,81 +289,88 @@ async def network_test():
     }
 
     try:
-        mem = subprocess.run(
-            ["free", "-h"], capture_output=True, text=True, timeout=5
-        )
-        results["memory"] = mem.stdout.strip() if mem.returncode == 0 else "N/A"
+        r = subprocess.run(["cat", "/proc/meminfo"], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            for line in r.stdout.splitlines():
+                if line.startswith("MemTotal:"):
+                    kb = int(line.split()[1])
+                    results["memory_gb"] = round(kb / 1024 / 1024, 1)
+                elif line.startswith("MemAvailable:"):
+                    kb = int(line.split()[1])
+                    results["memory_available_gb"] = round(kb / 1024 / 1024, 1)
     except Exception:
-        results["memory"] = "N/A (command not available)"
+        results["memory_gb"] = "N/A"
 
-    test_urls = [
-        ("cloudflare", "https://speed.cloudflare.com/__down?bytes=10000000"),
-        ("google_br", "https://www.google.com.br"),
-    ]
-    for label, url in test_urls:
+    def curl_test(url, label, max_time=15):
         try:
             r = subprocess.run(
                 ["curl", "-o", "/dev/null", "-s", "-w",
                  "speed_download=%{speed_download} time_namelookup=%{time_namelookup} "
                  "time_connect=%{time_connect} time_starttransfer=%{time_starttransfer} "
-                 "time_total=%{time_total}",
-                 "--max-time", "15", url],
-                capture_output=True, text=True, timeout=20
+                 "time_total=%{time_total} http_code=%{http_code} size_download=%{size_download}",
+                 "--max-time", str(max_time), url],
+                capture_output=True, text=True, timeout=max_time + 5
             )
             if r.returncode == 0:
                 parts = dict(p.split("=") for p in r.stdout.strip().split() if "=" in p)
                 speed_bytes = float(parts.get("speed_download", 0))
-                results[label] = {
+                return {
                     "speed_mbps": round(speed_bytes * 8 / 1_000_000, 1),
                     "dns_ms": round(float(parts.get("time_namelookup", 0)) * 1000),
                     "connect_ms": round(float(parts.get("time_connect", 0)) * 1000),
                     "ttfb_ms": round(float(parts.get("time_starttransfer", 0)) * 1000),
                     "total_ms": round(float(parts.get("time_total", 0)) * 1000),
+                    "http_code": parts.get("http_code", "?"),
+                    "size_bytes": int(float(parts.get("size_download", 0))),
                 }
+            return {"error": f"curl exit {r.returncode}: {r.stderr[:200]}"}
         except Exception as e:
-            results[label] = {"error": str(e)}
+            return {"error": str(e)}
 
-    try:
-        from app.services.scraper_manager.proxy_manager import proxy_pool
+    results["cloudflare_10mb"] = curl_test(
+        "https://speed.cloudflare.com/__down?bytes=10000000", "cf10"
+    )
+    results["google_br"] = curl_test("https://www.google.com.br", "gbr")
+
+    results["bandwidth_50mb"] = curl_test(
+        "http://speedtest.tele2.net/10MB.zip", "bw50", max_time=20
+    )
+
+    from app.services.scraper_manager.proxy_manager import proxy_pool
+    from app.core.config import settings
+
+    results["env_check"] = {
+        "WEBSHARE_PROXY_LIST_URL": "SET" if getattr(settings, "WEBSHARE_PROXY_LIST_URL", None) else "NOT SET",
+        "DATABASE_URL": "SET" if getattr(settings, "DATABASE_URL", None) else "NOT SET",
+    }
+
+    proxy_count = await proxy_pool.preload()
+    results["proxy_pool"] = {"total_loaded": proxy_count}
+
+    if proxy_count > 0:
         proxy = proxy_pool.get_next_proxy()
         if proxy:
-            r = subprocess.run(
-                ["curl", "-o", "/dev/null", "-s", "--proxy", proxy, "-w",
-                 "speed_download=%{speed_download} time_total=%{time_total} "
-                 "time_connect=%{time_connect}",
-                 "--max-time", "15", "https://www.google.com.br"],
-                capture_output=True, text=True, timeout=20
-            )
-            if r.returncode == 0:
-                parts = dict(p.split("=") for p in r.stdout.strip().split() if "=" in p)
-                results["proxy_test"] = {
-                    "proxy": proxy[:40] + "...",
-                    "speed_mbps": round(float(parts.get("speed_download", 0)) * 8 / 1_000_000, 1),
-                    "connect_ms": round(float(parts.get("time_connect", 0)) * 1000),
-                    "total_ms": round(float(parts.get("time_total", 0)) * 1000),
-                }
-        else:
-            results["proxy_test"] = {"error": "No proxy loaded"}
-    except Exception as e:
-        results["proxy_test"] = {"error": str(e)}
-
-    try:
-        r = subprocess.run(
-            ["curl", "-o", "/dev/null", "-s", "-w",
-             "speed_download=%{speed_download} time_total=%{time_total}",
-             "--max-time", "20",
-             "https://speed.cloudflare.com/__down?bytes=100000000"],
-            capture_output=True, text=True, timeout=25
-        )
-        if r.returncode == 0:
-            parts = dict(p.split("=") for p in r.stdout.strip().split() if "=" in p)
-            speed_bytes = float(parts.get("speed_download", 0))
-            results["bandwidth_100mb"] = {
-                "speed_mbps": round(speed_bytes * 8 / 1_000_000, 1),
-                "speed_MBs": round(speed_bytes / 1_000_000, 1),
-                "total_s": round(float(parts.get("time_total", 0)), 2),
-            }
-    except Exception as e:
-        results["bandwidth_100mb"] = {"error": str(e)}
+            try:
+                r = subprocess.run(
+                    ["curl", "-o", "/dev/null", "-s", "--proxy", proxy, "-w",
+                     "speed_download=%{speed_download} time_total=%{time_total} "
+                     "time_connect=%{time_connect} time_starttransfer=%{time_starttransfer} "
+                     "http_code=%{http_code}",
+                     "--max-time", "15", "https://www.google.com.br"],
+                    capture_output=True, text=True, timeout=20
+                )
+                if r.returncode == 0:
+                    parts = dict(p.split("=") for p in r.stdout.strip().split() if "=" in p)
+                    results["proxy_test"] = {
+                        "proxy": proxy[:40] + "...",
+                        "connect_ms": round(float(parts.get("time_connect", 0)) * 1000),
+                        "ttfb_ms": round(float(parts.get("time_starttransfer", 0)) * 1000),
+                        "total_ms": round(float(parts.get("time_total", 0)) * 1000),
+                        "http_code": parts.get("http_code", "?"),
+                    }
+            except Exception as e:
+                results["proxy_test"] = {"error": str(e)}
+    else:
+        results["proxy_test"] = {"error": "0 proxies loaded - check WEBSHARE_PROXY_LIST_URL"}
 
     return results
