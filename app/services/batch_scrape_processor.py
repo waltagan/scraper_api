@@ -671,6 +671,7 @@ class BatchScrapeProcessor:
         concurrency_manager.update_limits(
             global_limit=FAST_TRACK_CONFIG.get('site_semaphore_limit', 5000),
             per_domain_limit=FAST_TRACK_CONFIG.get('per_domain_limit', 25),
+            slow_domain_limit=3,
         )
 
         proxy_count = await proxy_pool.preload()

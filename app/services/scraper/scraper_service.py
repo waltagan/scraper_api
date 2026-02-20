@@ -168,6 +168,7 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", req
     
     if slow_mode:
         concurrency_manager.mark_domain_slow(url)
+        domain_rate_limiter.mark_domain_slow(url)
     
     per_request_timeout = (
         scraper_config.slow_per_request_timeout
@@ -301,6 +302,7 @@ async def scrape_all_subpages(
 
     if slow_mode:
         concurrency_manager.mark_domain_slow(url)
+        domain_rate_limiter.mark_domain_slow(url)
 
     per_request_timeout = (
         scraper_config.slow_per_request_timeout
@@ -418,7 +420,8 @@ async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[
     # Atualizar managers com config do fast track
     concurrency_manager.update_limits(
         global_limit=FAST_TRACK_CONFIG['site_semaphore_limit'],
-        per_domain_limit=FAST_TRACK_CONFIG['per_domain_limit']
+        per_domain_limit=FAST_TRACK_CONFIG['per_domain_limit'],
+        slow_domain_limit=3,
     )
     
     fast_sem = asyncio.Semaphore(FAST_TRACK_CONFIG['site_semaphore_limit'])
@@ -449,7 +452,8 @@ async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[
     # Atualizar managers com config do retry track
     concurrency_manager.update_limits(
         global_limit=RETRY_TRACK_CONFIG['site_semaphore_limit'],
-        per_domain_limit=RETRY_TRACK_CONFIG['per_domain_limit']
+        per_domain_limit=RETRY_TRACK_CONFIG['per_domain_limit'],
+        slow_domain_limit=3,
     )
     
     # Resetar circuit breaker para dar nova chance
