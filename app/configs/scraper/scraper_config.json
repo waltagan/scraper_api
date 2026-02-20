@@ -1,6 +1,6 @@
 {
-  "request_timeout": 12,
-  "probe_timeout": 12,
+  "request_timeout": 25,
+  "probe_timeout": 25,
   "max_retries": 1,
   "retry_delay": 0,
   "max_subpages": 15,
