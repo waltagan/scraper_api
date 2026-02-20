@@ -8,7 +8,7 @@ from typing import Optional, List, Dict, Any
 class BatchScrapeRequest(BaseModel):
     """Request para iniciar batch scrape."""
     limit: Optional[int] = Field(None, description="Maximo de empresas a processar (None = todas pendentes)")
-    worker_count: int = Field(2000, ge=1, le=5000, description="Numero total de workers (divididos entre instancias)")
+    worker_count: int = Field(2000, ge=1, le=20000, description="Numero total de workers (divididos entre instancias)")
     flush_size: int = Field(1000, ge=10, le=5000, description="Tamanho do buffer antes de flush no DB")
     instances: int = Field(10, ge=1, le=50, description="Numero de instancias paralelas de processamento")
     status_filter: List[str] = Field(
