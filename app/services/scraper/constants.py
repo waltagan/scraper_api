@@ -66,7 +66,8 @@ FAST_TRACK_CONFIG = _fast_track_from_json or {
     'batch_size': 50,
     'batch_min_delay': 0.05,
     'batch_max_delay': 0.15,
-    'intra_batch_delay': 0.02
+    'intra_batch_delay': 0.02,
+    'subpage_max_retries': 4
 }
 
 # Configuração padrão = Fast Track
@@ -253,6 +254,10 @@ class ScraperConfig:
     @property
     def intra_batch_delay(self) -> float:
         return self._config.get('intra_batch_delay', 0.5)
+
+    @property
+    def subpage_max_retries(self) -> int:
+        return self._config.get('subpage_max_retries', 4)
     
     def update(self, **kwargs):
         """Atualiza configurações dinamicamente."""

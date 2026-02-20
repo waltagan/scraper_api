@@ -811,7 +811,7 @@ async def _scrape_batch_parallel(
     Cada subpage usa proxy individual + até 2 retries com proxy diferente.
     Circuit breaker só registra falhas reais do site (não falhas de proxy/rede).
     """
-    max_retries = 2
+    max_retries = scraper_config.subpage_max_retries
 
     async def scrape_with_retry(i: int, url: str) -> ScrapedPage:
         if i > 0:
@@ -829,7 +829,7 @@ async def _scrape_batch_parallel(
                 if not await domain_rate_limiter.acquire(url, timeout=10.0):
                     return ScrapedPage(url=normalized_url, content="", error="Rate limit timeout")
 
-                async with concurrency_manager.acquire(url, timeout=30.0, request_id=request_id, substage="subpages"):
+                async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="subpages"):
                     used_proxy = proxy_pool.get_next_proxy()
                     async with AsyncSession(
                         impersonate="chrome120",

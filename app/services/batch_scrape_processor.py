@@ -414,6 +414,7 @@ class BatchScrapeProcessor:
         self.total = 0
         self.status = "idle"
         self._start_time: float = 0
+        self._proxy_health: dict = {}
 
     @property
     def processed(self) -> int:
@@ -483,7 +484,18 @@ class BatchScrapeProcessor:
             self.status = "error"
             return
 
-        # Carregar TODAS as empresas pendentes de uma vez
+        logger.info(f"[Batch {self.batch_id}] 🏥 Iniciando health check de {proxy_count} proxies...")
+        self._proxy_health = await proxy_pool.health_check()
+        active = len(proxy_pool._proxies)
+        logger.info(
+            f"[Batch {self.batch_id}] 🏥 Health check: {active}/{proxy_count} proxies saudáveis "
+            f"({self._proxy_health.get('healthy_pct', 0)}%)"
+        )
+        if active == 0:
+            logger.error(f"[Batch {self.batch_id}] ❌ ZERO proxies saudáveis! Abortando.")
+            self.status = "error"
+            return
+
         logger.info(
             f"[Batch {self.batch_id}] Carregando empresas pendentes..."
         )
@@ -687,7 +699,10 @@ class BatchScrapeProcessor:
         stats: Dict[str, Any] = {}
         try:
             from app.services.scraper_manager.proxy_manager import proxy_pool
-            stats["proxy_pool"] = proxy_pool.get_status()
+            pool_status = proxy_pool.get_status()
+            if self._proxy_health:
+                pool_status["health_check"] = self._proxy_health
+            stats["proxy_pool"] = pool_status
         except Exception:
             stats["proxy_pool"] = {"error": "unavailable"}
         try:
