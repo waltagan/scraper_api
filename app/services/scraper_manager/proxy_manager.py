@@ -269,8 +269,101 @@ class ProxyPool:
                 f"{self._successful_requests / total_outcomes:.1%}"
                 if total_outcomes > 0 else "N/A"
             ),
+            "per_proxy_analysis": self.get_per_proxy_analysis(),
         }
         return status
+
+    def get_per_proxy_analysis(self, min_requests: int = 3) -> dict:
+        """
+        Analisa performance individual de cada proxy.
+        Retorna distribuição, buckets de sucesso, e piores/melhores proxies.
+        Só inclui proxies com >= min_requests outcomes para evitar ruído.
+        """
+        rates: List[float] = []
+        used_count = 0
+        unused_count = 0
+        proxy_details: List[dict] = []
+
+        for s in self._stats.values():
+            outcomes = s.successes + s.failures
+            if outcomes == 0:
+                unused_count += 1
+                continue
+            used_count += 1
+            rate = s.successes / outcomes * 100
+            if outcomes >= min_requests:
+                rates.append(rate)
+                proxy_details.append({
+                    "proxy_id": s.proxy[-12:],
+                    "requests": s.requests,
+                    "outcomes": outcomes,
+                    "successes": s.successes,
+                    "failures": s.failures,
+                    "success_rate_pct": round(rate, 1),
+                })
+
+        if not rates:
+            return {"proxies_analyzed": 0}
+
+        rates.sort()
+        n = len(rates)
+
+        buckets = {
+            "90_100_pct": sum(1 for r in rates if r >= 90),
+            "70_90_pct": sum(1 for r in rates if 70 <= r < 90),
+            "50_70_pct": sum(1 for r in rates if 50 <= r < 70),
+            "30_50_pct": sum(1 for r in rates if 30 <= r < 50),
+            "10_30_pct": sum(1 for r in rates if 10 <= r < 30),
+            "0_10_pct": sum(1 for r in rates if r < 10),
+        }
+
+        avg_rate = sum(rates) / n
+        variance = sum((r - avg_rate) ** 2 for r in rates) / n
+        std_dev = variance ** 0.5
+
+        proxy_details.sort(key=lambda x: x["success_rate_pct"])
+        worst_5 = proxy_details[:5]
+        best_5 = proxy_details[-5:][::-1]
+
+        return {
+            "proxies_analyzed": n,
+            "proxies_used": used_count,
+            "proxies_unused": unused_count,
+            "success_rate_distribution": {
+                "avg_pct": round(avg_rate, 1),
+                "std_dev_pct": round(std_dev, 1),
+                "min_pct": round(rates[0], 1),
+                "max_pct": round(rates[-1], 1),
+                "p10": round(rates[int(n * 0.10)], 1),
+                "p25": round(rates[int(n * 0.25)], 1),
+                "p50": round(rates[n // 2], 1),
+                "p75": round(rates[int(n * 0.75)], 1),
+                "p90": round(rates[int(n * 0.90)], 1),
+            },
+            "buckets": buckets,
+            "verdict": self._verdict(std_dev, avg_rate),
+            "worst_5": worst_5,
+            "best_5": best_5,
+        }
+
+    @staticmethod
+    def _verdict(std_dev: float, avg_rate: float) -> str:
+        """Gera diagnóstico baseado na distribuição."""
+        if std_dev < 10:
+            return (
+                f"UNIFORME — todos os proxies têm taxa similar (~{avg_rate:.0f}%). "
+                f"O problema NÃO é proxy individual, é como os sites respondem ao tipo de proxy (datacenter)."
+            )
+        elif std_dev < 25:
+            return (
+                f"MODERADA — variação moderada (std={std_dev:.0f}%). "
+                f"Maioria dos proxies performa similar, alguns outliers."
+            )
+        else:
+            return (
+                f"DISPERSA — grande variação (std={std_dev:.0f}%). "
+                f"Alguns proxies são muito piores que outros. Filtrar proxies ruins pode ajudar."
+            )
 
     def reset_metrics(self):
         """Reseta métricas."""
