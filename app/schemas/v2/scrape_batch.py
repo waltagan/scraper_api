@@ -8,8 +8,9 @@ from typing import Optional, List
 class BatchScrapeRequest(BaseModel):
     """Request para iniciar batch scrape."""
     limit: Optional[int] = Field(None, description="Maximo de empresas a processar (None = todas pendentes)")
-    worker_count: int = Field(2000, ge=1, le=5000, description="Numero de workers paralelos")
+    worker_count: int = Field(2000, ge=1, le=5000, description="Numero total de workers (divididos entre instancias)")
     flush_size: int = Field(1000, ge=10, le=5000, description="Tamanho do buffer antes de flush no DB")
+    instances: int = Field(10, ge=1, le=50, description="Numero de instancias paralelas de processamento")
     status_filter: List[str] = Field(
         default=['muito_alto', 'alto', 'medio'],
         description="Lista de discovery_status para filtrar"
@@ -19,8 +20,9 @@ class BatchScrapeRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "limit": 10000,
-                "worker_count": 600,
+                "worker_count": 2000,
                 "flush_size": 1000,
+                "instances": 10,
                 "status_filter": ["muito_alto", "alto", "medio"]
             }
         }
@@ -34,7 +36,18 @@ class BatchScrapeResponse(BaseModel):
     total_companies: int
     worker_count: int
     flush_size: int
+    instances: int
     message: str
+
+
+class InstanceStatus(BaseModel):
+    """Status de uma instância individual."""
+    id: int
+    status: str
+    processed: int
+    success: int
+    errors: int
+    throughput_per_min: float
 
 
 class BatchStatusResponse(BaseModel):
@@ -52,3 +65,4 @@ class BatchStatusResponse(BaseModel):
     flushes_done: int
     buffer_size: int
     last_errors: List[dict] = Field(default_factory=list, description="Ultimos 10 erros")
+    instances: List[InstanceStatus] = Field(default_factory=list, description="Status por instancia")

@@ -35,18 +35,18 @@ FAST_TRACK_CONFIG = get_config("scraper/scraper_fast_track", {}) or {
     'slow_probe_threshold_ms': 10000,
     'slow_main_threshold_ms': 15000,
     'slow_subpage_cap': 10,
-    'slow_per_request_timeout': 12,
-    'fast_per_request_timeout': 8,
+    'slow_per_request_timeout': 15,
+    'fast_per_request_timeout': 10,
     'fast_chunk_internal_limit': 50,
     'slow_chunk_internal_limit': 10,
     'slow_chunk_semaphore_limit': 200,
     'proxy_max_latency_ms': 300,
     'proxy_max_failures': 3,
     'per_domain_limit': 25,
-    'batch_size': 50,
-    'batch_min_delay': 0.1,
-    'batch_max_delay': 0.3,
-    'intra_batch_delay': 0.05
+    'batch_size': 30,
+    'batch_min_delay': 0.5,
+    'batch_max_delay': 1.5,
+    'intra_batch_delay': 0.9
 }
 
 # Configuração padrão = Fast Track
