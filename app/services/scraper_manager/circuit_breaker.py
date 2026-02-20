@@ -54,9 +54,9 @@ class CircuitBreaker:
     
     def __init__(
         self,
-        failure_threshold: int = 5,
-        recovery_timeout: float = 60.0,
-        half_open_max_tests: int = 2
+        failure_threshold: int = 12,
+        recovery_timeout: float = 30.0,
+        half_open_max_tests: int = 3
     ):
         """
         Args:

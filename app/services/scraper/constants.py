@@ -45,28 +45,28 @@ else:
 
 FAST_TRACK_CONFIG = _fast_track_from_json or {
     'site_semaphore_limit': 5000,
-    'circuit_breaker_threshold': 5,
-    'page_timeout': 20000,
+    'circuit_breaker_threshold': 12,
+    'page_timeout': 15000,
     'md_threshold': 0.3,
     'min_word_threshold': 5,
-    'chunk_size': 25,
-    'chunk_semaphore_limit': 5000,
-    'session_timeout': 15,
-    'slow_probe_threshold_ms': 10000,
-    'slow_main_threshold_ms': 15000,
-    'slow_subpage_cap': 10,
+    'chunk_size': 50,
+    'chunk_semaphore_limit': 2000,
+    'session_timeout': 10,
+    'slow_probe_threshold_ms': 5000,
+    'slow_main_threshold_ms': 20000,
+    'slow_subpage_cap': 15,
     'slow_per_request_timeout': 15,
     'fast_per_request_timeout': 10,
     'fast_chunk_internal_limit': 50,
     'slow_chunk_internal_limit': 10,
-    'slow_chunk_semaphore_limit': 200,
-    'proxy_max_latency_ms': 300,
-    'proxy_max_failures': 3,
+    'slow_chunk_semaphore_limit': 100,
+    'proxy_max_latency_ms': 800,
+    'proxy_max_failures': 5,
     'per_domain_limit': 25,
-    'batch_size': 30,
-    'batch_min_delay': 0.5,
-    'batch_max_delay': 1.5,
-    'intra_batch_delay': 0.9
+    'batch_size': 50,
+    'batch_min_delay': 0.05,
+    'batch_max_delay': 0.15,
+    'intra_batch_delay': 0.02
 }
 
 # Configuração padrão = Fast Track

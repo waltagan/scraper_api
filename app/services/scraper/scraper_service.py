@@ -836,10 +836,10 @@ async def _scrape_batch_parallel(
         normalized_url = normalize_url(url)
 
         try:
-            if not await domain_rate_limiter.acquire(url, timeout=5.0):
+            if not await domain_rate_limiter.acquire(url, timeout=10.0):
                 return ScrapedPage(url=normalized_url, content="", error="Rate limit timeout")
 
-            async with concurrency_manager.acquire(url, timeout=5.0, request_id=request_id, substage="subpages"):
+            async with concurrency_manager.acquire(url, timeout=15.0, request_id=request_id, substage="subpages"):
                 if shared_session:
                     used_proxy = shared_proxy
                     page = await _scrape_single_subpage(

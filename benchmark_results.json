@@ -1,0 +1,46 @@
+[
+  {
+    "workers": 400,
+    "total": 400,
+    "processed": 400,
+    "success": 375,
+    "errors": 25,
+    "elapsed_s": 81.9,
+    "throughput_per_min": 293.1,
+    "success_rate": 93.8,
+    "status": "completed"
+  },
+  {
+    "workers": 600,
+    "total": 400,
+    "processed": 400,
+    "success": 366,
+    "errors": 34,
+    "elapsed_s": 100.0,
+    "throughput_per_min": 240.1,
+    "success_rate": 91.5,
+    "status": "completed"
+  },
+  {
+    "workers": 800,
+    "total": 400,
+    "processed": 400,
+    "success": 370,
+    "errors": 30,
+    "elapsed_s": 81.3,
+    "throughput_per_min": 295.2,
+    "success_rate": 92.5,
+    "status": "completed"
+  },
+  {
+    "workers": 1000,
+    "total": 400,
+    "processed": 399,
+    "success": 375,
+    "errors": 24,
+    "elapsed_s": 98.1,
+    "throughput_per_min": 244.1,
+    "success_rate": 94.0,
+    "status": "running"
+  }
+]
