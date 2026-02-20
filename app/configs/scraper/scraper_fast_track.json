@@ -27,12 +27,12 @@
   "per_domain_limit_note": "WHAT: req paralelas por domínio. CHANGED: 25→5 (25 IPs simultâneos no mesmo site = padrão de bot farm detectável por WAF).",
   "batch_size": 10,
   "batch_size_note": "WHAT: subpáginas por batch. CHANGED: 50→10 (batches menores com inter-batch delay simulam navegação humana).",
-  "batch_min_delay": 0.5,
-  "batch_min_delay_note": "WHAT: delay mínimo entre batches (s). CHANGED: 0.05→0.5.",
-  "batch_max_delay": 2.0,
-  "batch_max_delay_note": "WHAT: delay máximo entre batches (s). CHANGED: 0.15→2.0.",
-  "intra_batch_delay": 0.5,
-  "intra_batch_delay_note": "WHAT: delay entre requisições no batch (s). CHANGED: 0.02→0.5 (simula tempo de navegação humana entre cliques).",
+  "batch_min_delay": 0.2,
+  "batch_min_delay_note": "WHAT: delay mínimo entre batches (s). CHANGED: 0.5→0.2 (otimização throughput, cada empresa=domínio diferente).",
+  "batch_max_delay": 0.8,
+  "batch_max_delay_note": "WHAT: delay máximo entre batches (s). CHANGED: 2.0→0.8 (reduzir cauda longa de tempo por empresa).",
+  "intra_batch_delay": 0.15,
+  "intra_batch_delay_note": "WHAT: delay entre requisições no batch (s). CHANGED: 0.5→0.15 (3x mais rápido, ainda evita burst detection).",
   "subpage_max_retries": 2,
   "subpage_max_retries_note": "WHAT: retries por subpage com proxy diferente."
 }

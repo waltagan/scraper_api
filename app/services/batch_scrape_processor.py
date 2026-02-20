@@ -417,7 +417,7 @@ class BatchInstance:
         for attempt in range(max_retries + 1):
             try:
                 result = await scrape_all_subpages(
-                    url=url, max_subpages=50,
+                    url=url, max_subpages=15,
                     ctx_label=f"[B{self.batch_id}I{self.instance_id}]",
                     request_id=cnpj,
                 )
