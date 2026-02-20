@@ -133,7 +133,7 @@ FAST_TRACK_CONFIG = _fast_track_from_json or {
     'chunk_size': 10,
     'chunk_semaphore_limit': 2000,
     'session_timeout': 40,
-    'slow_probe_threshold_ms': 15000,
+    'slow_probe_threshold_ms': 10000,
     'slow_main_threshold_ms': 20000,
     'slow_subpage_cap': 15,
     'slow_per_request_timeout': 40,

@@ -421,7 +421,7 @@ async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[
     concurrency_manager.update_limits(
         global_limit=FAST_TRACK_CONFIG['site_semaphore_limit'],
         per_domain_limit=FAST_TRACK_CONFIG['per_domain_limit'],
-        slow_domain_limit=3,
+        slow_domain_limit=5,
     )
     
     fast_sem = asyncio.Semaphore(FAST_TRACK_CONFIG['site_semaphore_limit'])
@@ -453,7 +453,7 @@ async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[
     concurrency_manager.update_limits(
         global_limit=RETRY_TRACK_CONFIG['site_semaphore_limit'],
         per_domain_limit=RETRY_TRACK_CONFIG['per_domain_limit'],
-        slow_domain_limit=3,
+        slow_domain_limit=5,
     )
     
     # Resetar circuit breaker para dar nova chance
