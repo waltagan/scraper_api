@@ -1,0 +1,4394 @@
+{
+  "proxy": "us.rotgb.711proxy.com:10000",
+  "timestamp": "2026-02-20 17:38:11",
+  "tests": [
+    {
+      "label": "Timeout=5s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 5,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 35.4,
+      "throughput_sites_per_min": 339.1,
+      "throughput_pages_per_sec": 22.2,
+      "main_page": {
+        "total": 200,
+        "success": 167,
+        "failure": 33,
+        "success_rate": 83.5,
+        "latency": {
+          "min": 442,
+          "p10": 2329,
+          "p25": 2882,
+          "p50": 3248,
+          "p75": 4361,
+          "p90": 5003,
+          "p95": 5477,
+          "p99": 6033,
+          "max": 6093,
+          "avg": 3484,
+          "stdev": 1132
+        },
+        "errors": {
+          "timeout": 16,
+          "http_403": 8,
+          "connection_error": 7,
+          "http_404": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 167
+        },
+        "avg_size_kb": 257.1
+      },
+      "subpages": {
+        "total_links_found": 3787,
+        "total_attempted": 658,
+        "avg_links_per_site": 22.7,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 658,
+        "success": 619,
+        "failure": 39,
+        "success_rate": 94.1,
+        "latency_success": {
+          "min": 457,
+          "p10": 848,
+          "p25": 1686,
+          "p50": 2968,
+          "p75": 4070,
+          "p90": 4794,
+          "p95": 5178,
+          "p99": 5790,
+          "max": 6034,
+          "avg": 2904,
+          "stdev": 1428
+        },
+        "latency_failure": {
+          "min": 10,
+          "p10": 386,
+          "p25": 614,
+          "p50": 4835,
+          "p75": 5990,
+          "p90": 6587,
+          "p95": 6594,
+          "p99": 6600,
+          "max": 6600,
+          "avg": 3383,
+          "stdev": 2651
+        },
+        "histogram_success": {
+          "0-1s": 88,
+          "1-2s": 96,
+          "2-3s": 133,
+          "3-5s": 259,
+          "5-8s": 43,
+          "8-10s": 0,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "timeout": 18,
+          "http_404": 11,
+          "connection_error": 6,
+          "http_401": 1,
+          "http_500": 1,
+          "http_403": 1,
+          "http_409": 1
+        },
+        "status_codes": {
+          "200": 619
+        },
+        "avg_size_kb": 274.1,
+        "retries_total": 120,
+        "avg_retries_per_page": 0.18
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 1734,
+          "p10": 3726,
+          "p25": 6143,
+          "p50": 9841,
+          "p75": 12374,
+          "p90": 16264,
+          "p95": 18798,
+          "p99": 21708,
+          "max": 25341,
+          "avg": 9831,
+          "stdev": 4713
+        },
+        "latency_success": {
+          "min": 2224,
+          "p10": 4125,
+          "p25": 6810,
+          "p50": 9921,
+          "p75": 13789,
+          "p90": 17560,
+          "p95": 18802,
+          "p99": 21708,
+          "max": 25341,
+          "avg": 10312,
+          "stdev": 4750
+        },
+        "histogram": {
+          "0-5s": 21,
+          "5-10s": 65,
+          "10-15s": 50,
+          "15-20s": 27,
+          "20-30s": 4,
+          "30-45s": 0,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 207.6,
+        "main_mb": 41.9,
+        "sub_mb": 165.7
+      }
+    },
+    {
+      "label": "Timeout=8s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 8,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 44.4,
+      "throughput_sites_per_min": 270.2,
+      "throughput_pages_per_sec": 19.6,
+      "main_page": {
+        "total": 200,
+        "success": 181,
+        "failure": 19,
+        "success_rate": 90.5,
+        "latency": {
+          "min": 606,
+          "p10": 2081,
+          "p25": 2538,
+          "p50": 2978,
+          "p75": 4075,
+          "p90": 5351,
+          "p95": 6212,
+          "p99": 8409,
+          "max": 8776,
+          "avg": 3414,
+          "stdev": 1504
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 7,
+          "http_404": 1,
+          "http_400": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 181
+        },
+        "avg_size_kb": 259.7
+      },
+      "subpages": {
+        "total_links_found": 4214,
+        "total_attempted": 714,
+        "avg_links_per_site": 23.3,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 714,
+        "success": 689,
+        "failure": 25,
+        "success_rate": 96.5,
+        "latency_success": {
+          "min": 383,
+          "p10": 783,
+          "p25": 1989,
+          "p50": 2768,
+          "p75": 3660,
+          "p90": 5158,
+          "p95": 6233,
+          "p99": 7892,
+          "max": 8509,
+          "avg": 2919,
+          "stdev": 1646
+        },
+        "latency_failure": {
+          "min": 354,
+          "p10": 359,
+          "p25": 433,
+          "p50": 842,
+          "p75": 2640,
+          "p90": 8996,
+          "p95": 9000,
+          "p99": 9001,
+          "max": 9001,
+          "avg": 2127,
+          "stdev": 2786
+        },
+        "histogram_success": {
+          "0-1s": 108,
+          "1-2s": 66,
+          "2-3s": 224,
+          "3-5s": 219,
+          "5-8s": 67,
+          "8-10s": 5,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "connection_error": 4,
+          "timeout": 3,
+          "http_403": 2,
+          "http_401": 1,
+          "http_500": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 689
+        },
+        "avg_size_kb": 264.4,
+        "retries_total": 54,
+        "avg_retries_per_page": 0.08
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 704,
+          "p10": 2882,
+          "p25": 5133,
+          "p50": 7966,
+          "p75": 11197,
+          "p90": 15132,
+          "p95": 18750,
+          "p99": 29655,
+          "max": 41500,
+          "avg": 8823,
+          "stdev": 5410
+        },
+        "latency_success": {
+          "min": 2159,
+          "p10": 3563,
+          "p25": 6257,
+          "p50": 8651,
+          "p75": 11625,
+          "p90": 15412,
+          "p95": 18750,
+          "p99": 29655,
+          "max": 41500,
+          "avg": 9374,
+          "stdev": 5333
+        },
+        "histogram": {
+          "0-5s": 32,
+          "5-10s": 86,
+          "10-15s": 43,
+          "15-20s": 12,
+          "20-30s": 7,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 223.8,
+        "main_mb": 45.9,
+        "sub_mb": 177.9
+      }
+    },
+    {
+      "label": "Timeout=10s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 10,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 36.3,
+      "throughput_sites_per_min": 330.5,
+      "throughput_pages_per_sec": 24.1,
+      "main_page": {
+        "total": 200,
+        "success": 182,
+        "failure": 18,
+        "success_rate": 91.0,
+        "latency": {
+          "min": 559,
+          "p10": 2163,
+          "p25": 2493,
+          "p50": 3064,
+          "p75": 4167,
+          "p90": 5791,
+          "p95": 6724,
+          "p99": 9805,
+          "max": 10827,
+          "avg": 3523,
+          "stdev": 1655
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 6,
+          "timeout": 1,
+          "payload_error": 1,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 182
+        },
+        "avg_size_kb": 257.2
+      },
+      "subpages": {
+        "total_links_found": 4210,
+        "total_attempted": 716,
+        "avg_links_per_site": 23.1,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 716,
+        "success": 693,
+        "failure": 23,
+        "success_rate": 96.8,
+        "latency_success": {
+          "min": 378,
+          "p10": 752,
+          "p25": 1843,
+          "p50": 2709,
+          "p75": 3673,
+          "p90": 5303,
+          "p95": 6452,
+          "p99": 9002,
+          "max": 10109,
+          "avg": 2941,
+          "stdev": 1783
+        },
+        "latency_failure": {
+          "min": 362,
+          "p10": 412,
+          "p25": 459,
+          "p50": 916,
+          "p75": 2527,
+          "p90": 3695,
+          "p95": 10702,
+          "p99": 11000,
+          "max": 11000,
+          "avg": 2174,
+          "stdev": 2925
+        },
+        "histogram_success": {
+          "0-1s": 116,
+          "1-2s": 70,
+          "2-3s": 225,
+          "3-5s": 206,
+          "5-8s": 64,
+          "8-10s": 11,
+          "10-15s": 1,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "http_403": 4,
+          "connection_error": 3,
+          "timeout": 2,
+          "http_500": 1
+        },
+        "status_codes": {
+          "200": 693
+        },
+        "avg_size_kb": 262.7,
+        "retries_total": 44,
+        "avg_retries_per_page": 0.06
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 738,
+          "p10": 2920,
+          "p25": 5550,
+          "p50": 7802,
+          "p75": 11196,
+          "p90": 15056,
+          "p95": 17821,
+          "p99": 25704,
+          "max": 33397,
+          "avg": 8787,
+          "stdev": 4998
+        },
+        "latency_success": {
+          "min": 2442,
+          "p10": 3557,
+          "p25": 6360,
+          "p50": 8145,
+          "p75": 12432,
+          "p90": 15056,
+          "p95": 17169,
+          "p99": 25704,
+          "max": 33397,
+          "avg": 9272,
+          "stdev": 4845
+        },
+        "histogram": {
+          "0-5s": 28,
+          "5-10s": 92,
+          "10-15s": 43,
+          "15-20s": 13,
+          "20-30s": 5,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 223.5,
+        "main_mb": 45.7,
+        "sub_mb": 177.8
+      }
+    },
+    {
+      "label": "Timeout=12s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 40.3,
+      "throughput_sites_per_min": 298.1,
+      "throughput_pages_per_sec": 21.6,
+      "main_page": {
+        "total": 200,
+        "success": 181,
+        "failure": 19,
+        "success_rate": 90.5,
+        "latency": {
+          "min": 614,
+          "p10": 2028,
+          "p25": 2459,
+          "p50": 3100,
+          "p75": 4059,
+          "p90": 6207,
+          "p95": 7479,
+          "p99": 9311,
+          "max": 9900,
+          "avg": 3540,
+          "stdev": 1703
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 6,
+          "payload_error": 2,
+          "timeout": 1,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 181
+        },
+        "avg_size_kb": 271.7
+      },
+      "subpages": {
+        "total_links_found": 4267,
+        "total_attempted": 716,
+        "avg_links_per_site": 23.6,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 716,
+        "success": 689,
+        "failure": 27,
+        "success_rate": 96.2,
+        "latency_success": {
+          "min": 405,
+          "p10": 790,
+          "p25": 1817,
+          "p50": 2781,
+          "p75": 3714,
+          "p90": 5135,
+          "p95": 6661,
+          "p99": 9463,
+          "max": 11767,
+          "avg": 2972,
+          "stdev": 1831
+        },
+        "latency_failure": {
+          "min": 62,
+          "p10": 359,
+          "p25": 395,
+          "p50": 838,
+          "p75": 1920,
+          "p90": 4154,
+          "p95": 7076,
+          "p99": 12487,
+          "max": 12487,
+          "avg": 1772,
+          "stdev": 2657
+        },
+        "histogram_success": {
+          "0-1s": 114,
+          "1-2s": 79,
+          "2-3s": 199,
+          "3-5s": 223,
+          "5-8s": 55,
+          "8-10s": 16,
+          "10-15s": 3,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 16,
+          "http_403": 5,
+          "connection_error": 4,
+          "http_500": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 689
+        },
+        "avg_size_kb": 264.0,
+        "retries_total": 52,
+        "avg_retries_per_page": 0.07
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 761,
+          "p10": 3010,
+          "p25": 5681,
+          "p50": 8233,
+          "p75": 11205,
+          "p90": 15988,
+          "p95": 19745,
+          "p99": 31728,
+          "max": 36504,
+          "avg": 9013,
+          "stdev": 5502
+        },
+        "latency_success": {
+          "min": 2087,
+          "p10": 3357,
+          "p25": 6279,
+          "p50": 8455,
+          "p75": 11624,
+          "p90": 15988,
+          "p95": 19745,
+          "p99": 31728,
+          "max": 36504,
+          "avg": 9503,
+          "stdev": 5421
+        },
+        "histogram": {
+          "0-5s": 29,
+          "5-10s": 93,
+          "10-15s": 36,
+          "15-20s": 14,
+          "20-30s": 7,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 225.7,
+        "main_mb": 48.0,
+        "sub_mb": 177.7
+      }
+    },
+    {
+      "label": "Timeout=15s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 15,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 42.5,
+      "throughput_sites_per_min": 282.0,
+      "throughput_pages_per_sec": 21.0,
+      "main_page": {
+        "total": 200,
+        "success": 184,
+        "failure": 16,
+        "success_rate": 92.0,
+        "latency": {
+          "min": 692,
+          "p10": 2018,
+          "p25": 2414,
+          "p50": 2929,
+          "p75": 4118,
+          "p90": 5883,
+          "p95": 6961,
+          "p99": 10296,
+          "max": 11216,
+          "avg": 3459,
+          "stdev": 1762
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 3,
+          "timeout": 1,
+          "http_404": 1,
+          "http_400": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 184
+        },
+        "avg_size_kb": 278.6
+      },
+      "subpages": {
+        "total_links_found": 4404,
+        "total_attempted": 736,
+        "avg_links_per_site": 23.9,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 736,
+        "success": 709,
+        "failure": 27,
+        "success_rate": 96.3,
+        "latency_success": {
+          "min": 380,
+          "p10": 752,
+          "p25": 1875,
+          "p50": 2660,
+          "p75": 3561,
+          "p90": 5313,
+          "p95": 6946,
+          "p99": 9933,
+          "max": 14888,
+          "avg": 2962,
+          "stdev": 1978
+        },
+        "latency_failure": {
+          "min": 355,
+          "p10": 371,
+          "p25": 412,
+          "p50": 828,
+          "p75": 2118,
+          "p90": 2741,
+          "p95": 4132,
+          "p99": 5309,
+          "max": 5309,
+          "avg": 1371,
+          "stdev": 1263
+        },
+        "histogram_success": {
+          "0-1s": 110,
+          "1-2s": 83,
+          "2-3s": 249,
+          "3-5s": 182,
+          "5-8s": 63,
+          "8-10s": 15,
+          "10-15s": 7,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 15,
+          "connection_error": 6,
+          "http_403": 4,
+          "http_500": 2
+        },
+        "status_codes": {
+          "200": 709
+        },
+        "avg_size_kb": 262.2,
+        "retries_total": 49,
+        "avg_retries_per_page": 0.07
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 763,
+          "p10": 3261,
+          "p25": 5828,
+          "p50": 7793,
+          "p75": 11059,
+          "p90": 14418,
+          "p95": 17496,
+          "p99": 29840,
+          "max": 36734,
+          "avg": 8819,
+          "stdev": 4927
+        },
+        "latency_success": {
+          "min": 2066,
+          "p10": 4461,
+          "p25": 6276,
+          "p50": 8128,
+          "p75": 11422,
+          "p90": 14418,
+          "p95": 17496,
+          "p99": 29840,
+          "max": 36734,
+          "avg": 9204,
+          "stdev": 4840
+        },
+        "histogram": {
+          "0-5s": 21,
+          "5-10s": 104,
+          "10-15s": 45,
+          "15-20s": 9,
+          "20-30s": 4,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 231.6,
+        "main_mb": 50.1,
+        "sub_mb": 181.5
+      }
+    },
+    {
+      "label": "Timeout=20s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 20,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 40.6,
+      "throughput_sites_per_min": 295.7,
+      "throughput_pages_per_sec": 21.5,
+      "main_page": {
+        "total": 200,
+        "success": 181,
+        "failure": 19,
+        "success_rate": 90.5,
+        "latency": {
+          "min": 557,
+          "p10": 2110,
+          "p25": 2420,
+          "p50": 3030,
+          "p75": 4189,
+          "p90": 5731,
+          "p95": 7590,
+          "p99": 10801,
+          "max": 13155,
+          "avg": 3588,
+          "stdev": 1890
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 7,
+          "http_404": 1,
+          "http_400": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 181
+        },
+        "avg_size_kb": 277.8
+      },
+      "subpages": {
+        "total_links_found": 4275,
+        "total_attempted": 714,
+        "avg_links_per_site": 23.6,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 714,
+        "success": 693,
+        "failure": 21,
+        "success_rate": 97.1,
+        "latency_success": {
+          "min": 387,
+          "p10": 753,
+          "p25": 1942,
+          "p50": 2738,
+          "p75": 3792,
+          "p90": 5340,
+          "p95": 6779,
+          "p99": 10435,
+          "max": 14561,
+          "avg": 3044,
+          "stdev": 1968
+        },
+        "latency_failure": {
+          "min": 370,
+          "p10": 385,
+          "p25": 466,
+          "p50": 887,
+          "p75": 2656,
+          "p90": 2878,
+          "p95": 2880,
+          "p99": 4010,
+          "max": 4010,
+          "avg": 1405,
+          "stdev": 1146
+        },
+        "histogram_success": {
+          "0-1s": 104,
+          "1-2s": 79,
+          "2-3s": 221,
+          "3-5s": 205,
+          "5-8s": 62,
+          "8-10s": 14,
+          "10-15s": 8,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "http_403": 3,
+          "http_500": 2,
+          "connection_error": 2,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 693
+        },
+        "avg_size_kb": 264.0,
+        "retries_total": 30,
+        "avg_retries_per_page": 0.04
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 711,
+          "p10": 3268,
+          "p25": 5717,
+          "p50": 7717,
+          "p75": 11176,
+          "p90": 16433,
+          "p95": 22967,
+          "p99": 30885,
+          "max": 32437,
+          "avg": 9052,
+          "stdev": 5812
+        },
+        "latency_success": {
+          "min": 2185,
+          "p10": 3932,
+          "p25": 6413,
+          "p50": 8099,
+          "p75": 11366,
+          "p90": 16433,
+          "p95": 21775,
+          "p99": 30885,
+          "max": 32437,
+          "avg": 9584,
+          "stdev": 5663
+        },
+        "histogram": {
+          "0-5s": 28,
+          "5-10s": 96,
+          "10-15s": 35,
+          "15-20s": 11,
+          "20-30s": 9,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 227.8,
+        "main_mb": 49.1,
+        "sub_mb": 178.6
+      }
+    },
+    {
+      "label": "DomainConc=1",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 1,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 50.1,
+      "throughput_sites_per_min": 239.6,
+      "throughput_pages_per_sec": 17.7,
+      "main_page": {
+        "total": 200,
+        "success": 183,
+        "failure": 17,
+        "success_rate": 91.5,
+        "latency": {
+          "min": 426,
+          "p10": 2151,
+          "p25": 2508,
+          "p50": 3020,
+          "p75": 3916,
+          "p90": 5731,
+          "p95": 7035,
+          "p99": 9578,
+          "max": 12264,
+          "avg": 3515,
+          "stdev": 1679
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 6,
+          "http_404": 1,
+          "http_400": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 183
+        },
+        "avg_size_kb": 256.2
+      },
+      "subpages": {
+        "total_links_found": 4253,
+        "total_attempted": 722,
+        "avg_links_per_site": 23.2,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 722,
+        "success": 701,
+        "failure": 21,
+        "success_rate": 97.1,
+        "latency_success": {
+          "min": 391,
+          "p10": 532,
+          "p25": 663,
+          "p50": 911,
+          "p75": 1431,
+          "p90": 2419,
+          "p95": 3872,
+          "p99": 6110,
+          "max": 9369,
+          "avg": 1298,
+          "stdev": 1153
+        },
+        "latency_failure": {
+          "min": 358,
+          "p10": 395,
+          "p25": 464,
+          "p50": 760,
+          "p75": 2010,
+          "p90": 2755,
+          "p95": 3272,
+          "p99": 5259,
+          "max": 5259,
+          "avg": 1338,
+          "stdev": 1259
+        },
+        "histogram_success": {
+          "0-1s": 391,
+          "1-2s": 216,
+          "2-3s": 44,
+          "3-5s": 32,
+          "5-8s": 16,
+          "8-10s": 2,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "http_403": 4,
+          "http_500": 2,
+          "http_401": 1,
+          "connection_error": 1
+        },
+        "status_codes": {
+          "200": 701
+        },
+        "avg_size_kb": 261.6,
+        "retries_total": 26,
+        "avg_retries_per_page": 0.04
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 705,
+          "p10": 3477,
+          "p25": 5577,
+          "p50": 8413,
+          "p75": 12569,
+          "p90": 18712,
+          "p95": 22628,
+          "p99": 34906,
+          "max": 39316,
+          "avg": 9838,
+          "stdev": 6526
+        },
+        "latency_success": {
+          "min": 2193,
+          "p10": 3709,
+          "p25": 6095,
+          "p50": 8756,
+          "p75": 13039,
+          "p90": 19844,
+          "p95": 22628,
+          "p99": 34906,
+          "max": 39316,
+          "avg": 10425,
+          "stdev": 6499
+        },
+        "histogram": {
+          "0-5s": 29,
+          "5-10s": 80,
+          "10-15s": 42,
+          "15-20s": 14,
+          "20-30s": 14,
+          "30-45s": 4,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 224.9,
+        "main_mb": 45.8,
+        "sub_mb": 179.1
+      }
+    },
+    {
+      "label": "DomainConc=2",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 2,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 38.5,
+      "throughput_sites_per_min": 311.6,
+      "throughput_pages_per_sec": 23.2,
+      "main_page": {
+        "total": 200,
+        "success": 183,
+        "failure": 17,
+        "success_rate": 91.5,
+        "latency": {
+          "min": 540,
+          "p10": 2131,
+          "p25": 2454,
+          "p50": 2972,
+          "p75": 3915,
+          "p90": 5835,
+          "p95": 6826,
+          "p99": 10158,
+          "max": 11717,
+          "avg": 3444,
+          "stdev": 1643
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 5,
+          "http_404": 1,
+          "http_400": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 183
+        },
+        "avg_size_kb": 255.5
+      },
+      "subpages": {
+        "total_links_found": 4320,
+        "total_attempted": 732,
+        "avg_links_per_site": 23.6,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 732,
+        "success": 710,
+        "failure": 22,
+        "success_rate": 97.0,
+        "latency_success": {
+          "min": 389,
+          "p10": 550,
+          "p25": 683,
+          "p50": 995,
+          "p75": 2203,
+          "p90": 3718,
+          "p95": 4806,
+          "p99": 7424,
+          "max": 9942,
+          "avg": 1650,
+          "stdev": 1493
+        },
+        "latency_failure": {
+          "min": 367,
+          "p10": 407,
+          "p25": 498,
+          "p50": 982,
+          "p75": 2048,
+          "p90": 2732,
+          "p95": 2829,
+          "p99": 2918,
+          "max": 2918,
+          "avg": 1314,
+          "stdev": 890
+        },
+        "histogram_success": {
+          "0-1s": 356,
+          "1-2s": 157,
+          "2-3s": 85,
+          "3-5s": 82,
+          "5-8s": 25,
+          "8-10s": 5,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 14,
+          "http_403": 3,
+          "http_500": 2,
+          "connection_error": 2,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 709,
+          "202": 1
+        },
+        "avg_size_kb": 262.9,
+        "retries_total": 25,
+        "avg_retries_per_page": 0.03
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 704,
+          "p10": 3112,
+          "p25": 5174,
+          "p50": 7446,
+          "p75": 10104,
+          "p90": 14449,
+          "p95": 16328,
+          "p99": 30021,
+          "max": 33920,
+          "avg": 8322,
+          "stdev": 4710
+        },
+        "latency_success": {
+          "min": 2205,
+          "p10": 4024,
+          "p25": 6102,
+          "p50": 7665,
+          "p75": 10293,
+          "p90": 14681,
+          "p95": 16328,
+          "p99": 30021,
+          "max": 33920,
+          "avg": 8769,
+          "stdev": 4606
+        },
+        "histogram": {
+          "0-5s": 30,
+          "5-10s": 102,
+          "10-15s": 34,
+          "15-20s": 14,
+          "20-30s": 1,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 227.9,
+        "main_mb": 45.7,
+        "sub_mb": 182.3
+      }
+    },
+    {
+      "label": "DomainConc=3",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 3,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 37.3,
+      "throughput_sites_per_min": 322.1,
+      "throughput_pages_per_sec": 24.2,
+      "main_page": {
+        "total": 200,
+        "success": 185,
+        "failure": 15,
+        "success_rate": 92.5,
+        "latency": {
+          "min": 595,
+          "p10": 2247,
+          "p25": 2655,
+          "p50": 3282,
+          "p75": 4188,
+          "p90": 6215,
+          "p95": 7300,
+          "p99": 9844,
+          "max": 11188,
+          "avg": 3703,
+          "stdev": 1720
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 3,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 185
+        },
+        "avg_size_kb": 277.8
+      },
+      "subpages": {
+        "total_links_found": 4435,
+        "total_attempted": 742,
+        "avg_links_per_site": 24.0,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 742,
+        "success": 715,
+        "failure": 27,
+        "success_rate": 96.4,
+        "latency_success": {
+          "min": 375,
+          "p10": 617,
+          "p25": 820,
+          "p50": 1548,
+          "p75": 2978,
+          "p90": 4426,
+          "p95": 5447,
+          "p99": 9290,
+          "max": 12156,
+          "avg": 2175,
+          "stdev": 1791
+        },
+        "latency_failure": {
+          "min": 390,
+          "p10": 412,
+          "p25": 422,
+          "p50": 806,
+          "p75": 2038,
+          "p90": 2925,
+          "p95": 3036,
+          "p99": 12466,
+          "max": 12466,
+          "avg": 1517,
+          "stdev": 2375
+        },
+        "histogram_success": {
+          "0-1s": 258,
+          "1-2s": 137,
+          "2-3s": 143,
+          "3-5s": 125,
+          "5-8s": 40,
+          "8-10s": 8,
+          "10-15s": 4,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 16,
+          "connection_error": 4,
+          "http_403": 3,
+          "http_500": 2,
+          "http_401": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 715
+        },
+        "avg_size_kb": 259.9,
+        "retries_total": 37,
+        "avg_retries_per_page": 0.05
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 1159,
+          "p10": 3617,
+          "p25": 5915,
+          "p50": 7932,
+          "p75": 11783,
+          "p90": 15258,
+          "p95": 19602,
+          "p99": 26111,
+          "max": 33198,
+          "avg": 9178,
+          "stdev": 5163
+        },
+        "latency_success": {
+          "min": 2455,
+          "p10": 4531,
+          "p25": 6309,
+          "p50": 8354,
+          "p75": 12300,
+          "p90": 15312,
+          "p95": 19602,
+          "p99": 26111,
+          "max": 33198,
+          "avg": 9607,
+          "stdev": 5117
+        },
+        "histogram": {
+          "0-5s": 23,
+          "5-10s": 99,
+          "10-15s": 41,
+          "15-20s": 13,
+          "20-30s": 8,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 231.7,
+        "main_mb": 50.2,
+        "sub_mb": 181.5
+      }
+    },
+    {
+      "label": "DomainConc=5",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 34.8,
+      "throughput_sites_per_min": 344.5,
+      "throughput_pages_per_sec": 25.3,
+      "main_page": {
+        "total": 200,
+        "success": 181,
+        "failure": 19,
+        "success_rate": 90.5,
+        "latency": {
+          "min": 593,
+          "p10": 2287,
+          "p25": 2568,
+          "p50": 3144,
+          "p75": 4024,
+          "p90": 5287,
+          "p95": 6453,
+          "p99": 10529,
+          "max": 12514,
+          "avg": 3553,
+          "stdev": 1682
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 7,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 181
+        },
+        "avg_size_kb": 262.7
+      },
+      "subpages": {
+        "total_links_found": 4300,
+        "total_attempted": 728,
+        "avg_links_per_site": 23.8,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 728,
+        "success": 701,
+        "failure": 27,
+        "success_rate": 96.3,
+        "latency_success": {
+          "min": 388,
+          "p10": 744,
+          "p25": 1964,
+          "p50": 2784,
+          "p75": 3750,
+          "p90": 5412,
+          "p95": 6617,
+          "p99": 8911,
+          "max": 11808,
+          "avg": 2985,
+          "stdev": 1817
+        },
+        "latency_failure": {
+          "min": 353,
+          "p10": 392,
+          "p25": 450,
+          "p50": 893,
+          "p75": 2829,
+          "p90": 3294,
+          "p95": 4030,
+          "p99": 12165,
+          "max": 12165,
+          "avg": 1861,
+          "stdev": 2352
+        },
+        "histogram_success": {
+          "0-1s": 110,
+          "1-2s": 72,
+          "2-3s": 224,
+          "3-5s": 213,
+          "5-8s": 71,
+          "8-10s": 7,
+          "10-15s": 4,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 14,
+          "connection_error": 5,
+          "http_403": 4,
+          "http_500": 2,
+          "http_401": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 700,
+          "202": 1
+        },
+        "avg_size_kb": 262.5,
+        "retries_total": 49,
+        "avg_retries_per_page": 0.07
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 701,
+          "p10": 3071,
+          "p25": 5810,
+          "p50": 8124,
+          "p75": 11101,
+          "p90": 14734,
+          "p95": 17879,
+          "p99": 28728,
+          "max": 31487,
+          "avg": 8782,
+          "stdev": 4955
+        },
+        "latency_success": {
+          "min": 1997,
+          "p10": 3594,
+          "p25": 6437,
+          "p50": 8635,
+          "p75": 11327,
+          "p90": 14910,
+          "p95": 17879,
+          "p99": 28728,
+          "max": 31487,
+          "avg": 9319,
+          "stdev": 4763
+        },
+        "histogram": {
+          "0-5s": 26,
+          "5-10s": 91,
+          "10-15s": 46,
+          "15-20s": 13,
+          "20-30s": 4,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 226.1,
+        "main_mb": 46.4,
+        "sub_mb": 179.7
+      }
+    },
+    {
+      "label": "DomainConc=10",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 10,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 45.2,
+      "throughput_sites_per_min": 265.4,
+      "throughput_pages_per_sec": 19.5,
+      "main_page": {
+        "total": 200,
+        "success": 183,
+        "failure": 17,
+        "success_rate": 91.5,
+        "latency": {
+          "min": 525,
+          "p10": 2086,
+          "p25": 2454,
+          "p50": 3017,
+          "p75": 4086,
+          "p90": 5580,
+          "p95": 6518,
+          "p99": 9592,
+          "max": 11616,
+          "avg": 3500,
+          "stdev": 1715
+        },
+        "errors": {
+          "http_403": 7,
+          "connection_error": 6,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 183
+        },
+        "avg_size_kb": 251.8
+      },
+      "subpages": {
+        "total_links_found": 4334,
+        "total_attempted": 724,
+        "avg_links_per_site": 23.7,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 724,
+        "success": 699,
+        "failure": 25,
+        "success_rate": 96.5,
+        "latency_success": {
+          "min": 384,
+          "p10": 728,
+          "p25": 1761,
+          "p50": 2808,
+          "p75": 3866,
+          "p90": 5425,
+          "p95": 6505,
+          "p99": 9501,
+          "max": 11067,
+          "avg": 3016,
+          "stdev": 1893
+        },
+        "latency_failure": {
+          "min": 79,
+          "p10": 379,
+          "p25": 460,
+          "p50": 807,
+          "p75": 1814,
+          "p90": 3168,
+          "p95": 3390,
+          "p99": 3806,
+          "max": 3806,
+          "avg": 1267,
+          "stdev": 1086
+        },
+        "histogram_success": {
+          "0-1s": 114,
+          "1-2s": 89,
+          "2-3s": 188,
+          "3-5s": 224,
+          "5-8s": 64,
+          "8-10s": 16,
+          "10-15s": 4,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 14,
+          "http_403": 4,
+          "connection_error": 4,
+          "http_500": 2,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 699
+        },
+        "avg_size_kb": 262.6,
+        "retries_total": 47,
+        "avg_retries_per_page": 0.06
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 737,
+          "p10": 2808,
+          "p25": 5560,
+          "p50": 8282,
+          "p75": 10990,
+          "p90": 15286,
+          "p95": 19149,
+          "p99": 32300,
+          "max": 40164,
+          "avg": 9046,
+          "stdev": 5494
+        },
+        "latency_success": {
+          "min": 2171,
+          "p10": 3094,
+          "p25": 6590,
+          "p50": 8440,
+          "p75": 11645,
+          "p90": 15596,
+          "p95": 19149,
+          "p99": 32300,
+          "max": 40164,
+          "avg": 9544,
+          "stdev": 5444
+        },
+        "histogram": {
+          "0-5s": 29,
+          "5-10s": 92,
+          "10-15s": 41,
+          "15-20s": 12,
+          "20-30s": 7,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 224.3,
+        "main_mb": 45.0,
+        "sub_mb": 179.3
+      }
+    },
+    {
+      "label": "IntraDelay=0s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 43.1,
+      "throughput_sites_per_min": 278.6,
+      "throughput_pages_per_sec": 20.6,
+      "main_page": {
+        "total": 200,
+        "success": 185,
+        "failure": 15,
+        "success_rate": 92.5,
+        "latency": {
+          "min": 534,
+          "p10": 2072,
+          "p25": 2437,
+          "p50": 3072,
+          "p75": 4181,
+          "p90": 6352,
+          "p95": 7058,
+          "p99": 8946,
+          "max": 9145,
+          "avg": 3520,
+          "stdev": 1680
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 3,
+          "http_404": 1,
+          "http_400": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 185
+        },
+        "avg_size_kb": 277.3
+      },
+      "subpages": {
+        "total_links_found": 4362,
+        "total_attempted": 725,
+        "avg_links_per_site": 23.6,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 725,
+        "success": 704,
+        "failure": 21,
+        "success_rate": 97.1,
+        "latency_success": {
+          "min": 375,
+          "p10": 708,
+          "p25": 1678,
+          "p50": 2722,
+          "p75": 3678,
+          "p90": 5169,
+          "p95": 6670,
+          "p99": 9441,
+          "max": 11550,
+          "avg": 2927,
+          "stdev": 1866
+        },
+        "latency_failure": {
+          "min": 390,
+          "p10": 400,
+          "p25": 742,
+          "p50": 995,
+          "p75": 2281,
+          "p90": 2825,
+          "p95": 2883,
+          "p99": 3033,
+          "max": 3033,
+          "avg": 1387,
+          "stdev": 954
+        },
+        "histogram_success": {
+          "0-1s": 128,
+          "1-2s": 74,
+          "2-3s": 220,
+          "3-5s": 203,
+          "5-8s": 61,
+          "8-10s": 15,
+          "10-15s": 3,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "http_500": 3,
+          "http_403": 3,
+          "http_401": 1,
+          "connection_error": 1
+        },
+        "status_codes": {
+          "200": 704
+        },
+        "avg_size_kb": 265.3,
+        "retries_total": 53,
+        "avg_retries_per_page": 0.07
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 703,
+          "p10": 3071,
+          "p25": 5638,
+          "p50": 7895,
+          "p75": 11111,
+          "p90": 16123,
+          "p95": 20168,
+          "p99": 31448,
+          "max": 32388,
+          "avg": 9063,
+          "stdev": 5385
+        },
+        "latency_success": {
+          "min": 2135,
+          "p10": 4013,
+          "p25": 6178,
+          "p50": 8358,
+          "p75": 11397,
+          "p90": 16124,
+          "p95": 20168,
+          "p99": 31448,
+          "max": 32388,
+          "avg": 9480,
+          "stdev": 5307
+        },
+        "histogram": {
+          "0-5s": 28,
+          "5-10s": 97,
+          "10-15s": 36,
+          "15-20s": 14,
+          "20-30s": 8,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 232.5,
+        "main_mb": 50.1,
+        "sub_mb": 182.4
+      }
+    },
+    {
+      "label": "IntraDelay=0.1s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0.1,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 42.1,
+      "throughput_sites_per_min": 285.0,
+      "throughput_pages_per_sec": 20.3,
+      "main_page": {
+        "total": 200,
+        "success": 183,
+        "failure": 17,
+        "success_rate": 91.5,
+        "latency": {
+          "min": 652,
+          "p10": 1972,
+          "p25": 2445,
+          "p50": 3040,
+          "p75": 4215,
+          "p90": 5765,
+          "p95": 7017,
+          "p99": 9935,
+          "max": 10810,
+          "avg": 3530,
+          "stdev": 1749
+        },
+        "errors": {
+          "http_403": 10,
+          "connection_error": 5,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 183
+        },
+        "avg_size_kb": 271.5
+      },
+      "subpages": {
+        "total_links_found": 4170,
+        "total_attempted": 697,
+        "avg_links_per_site": 22.8,
+        "avg_attempted_per_site": 3.8,
+        "total_requests": 697,
+        "success": 670,
+        "failure": 27,
+        "success_rate": 96.1,
+        "latency_success": {
+          "min": 412,
+          "p10": 762,
+          "p25": 1903,
+          "p50": 2712,
+          "p75": 3662,
+          "p90": 5092,
+          "p95": 6702,
+          "p99": 9847,
+          "max": 12218,
+          "avg": 2963,
+          "stdev": 1884
+        },
+        "latency_failure": {
+          "min": 353,
+          "p10": 388,
+          "p25": 481,
+          "p50": 876,
+          "p75": 2030,
+          "p90": 3400,
+          "p95": 3435,
+          "p99": 3647,
+          "max": 3647,
+          "avg": 1251,
+          "stdev": 1049
+        },
+        "histogram_success": {
+          "0-1s": 108,
+          "1-2s": 78,
+          "2-3s": 199,
+          "3-5s": 215,
+          "5-8s": 53,
+          "8-10s": 11,
+          "10-15s": 6,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 15,
+          "http_403": 4,
+          "connection_error": 4,
+          "http_500": 3,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 670
+        },
+        "avg_size_kb": 268.9,
+        "retries_total": 47,
+        "avg_retries_per_page": 0.07
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 730,
+          "p10": 2920,
+          "p25": 5186,
+          "p50": 7975,
+          "p75": 11040,
+          "p90": 16010,
+          "p95": 19056,
+          "p99": 34774,
+          "max": 38132,
+          "avg": 9087,
+          "stdev": 6171
+        },
+        "latency_success": {
+          "min": 2100,
+          "p10": 3091,
+          "p25": 6215,
+          "p50": 8304,
+          "p75": 11454,
+          "p90": 16061,
+          "p95": 19056,
+          "p99": 34774,
+          "max": 38132,
+          "avg": 9641,
+          "stdev": 6150
+        },
+        "histogram": {
+          "0-5s": 30,
+          "5-10s": 93,
+          "10-15s": 36,
+          "15-20s": 15,
+          "20-30s": 4,
+          "30-45s": 5,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 224.5,
+        "main_mb": 48.5,
+        "sub_mb": 175.9
+      }
+    },
+    {
+      "label": "IntraDelay=0.3s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0.3,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 50.3,
+      "throughput_sites_per_min": 238.8,
+      "throughput_pages_per_sec": 17.3,
+      "main_page": {
+        "total": 200,
+        "success": 181,
+        "failure": 19,
+        "success_rate": 90.5,
+        "latency": {
+          "min": 560,
+          "p10": 2280,
+          "p25": 2633,
+          "p50": 3273,
+          "p75": 4252,
+          "p90": 5321,
+          "p95": 7579,
+          "p99": 10085,
+          "max": 10449,
+          "avg": 3667,
+          "stdev": 1700
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 7,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 181
+        },
+        "avg_size_kb": 277.0
+      },
+      "subpages": {
+        "total_links_found": 4246,
+        "total_attempted": 715,
+        "avg_links_per_site": 23.5,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 715,
+        "success": 687,
+        "failure": 28,
+        "success_rate": 96.1,
+        "latency_success": {
+          "min": 366,
+          "p10": 580,
+          "p25": 861,
+          "p50": 2391,
+          "p75": 3453,
+          "p90": 5189,
+          "p95": 6327,
+          "p99": 8759,
+          "max": 11767,
+          "avg": 2574,
+          "stdev": 1925
+        },
+        "latency_failure": {
+          "min": 367,
+          "p10": 379,
+          "p25": 411,
+          "p50": 750,
+          "p75": 1945,
+          "p90": 3011,
+          "p95": 3113,
+          "p99": 4420,
+          "max": 4420,
+          "avg": 1202,
+          "stdev": 1111
+        },
+        "histogram_success": {
+          "0-1s": 205,
+          "1-2s": 83,
+          "2-3s": 160,
+          "3-5s": 166,
+          "5-8s": 60,
+          "8-10s": 10,
+          "10-15s": 3,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 16,
+          "connection_error": 5,
+          "http_500": 3,
+          "http_403": 3,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 686,
+          "202": 1
+        },
+        "avg_size_kb": 264.6,
+        "retries_total": 39,
+        "avg_retries_per_page": 0.05
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 711,
+          "p10": 3431,
+          "p25": 6025,
+          "p50": 8599,
+          "p75": 11803,
+          "p90": 15367,
+          "p95": 17798,
+          "p99": 33876,
+          "max": 38416,
+          "avg": 9218,
+          "stdev": 5253
+        },
+        "latency_success": {
+          "min": 2165,
+          "p10": 4175,
+          "p25": 6756,
+          "p50": 8812,
+          "p75": 12317,
+          "p90": 15613,
+          "p95": 17798,
+          "p99": 33876,
+          "max": 38416,
+          "avg": 9864,
+          "stdev": 5072
+        },
+        "histogram": {
+          "0-5s": 23,
+          "5-10s": 89,
+          "10-15s": 48,
+          "15-20s": 14,
+          "20-30s": 5,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 226.5,
+        "main_mb": 49.0,
+        "sub_mb": 177.5
+      }
+    },
+    {
+      "label": "IntraDelay=0.5s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0.5,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 43.3,
+      "throughput_sites_per_min": 277.0,
+      "throughput_pages_per_sec": 20.0,
+      "main_page": {
+        "total": 200,
+        "success": 180,
+        "failure": 20,
+        "success_rate": 90.0,
+        "latency": {
+          "min": 726,
+          "p10": 2082,
+          "p25": 2526,
+          "p50": 3015,
+          "p75": 4161,
+          "p90": 5883,
+          "p95": 7428,
+          "p99": 10476,
+          "max": 10876,
+          "avg": 3523,
+          "stdev": 1754
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 6,
+          "timeout": 2,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 180
+        },
+        "avg_size_kb": 261.3
+      },
+      "subpages": {
+        "total_links_found": 4292,
+        "total_attempted": 707,
+        "avg_links_per_site": 23.8,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 707,
+        "success": 685,
+        "failure": 22,
+        "success_rate": 96.9,
+        "latency_success": {
+          "min": 411,
+          "p10": 622,
+          "p25": 792,
+          "p50": 2000,
+          "p75": 3305,
+          "p90": 4775,
+          "p95": 6372,
+          "p99": 8878,
+          "max": 12043,
+          "avg": 2363,
+          "stdev": 1950
+        },
+        "latency_failure": {
+          "min": 354,
+          "p10": 371,
+          "p25": 417,
+          "p50": 844,
+          "p75": 2125,
+          "p90": 2981,
+          "p95": 2992,
+          "p99": 3179,
+          "max": 3179,
+          "avg": 1273,
+          "stdev": 1009
+        },
+        "histogram_success": {
+          "0-1s": 247,
+          "1-2s": 95,
+          "2-3s": 140,
+          "3-5s": 141,
+          "5-8s": 49,
+          "8-10s": 8,
+          "10-15s": 5,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "http_500": 3,
+          "http_403": 3,
+          "connection_error": 2,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 685
+        },
+        "avg_size_kb": 270.4,
+        "retries_total": 43,
+        "avg_retries_per_page": 0.06
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 724,
+          "p10": 3285,
+          "p25": 6303,
+          "p50": 8761,
+          "p75": 11868,
+          "p90": 16051,
+          "p95": 19973,
+          "p99": 26146,
+          "max": 40022,
+          "avg": 9446,
+          "stdev": 5558
+        },
+        "latency_success": {
+          "min": 2036,
+          "p10": 3785,
+          "p25": 7033,
+          "p50": 9080,
+          "p75": 12047,
+          "p90": 16051,
+          "p95": 19973,
+          "p99": 26146,
+          "max": 40022,
+          "avg": 9958,
+          "stdev": 5259
+        },
+        "histogram": {
+          "0-5s": 28,
+          "5-10s": 83,
+          "10-15s": 45,
+          "15-20s": 16,
+          "20-30s": 7,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 226.8,
+        "main_mb": 45.9,
+        "sub_mb": 180.9
+      }
+    },
+    {
+      "label": "IntraDelay=1.0s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 1.0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 48.5,
+      "throughput_sites_per_min": 247.5,
+      "throughput_pages_per_sec": 18.5,
+      "main_page": {
+        "total": 200,
+        "success": 184,
+        "failure": 16,
+        "success_rate": 92.0,
+        "latency": {
+          "min": 700,
+          "p10": 2167,
+          "p25": 2471,
+          "p50": 3090,
+          "p75": 4233,
+          "p90": 6060,
+          "p95": 7692,
+          "p99": 9543,
+          "max": 11381,
+          "avg": 3610,
+          "stdev": 1783
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 5,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 184
+        },
+        "avg_size_kb": 259.4
+      },
+      "subpages": {
+        "total_links_found": 4392,
+        "total_attempted": 735,
+        "avg_links_per_site": 23.9,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 735,
+        "success": 713,
+        "failure": 22,
+        "success_rate": 97.0,
+        "latency_success": {
+          "min": 349,
+          "p10": 565,
+          "p25": 725,
+          "p50": 1045,
+          "p75": 2406,
+          "p90": 4235,
+          "p95": 5650,
+          "p99": 8162,
+          "max": 12000,
+          "avg": 1820,
+          "stdev": 1741
+        },
+        "latency_failure": {
+          "min": 380,
+          "p10": 402,
+          "p25": 554,
+          "p50": 900,
+          "p75": 2280,
+          "p90": 2520,
+          "p95": 9369,
+          "p99": 12926,
+          "max": 12926,
+          "avg": 2093,
+          "stdev": 3076
+        },
+        "histogram_success": {
+          "0-1s": 336,
+          "1-2s": 170,
+          "2-3s": 75,
+          "3-5s": 84,
+          "5-8s": 38,
+          "8-10s": 7,
+          "10-15s": 3,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "http_403": 3,
+          "http_500": 2,
+          "http_401": 1,
+          "connection_error": 1,
+          "http_503": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 713
+        },
+        "avg_size_kb": 262.4,
+        "retries_total": 30,
+        "avg_retries_per_page": 0.04
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 711,
+          "p10": 4008,
+          "p25": 6888,
+          "p50": 9033,
+          "p75": 12629,
+          "p90": 16087,
+          "p95": 19544,
+          "p99": 29975,
+          "max": 35032,
+          "avg": 10014,
+          "stdev": 5220
+        },
+        "latency_success": {
+          "min": 2283,
+          "p10": 4781,
+          "p25": 7576,
+          "p50": 9305,
+          "p75": 12691,
+          "p90": 16761,
+          "p95": 19544,
+          "p99": 29975,
+          "max": 35032,
+          "avg": 10460,
+          "stdev": 5132
+        },
+        "histogram": {
+          "0-5s": 20,
+          "5-10s": 80,
+          "10-15s": 59,
+          "15-20s": 18,
+          "20-30s": 6,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 229.3,
+        "main_mb": 46.6,
+        "sub_mb": 182.7
+      }
+    },
+    {
+      "label": "Retries=0,delay=0s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 0,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 37.0,
+      "throughput_sites_per_min": 324.5,
+      "throughput_pages_per_sec": 22.4,
+      "main_page": {
+        "total": 200,
+        "success": 174,
+        "failure": 26,
+        "success_rate": 87.0,
+        "latency": {
+          "min": 580,
+          "p10": 2106,
+          "p25": 2442,
+          "p50": 2985,
+          "p75": 4064,
+          "p90": 5298,
+          "p95": 6689,
+          "p99": 10917,
+          "max": 12099,
+          "avg": 3502,
+          "stdev": 1714
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 8,
+          "timeout": 6,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 174
+        },
+        "avg_size_kb": 262.8
+      },
+      "subpages": {
+        "total_links_found": 4160,
+        "total_attempted": 692,
+        "avg_links_per_site": 23.9,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 692,
+        "success": 653,
+        "failure": 39,
+        "success_rate": 94.4,
+        "latency_success": {
+          "min": 391,
+          "p10": 811,
+          "p25": 2116,
+          "p50": 2893,
+          "p75": 3803,
+          "p90": 5390,
+          "p95": 6594,
+          "p99": 8634,
+          "max": 11865,
+          "avg": 3089,
+          "stdev": 1789
+        },
+        "latency_failure": {
+          "min": 357,
+          "p10": 474,
+          "p25": 1756,
+          "p50": 2938,
+          "p75": 8003,
+          "p90": 12202,
+          "p95": 12821,
+          "p99": 12943,
+          "max": 12943,
+          "avg": 4418,
+          "stdev": 3742
+        },
+        "histogram_success": {
+          "0-1s": 97,
+          "1-2s": 61,
+          "2-3s": 193,
+          "3-5s": 216,
+          "5-8s": 74,
+          "8-10s": 10,
+          "10-15s": 2,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "timeout": 9,
+          "connection_error": 9,
+          "http_403": 4,
+          "http_500": 2,
+          "http_401": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 653
+        },
+        "avg_size_kb": 269.7,
+        "retries_total": 0,
+        "avg_retries_per_page": 0.0
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 360,
+          "p10": 2343,
+          "p25": 5817,
+          "p50": 8143,
+          "p75": 10648,
+          "p90": 13711,
+          "p95": 15227,
+          "p99": 28369,
+          "max": 32730,
+          "avg": 8337,
+          "stdev": 4634
+        },
+        "latency_success": {
+          "min": 2199,
+          "p10": 4043,
+          "p25": 6722,
+          "p50": 8622,
+          "p75": 10666,
+          "p90": 13779,
+          "p95": 15489,
+          "p99": 28369,
+          "max": 32730,
+          "avg": 9035,
+          "stdev": 4297
+        },
+        "histogram": {
+          "0-5s": 25,
+          "5-10s": 88,
+          "10-15s": 51,
+          "15-20s": 7,
+          "20-30s": 2,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 216.7,
+        "main_mb": 44.7,
+        "sub_mb": 172.0
+      }
+    },
+    {
+      "label": "Retries=1,delay=0s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 50.8,
+      "throughput_sites_per_min": 236.1,
+      "throughput_pages_per_sec": 17.3,
+      "main_page": {
+        "total": 200,
+        "success": 183,
+        "failure": 17,
+        "success_rate": 91.5,
+        "latency": {
+          "min": 578,
+          "p10": 2335,
+          "p25": 2730,
+          "p50": 3258,
+          "p75": 4127,
+          "p90": 5377,
+          "p95": 7158,
+          "p99": 8973,
+          "max": 11440,
+          "avg": 3642,
+          "stdev": 1573
+        },
+        "errors": {
+          "http_403": 7,
+          "connection_error": 6,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 183
+        },
+        "avg_size_kb": 278.7
+      },
+      "subpages": {
+        "total_links_found": 4358,
+        "total_attempted": 727,
+        "avg_links_per_site": 23.8,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 727,
+        "success": 698,
+        "failure": 29,
+        "success_rate": 96.0,
+        "latency_success": {
+          "min": 374,
+          "p10": 787,
+          "p25": 1818,
+          "p50": 2654,
+          "p75": 3568,
+          "p90": 5490,
+          "p95": 6503,
+          "p99": 9022,
+          "max": 11099,
+          "avg": 2902,
+          "stdev": 1791
+        },
+        "latency_failure": {
+          "min": 354,
+          "p10": 364,
+          "p25": 403,
+          "p50": 689,
+          "p75": 1973,
+          "p90": 3124,
+          "p95": 3487,
+          "p99": 13022,
+          "max": 13022,
+          "avg": 1522,
+          "stdev": 2409
+        },
+        "histogram_success": {
+          "0-1s": 120,
+          "1-2s": 76,
+          "2-3s": 229,
+          "3-5s": 192,
+          "5-8s": 70,
+          "8-10s": 8,
+          "10-15s": 3,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 15,
+          "connection_error": 6,
+          "http_500": 3,
+          "http_403": 3,
+          "http_401": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 698
+        },
+        "avg_size_kb": 263.3,
+        "retries_total": 49,
+        "avg_retries_per_page": 0.07
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 708,
+          "p10": 3492,
+          "p25": 6056,
+          "p50": 7926,
+          "p75": 11380,
+          "p90": 14387,
+          "p95": 17940,
+          "p99": 31414,
+          "max": 45352,
+          "avg": 8973,
+          "stdev": 5492
+        },
+        "latency_success": {
+          "min": 2118,
+          "p10": 3812,
+          "p25": 6437,
+          "p50": 8311,
+          "p75": 11663,
+          "p90": 14456,
+          "p95": 17940,
+          "p99": 31414,
+          "max": 45352,
+          "avg": 9472,
+          "stdev": 5442
+        },
+        "histogram": {
+          "0-5s": 26,
+          "5-10s": 90,
+          "10-15s": 49,
+          "15-20s": 9,
+          "20-30s": 6,
+          "30-45s": 2,
+          "45-60s": 1,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 229.3,
+        "main_mb": 49.8,
+        "sub_mb": 179.5
+      }
+    },
+    {
+      "label": "Retries=1,delay=0.5s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0.5
+      },
+      "wall_time_s": 37.7,
+      "throughput_sites_per_min": 318.1,
+      "throughput_pages_per_sec": 23.3,
+      "main_page": {
+        "total": 200,
+        "success": 183,
+        "failure": 17,
+        "success_rate": 91.5,
+        "latency": {
+          "min": 483,
+          "p10": 2218,
+          "p25": 2620,
+          "p50": 3166,
+          "p75": 4278,
+          "p90": 6090,
+          "p95": 7203,
+          "p99": 10901,
+          "max": 11370,
+          "avg": 3669,
+          "stdev": 1806
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 5,
+          "timeout": 1,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 183
+        },
+        "avg_size_kb": 253.4
+      },
+      "subpages": {
+        "total_links_found": 4269,
+        "total_attempted": 717,
+        "avg_links_per_site": 23.3,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 717,
+        "success": 697,
+        "failure": 20,
+        "success_rate": 97.2,
+        "latency_success": {
+          "min": 366,
+          "p10": 775,
+          "p25": 1881,
+          "p50": 2775,
+          "p75": 3713,
+          "p90": 5617,
+          "p95": 6412,
+          "p99": 10046,
+          "max": 11806,
+          "avg": 3011,
+          "stdev": 1859
+        },
+        "latency_failure": {
+          "min": 381,
+          "p10": 445,
+          "p25": 591,
+          "p50": 858,
+          "p75": 2342,
+          "p90": 2714,
+          "p95": 7516,
+          "p99": 7516,
+          "max": 7516,
+          "avg": 1415,
+          "stdev": 1625
+        },
+        "histogram_success": {
+          "0-1s": 107,
+          "1-2s": 77,
+          "2-3s": 215,
+          "3-5s": 213,
+          "5-8s": 69,
+          "8-10s": 9,
+          "10-15s": 7,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 13,
+          "http_500": 2,
+          "connection_error": 2,
+          "http_401": 1,
+          "payload_error": 1,
+          "http_403": 1
+        },
+        "status_codes": {
+          "200": 697
+        },
+        "avg_size_kb": 259.0,
+        "retries_total": 42,
+        "avg_retries_per_page": 0.06
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 1252,
+          "p10": 3335,
+          "p25": 6104,
+          "p50": 8362,
+          "p75": 11787,
+          "p90": 15886,
+          "p95": 19224,
+          "p99": 26875,
+          "max": 34513,
+          "avg": 9296,
+          "stdev": 5142
+        },
+        "latency_success": {
+          "min": 2368,
+          "p10": 4259,
+          "p25": 6750,
+          "p50": 8563,
+          "p75": 12009,
+          "p90": 15886,
+          "p95": 19105,
+          "p99": 26875,
+          "max": 34513,
+          "avg": 9691,
+          "stdev": 5006
+        },
+        "histogram": {
+          "0-5s": 25,
+          "5-10s": 94,
+          "10-15s": 43,
+          "15-20s": 13,
+          "20-30s": 7,
+          "30-45s": 1,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 221.6,
+        "main_mb": 45.3,
+        "sub_mb": 176.3
+      }
+    },
+    {
+      "label": "Retries=2,delay=0s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 2,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 42.6,
+      "throughput_sites_per_min": 281.9,
+      "throughput_pages_per_sec": 21.1,
+      "main_page": {
+        "total": 200,
+        "success": 182,
+        "failure": 18,
+        "success_rate": 91.0,
+        "latency": {
+          "min": 678,
+          "p10": 2083,
+          "p25": 2408,
+          "p50": 2956,
+          "p75": 3901,
+          "p90": 5435,
+          "p95": 7265,
+          "p99": 10878,
+          "max": 12189,
+          "avg": 3488,
+          "stdev": 1857
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 6,
+          "http_404": 1,
+          "http_400": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 182
+        },
+        "avg_size_kb": 263.8
+      },
+      "subpages": {
+        "total_links_found": 4404,
+        "total_attempted": 737,
+        "avg_links_per_site": 24.2,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 737,
+        "success": 715,
+        "failure": 22,
+        "success_rate": 97.0,
+        "latency_success": {
+          "min": 384,
+          "p10": 737,
+          "p25": 1830,
+          "p50": 2694,
+          "p75": 3818,
+          "p90": 5148,
+          "p95": 6646,
+          "p99": 8863,
+          "max": 11308,
+          "avg": 2954,
+          "stdev": 1821
+        },
+        "latency_failure": {
+          "min": 362,
+          "p10": 373,
+          "p25": 452,
+          "p50": 916,
+          "p75": 2586,
+          "p90": 3348,
+          "p95": 3369,
+          "p99": 3431,
+          "max": 3431,
+          "avg": 1464,
+          "stdev": 1133
+        },
+        "histogram_success": {
+          "0-1s": 122,
+          "1-2s": 81,
+          "2-3s": 218,
+          "3-5s": 216,
+          "5-8s": 62,
+          "8-10s": 14,
+          "10-15s": 2,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 14,
+          "http_403": 3,
+          "http_500": 2,
+          "connection_error": 2,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 715
+        },
+        "avg_size_kb": 262.3,
+        "retries_total": 78,
+        "avg_retries_per_page": 0.11
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 1085,
+          "p10": 3222,
+          "p25": 6014,
+          "p50": 8003,
+          "p75": 11449,
+          "p90": 14900,
+          "p95": 18307,
+          "p99": 32720,
+          "max": 42532,
+          "avg": 9125,
+          "stdev": 5461
+        },
+        "latency_success": {
+          "min": 2140,
+          "p10": 3430,
+          "p25": 6331,
+          "p50": 8495,
+          "p75": 11775,
+          "p90": 14922,
+          "p95": 18307,
+          "p99": 32720,
+          "max": 42532,
+          "avg": 9555,
+          "stdev": 5503
+        },
+        "histogram": {
+          "0-5s": 23,
+          "5-10s": 98,
+          "10-15s": 43,
+          "15-20s": 10,
+          "20-30s": 5,
+          "30-45s": 3,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 230.1,
+        "main_mb": 46.9,
+        "sub_mb": 183.2
+      }
+    },
+    {
+      "label": "Retries=2,delay=1.0s",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 2,
+        "retry_delay_s": 1.0
+      },
+      "wall_time_s": 49.8,
+      "throughput_sites_per_min": 241.1,
+      "throughput_pages_per_sec": 18.1,
+      "main_page": {
+        "total": 200,
+        "success": 185,
+        "failure": 15,
+        "success_rate": 92.5,
+        "latency": {
+          "min": 422,
+          "p10": 2106,
+          "p25": 2484,
+          "p50": 2990,
+          "p75": 4185,
+          "p90": 5780,
+          "p95": 7471,
+          "p99": 10907,
+          "max": 12424,
+          "avg": 3517,
+          "stdev": 1741
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 5,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 185
+        },
+        "avg_size_kb": 276.8
+      },
+      "subpages": {
+        "total_links_found": 4356,
+        "total_attempted": 735,
+        "avg_links_per_site": 23.5,
+        "avg_attempted_per_site": 4.0,
+        "total_requests": 735,
+        "success": 714,
+        "failure": 21,
+        "success_rate": 97.1,
+        "latency_success": {
+          "min": 375,
+          "p10": 747,
+          "p25": 1757,
+          "p50": 2647,
+          "p75": 3740,
+          "p90": 5692,
+          "p95": 6718,
+          "p99": 8668,
+          "max": 12511,
+          "avg": 2964,
+          "stdev": 1898
+        },
+        "latency_failure": {
+          "min": 358,
+          "p10": 387,
+          "p25": 429,
+          "p50": 871,
+          "p75": 1833,
+          "p90": 2646,
+          "p95": 2989,
+          "p99": 3714,
+          "max": 3714,
+          "avg": 1262,
+          "stdev": 1002
+        },
+        "histogram_success": {
+          "0-1s": 117,
+          "1-2s": 97,
+          "2-3s": 211,
+          "3-5s": 190,
+          "5-8s": 84,
+          "8-10s": 12,
+          "10-15s": 3,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 14,
+          "http_403": 3,
+          "http_500": 2,
+          "http_401": 1,
+          "connection_error": 1
+        },
+        "status_codes": {
+          "200": 714
+        },
+        "avg_size_kb": 261.0,
+        "retries_total": 70,
+        "avg_retries_per_page": 0.1
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 2054,
+          "p10": 3686,
+          "p25": 6174,
+          "p50": 8829,
+          "p75": 11507,
+          "p90": 15595,
+          "p95": 18060,
+          "p99": 28009,
+          "max": 45834,
+          "avg": 9611,
+          "stdev": 5553
+        },
+        "latency_success": {
+          "min": 2054,
+          "p10": 3559,
+          "p25": 6327,
+          "p50": 9081,
+          "p75": 11925,
+          "p90": 16017,
+          "p95": 18060,
+          "p99": 28009,
+          "max": 45834,
+          "avg": 9841,
+          "stdev": 5682
+        },
+        "histogram": {
+          "0-5s": 28,
+          "5-10s": 83,
+          "10-15s": 47,
+          "15-20s": 19,
+          "20-30s": 7,
+          "30-45s": 0,
+          "45-60s": 1,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 232.0,
+        "main_mb": 50.0,
+        "sub_mb": 182.0
+      }
+    },
+    {
+      "label": "MaxSubpages=2",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 2,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 32.1,
+      "throughput_sites_per_min": 374.2,
+      "throughput_pages_per_sec": 14.6,
+      "main_page": {
+        "total": 200,
+        "success": 182,
+        "failure": 18,
+        "success_rate": 91.0,
+        "latency": {
+          "min": 563,
+          "p10": 2074,
+          "p25": 2519,
+          "p50": 3033,
+          "p75": 3800,
+          "p90": 5638,
+          "p95": 6529,
+          "p99": 9504,
+          "max": 10621,
+          "avg": 3453,
+          "stdev": 1650
+        },
+        "errors": {
+          "http_403": 10,
+          "connection_error": 5,
+          "http_404": 1,
+          "http_400": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 182
+        },
+        "avg_size_kb": 269.0
+      },
+      "subpages": {
+        "total_links_found": 4221,
+        "total_attempted": 299,
+        "avg_links_per_site": 23.2,
+        "avg_attempted_per_site": 1.6,
+        "total_requests": 299,
+        "success": 287,
+        "failure": 12,
+        "success_rate": 96.0,
+        "latency_success": {
+          "min": 395,
+          "p10": 597,
+          "p25": 802,
+          "p50": 1891,
+          "p75": 3026,
+          "p90": 4179,
+          "p95": 5296,
+          "p99": 7738,
+          "max": 11471,
+          "avg": 2185,
+          "stdev": 1667
+        },
+        "latency_failure": {
+          "min": 449,
+          "p10": 594,
+          "p25": 733,
+          "p50": 846,
+          "p75": 2693,
+          "p90": 3177,
+          "p95": 3320,
+          "p99": 3320,
+          "max": 3320,
+          "avg": 1424,
+          "stdev": 1078
+        },
+        "histogram_success": {
+          "0-1s": 95,
+          "1-2s": 54,
+          "2-3s": 63,
+          "3-5s": 58,
+          "5-8s": 15,
+          "8-10s": 1,
+          "10-15s": 1,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 8,
+          "http_500": 2,
+          "http_401": 1,
+          "http_403": 1
+        },
+        "status_codes": {
+          "200": 287
+        },
+        "avg_size_kb": 246.2,
+        "retries_total": 15,
+        "avg_retries_per_page": 0.05
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 698,
+          "p10": 2744,
+          "p25": 4881,
+          "p50": 6821,
+          "p75": 9220,
+          "p90": 12807,
+          "p95": 19003,
+          "p99": 23067,
+          "max": 24740,
+          "avg": 7612,
+          "stdev": 4475
+        },
+        "latency_success": {
+          "min": 1705,
+          "p10": 3221,
+          "p25": 5478,
+          "p50": 7037,
+          "p75": 9371,
+          "p90": 12807,
+          "p95": 19003,
+          "p99": 23067,
+          "max": 24740,
+          "avg": 7965,
+          "stdev": 4433
+        },
+        "histogram": {
+          "0-5s": 38,
+          "5-10s": 107,
+          "10-15s": 24,
+          "15-20s": 8,
+          "20-30s": 5,
+          "30-45s": 0,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 116.8,
+        "main_mb": 47.8,
+        "sub_mb": 69.0
+      }
+    },
+    {
+      "label": "MaxSubpages=5",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 39.4,
+      "throughput_sites_per_min": 304.2,
+      "throughput_pages_per_sec": 22.2,
+      "main_page": {
+        "total": 200,
+        "success": 184,
+        "failure": 16,
+        "success_rate": 92.0,
+        "latency": {
+          "min": 530,
+          "p10": 2083,
+          "p25": 2355,
+          "p50": 2982,
+          "p75": 3963,
+          "p90": 5264,
+          "p95": 7377,
+          "p99": 11927,
+          "max": 11959,
+          "avg": 3443,
+          "stdev": 1803
+        },
+        "errors": {
+          "http_403": 8,
+          "connection_error": 6,
+          "http_404": 1,
+          "payload_error": 1
+        },
+        "status_codes": {
+          "200": 184
+        },
+        "avg_size_kb": 266.0
+      },
+      "subpages": {
+        "total_links_found": 4306,
+        "total_attempted": 720,
+        "avg_links_per_site": 23.4,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 720,
+        "success": 691,
+        "failure": 29,
+        "success_rate": 96.0,
+        "latency_success": {
+          "min": 382,
+          "p10": 738,
+          "p25": 1791,
+          "p50": 2742,
+          "p75": 3843,
+          "p90": 5517,
+          "p95": 6816,
+          "p99": 10040,
+          "max": 12456,
+          "avg": 3017,
+          "stdev": 1940
+        },
+        "latency_failure": {
+          "min": 355,
+          "p10": 358,
+          "p25": 402,
+          "p50": 691,
+          "p75": 2361,
+          "p90": 3161,
+          "p95": 3392,
+          "p99": 8734,
+          "max": 8734,
+          "avg": 1355,
+          "stdev": 1713
+        },
+        "histogram_success": {
+          "0-1s": 112,
+          "1-2s": 81,
+          "2-3s": 215,
+          "3-5s": 197,
+          "5-8s": 69,
+          "8-10s": 10,
+          "10-15s": 7,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 15,
+          "connection_error": 7,
+          "http_403": 3,
+          "http_500": 2,
+          "http_401": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 691
+        },
+        "avg_size_kb": 261.9,
+        "retries_total": 47,
+        "avg_retries_per_page": 0.07
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 697,
+          "p10": 2951,
+          "p25": 5323,
+          "p50": 8152,
+          "p75": 12374,
+          "p90": 15658,
+          "p95": 19808,
+          "p99": 30755,
+          "max": 32248,
+          "avg": 9114,
+          "stdev": 5509
+        },
+        "latency_success": {
+          "min": 1958,
+          "p10": 3251,
+          "p25": 6182,
+          "p50": 8425,
+          "p75": 12784,
+          "p90": 15787,
+          "p95": 19808,
+          "p99": 30755,
+          "max": 32248,
+          "avg": 9646,
+          "stdev": 5415
+        },
+        "histogram": {
+          "0-5s": 32,
+          "5-10s": 82,
+          "10-15s": 47,
+          "15-20s": 14,
+          "20-30s": 7,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 224.5,
+        "main_mb": 47.8,
+        "sub_mb": 176.7
+      }
+    },
+    {
+      "label": "MaxSubpages=10",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 10,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 64.5,
+      "throughput_sites_per_min": 186.2,
+      "throughput_pages_per_sec": 22.1,
+      "main_page": {
+        "total": 200,
+        "success": 181,
+        "failure": 19,
+        "success_rate": 90.5,
+        "latency": {
+          "min": 615,
+          "p10": 2189,
+          "p25": 2448,
+          "p50": 2957,
+          "p75": 3856,
+          "p90": 5984,
+          "p95": 6600,
+          "p99": 10118,
+          "max": 10914,
+          "avg": 3475,
+          "stdev": 1706
+        },
+        "errors": {
+          "connection_error": 6,
+          "payload_error": 5,
+          "http_403": 5,
+          "http_404": 1,
+          "http_400": 1,
+          "timeout": 1
+        },
+        "status_codes": {
+          "200": 181
+        },
+        "avg_size_kb": 252.5
+      },
+      "subpages": {
+        "total_links_found": 4184,
+        "total_attempted": 1304,
+        "avg_links_per_site": 23.1,
+        "avg_attempted_per_site": 7.2,
+        "total_requests": 1304,
+        "success": 1246,
+        "failure": 58,
+        "success_rate": 95.6,
+        "latency_success": {
+          "min": 369,
+          "p10": 638,
+          "p25": 958,
+          "p50": 2009,
+          "p75": 3258,
+          "p90": 4838,
+          "p95": 6243,
+          "p99": 9507,
+          "max": 12896,
+          "avg": 2450,
+          "stdev": 1949
+        },
+        "latency_failure": {
+          "min": 154,
+          "p10": 385,
+          "p25": 452,
+          "p50": 892,
+          "p75": 3581,
+          "p90": 12998,
+          "p95": 13001,
+          "p99": 13003,
+          "max": 13003,
+          "avg": 3237,
+          "stdev": 4506
+        },
+        "histogram_success": {
+          "0-1s": 331,
+          "1-2s": 289,
+          "2-3s": 263,
+          "3-5s": 246,
+          "5-8s": 91,
+          "8-10s": 16,
+          "10-15s": 10,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 23,
+          "http_403": 11,
+          "timeout": 9,
+          "connection_error": 9,
+          "http_500": 5,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 1246
+        },
+        "avg_size_kb": 290.1,
+        "retries_total": 75,
+        "avg_retries_per_page": 0.06
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 720,
+          "p10": 3114,
+          "p25": 5741,
+          "p50": 8591,
+          "p75": 12512,
+          "p90": 16577,
+          "p95": 22709,
+          "p99": 52288,
+          "max": 61622,
+          "avg": 9993,
+          "stdev": 7402
+        },
+        "latency_success": {
+          "min": 2261,
+          "p10": 3589,
+          "p25": 6617,
+          "p50": 8838,
+          "p75": 12954,
+          "p90": 16756,
+          "p95": 22709,
+          "p99": 52288,
+          "max": 61622,
+          "avg": 10593,
+          "stdev": 7482
+        },
+        "histogram": {
+          "0-5s": 28,
+          "5-10s": 79,
+          "10-15s": 47,
+          "15-20s": 15,
+          "20-30s": 7,
+          "30-45s": 3,
+          "45-60s": 1,
+          "60-90s": 1,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 397.6,
+        "main_mb": 44.6,
+        "sub_mb": 353.0
+      }
+    },
+    {
+      "label": "MaxSubpages=15",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 15,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 92.1,
+      "throughput_sites_per_min": 130.3,
+      "throughput_pages_per_sec": 21.3,
+      "main_page": {
+        "total": 200,
+        "success": 181,
+        "failure": 19,
+        "success_rate": 90.5,
+        "latency": {
+          "min": 540,
+          "p10": 2312,
+          "p25": 2689,
+          "p50": 3339,
+          "p75": 4664,
+          "p90": 6131,
+          "p95": 7625,
+          "p99": 10680,
+          "max": 11188,
+          "avg": 3833,
+          "stdev": 1790
+        },
+        "errors": {
+          "http_403": 11,
+          "connection_error": 5,
+          "http_404": 1,
+          "timeout": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 181
+        },
+        "avg_size_kb": 259.9
+      },
+      "subpages": {
+        "total_links_found": 4234,
+        "total_attempted": 1846,
+        "avg_links_per_site": 23.4,
+        "avg_attempted_per_site": 10.2,
+        "total_requests": 1846,
+        "success": 1776,
+        "failure": 70,
+        "success_rate": 96.2,
+        "latency_success": {
+          "min": 368,
+          "p10": 605,
+          "p25": 819,
+          "p50": 1602,
+          "p75": 2960,
+          "p90": 4499,
+          "p95": 5832,
+          "p99": 8828,
+          "max": 12116,
+          "avg": 2199,
+          "stdev": 1831
+        },
+        "latency_failure": {
+          "min": 1,
+          "p10": 379,
+          "p25": 427,
+          "p50": 908,
+          "p75": 2616,
+          "p90": 12980,
+          "p95": 12999,
+          "p99": 13002,
+          "max": 13002,
+          "avg": 2482,
+          "stdev": 3719
+        },
+        "histogram_success": {
+          "0-1s": 599,
+          "1-2s": 399,
+          "2-3s": 347,
+          "3-5s": 300,
+          "5-8s": 100,
+          "8-10s": 20,
+          "10-15s": 11,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 40,
+          "http_403": 10,
+          "connection_error": 7,
+          "timeout": 7,
+          "http_500": 5,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 1776
+        },
+        "avg_size_kb": 295.5,
+        "retries_total": 108,
+        "avg_retries_per_page": 0.06
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 727,
+          "p10": 3276,
+          "p25": 6597,
+          "p50": 10342,
+          "p75": 14794,
+          "p90": 20833,
+          "p95": 26940,
+          "p99": 67899,
+          "max": 88762,
+          "avg": 11960,
+          "stdev": 9772
+        },
+        "latency_success": {
+          "min": 2406,
+          "p10": 4655,
+          "p25": 7410,
+          "p50": 10820,
+          "p75": 15378,
+          "p90": 21302,
+          "p95": 26940,
+          "p99": 67899,
+          "max": 88762,
+          "avg": 12793,
+          "stdev": 9838
+        },
+        "histogram": {
+          "0-5s": 20,
+          "5-10s": 58,
+          "10-15s": 55,
+          "15-20s": 23,
+          "20-30s": 18,
+          "30-45s": 5,
+          "45-60s": 0,
+          "60-90s": 2,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 558.5,
+        "main_mb": 45.9,
+        "sub_mb": 512.6
+      }
+    },
+    {
+      "label": "Scale=100sites,conc=50",
+      "config": {
+        "num_sites": 100,
+        "site_concurrency": 50,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 31.4,
+      "throughput_sites_per_min": 191.0,
+      "throughput_pages_per_sec": 14.1,
+      "main_page": {
+        "total": 100,
+        "success": 94,
+        "failure": 6,
+        "success_rate": 94.0,
+        "latency": {
+          "min": 992,
+          "p10": 2019,
+          "p25": 2407,
+          "p50": 3141,
+          "p75": 4244,
+          "p90": 5949,
+          "p95": 7381,
+          "p99": 10281,
+          "max": 10281,
+          "avg": 3564,
+          "stdev": 1681
+        },
+        "errors": {
+          "connection_error": 2,
+          "http_403": 2,
+          "payload_error": 1,
+          "http_404": 1
+        },
+        "status_codes": {
+          "200": 94
+        },
+        "avg_size_kb": 245.6
+      },
+      "subpages": {
+        "total_links_found": 2238,
+        "total_attempted": 360,
+        "avg_links_per_site": 23.8,
+        "avg_attempted_per_site": 3.8,
+        "total_requests": 360,
+        "success": 348,
+        "failure": 12,
+        "success_rate": 96.7,
+        "latency_success": {
+          "min": 412,
+          "p10": 750,
+          "p25": 1982,
+          "p50": 2576,
+          "p75": 3497,
+          "p90": 5118,
+          "p95": 6373,
+          "p99": 9264,
+          "max": 10452,
+          "avg": 2921,
+          "stdev": 1754
+        },
+        "latency_failure": {
+          "min": 400,
+          "p10": 444,
+          "p25": 551,
+          "p50": 735,
+          "p75": 1943,
+          "p90": 3036,
+          "p95": 4176,
+          "p99": 4176,
+          "max": 4176,
+          "avg": 1244,
+          "stdev": 1199
+        },
+        "histogram_success": {
+          "0-1s": 44,
+          "1-2s": 44,
+          "2-3s": 124,
+          "3-5s": 96,
+          "5-8s": 34,
+          "8-10s": 5,
+          "10-15s": 1,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 7,
+          "http_403": 3,
+          "http_401": 1,
+          "http_500": 1
+        },
+        "status_codes": {
+          "200": 348
+        },
+        "avg_size_kb": 231.6,
+        "retries_total": 20,
+        "avg_retries_per_page": 0.06
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 740,
+          "p10": 3454,
+          "p25": 5586,
+          "p50": 8119,
+          "p75": 12360,
+          "p90": 15108,
+          "p95": 19177,
+          "p99": 22390,
+          "max": 22390,
+          "avg": 8838,
+          "stdev": 4670
+        },
+        "latency_success": {
+          "min": 2213,
+          "p10": 4329,
+          "p25": 5938,
+          "p50": 8291,
+          "p75": 12598,
+          "p90": 15108,
+          "p95": 19177,
+          "p99": 22390,
+          "max": 22390,
+          "avg": 9207,
+          "stdev": 4562
+        },
+        "histogram": {
+          "0-5s": 13,
+          "5-10s": 48,
+          "10-15s": 23,
+          "15-20s": 7,
+          "20-30s": 3,
+          "30-45s": 0,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 101.3,
+        "main_mb": 22.5,
+        "sub_mb": 78.7
+      }
+    },
+    {
+      "label": "Scale=200sites,conc=100",
+      "config": {
+        "num_sites": 200,
+        "site_concurrency": 100,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 37.4,
+      "throughput_sites_per_min": 321.1,
+      "throughput_pages_per_sec": 23.0,
+      "main_page": {
+        "total": 200,
+        "success": 182,
+        "failure": 18,
+        "success_rate": 91.0,
+        "latency": {
+          "min": 617,
+          "p10": 2093,
+          "p25": 2398,
+          "p50": 2986,
+          "p75": 4132,
+          "p90": 5412,
+          "p95": 6595,
+          "p99": 10866,
+          "max": 12733,
+          "avg": 3473,
+          "stdev": 1759
+        },
+        "errors": {
+          "http_403": 9,
+          "connection_error": 5,
+          "payload_error": 2,
+          "http_404": 1,
+          "http_400": 1
+        },
+        "status_codes": {
+          "200": 182
+        },
+        "avg_size_kb": 271.8
+      },
+      "subpages": {
+        "total_links_found": 4214,
+        "total_attempted": 701,
+        "avg_links_per_site": 23.2,
+        "avg_attempted_per_site": 3.9,
+        "total_requests": 701,
+        "success": 677,
+        "failure": 24,
+        "success_rate": 96.6,
+        "latency_success": {
+          "min": 419,
+          "p10": 726,
+          "p25": 1937,
+          "p50": 2688,
+          "p75": 3742,
+          "p90": 5231,
+          "p95": 6643,
+          "p99": 10454,
+          "max": 12275,
+          "avg": 2993,
+          "stdev": 1897
+        },
+        "latency_failure": {
+          "min": 353,
+          "p10": 365,
+          "p25": 433,
+          "p50": 848,
+          "p75": 2231,
+          "p90": 2971,
+          "p95": 3276,
+          "p99": 3562,
+          "max": 3562,
+          "avg": 1282,
+          "stdev": 1070
+        },
+        "histogram_success": {
+          "0-1s": 105,
+          "1-2s": 74,
+          "2-3s": 216,
+          "3-5s": 208,
+          "5-8s": 56,
+          "8-10s": 10,
+          "10-15s": 8,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "http_404": 14,
+          "connection_error": 4,
+          "http_403": 3,
+          "http_500": 2,
+          "http_401": 1
+        },
+        "status_codes": {
+          "200": 677
+        },
+        "avg_size_kb": 268.0,
+        "retries_total": 38,
+        "avg_retries_per_page": 0.05
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 789,
+          "p10": 2991,
+          "p25": 5238,
+          "p50": 7826,
+          "p75": 10891,
+          "p90": 14941,
+          "p95": 18340,
+          "p99": 30815,
+          "max": 31372,
+          "avg": 8638,
+          "stdev": 5141
+        },
+        "latency_success": {
+          "min": 2207,
+          "p10": 3768,
+          "p25": 6166,
+          "p50": 8393,
+          "p75": 11670,
+          "p90": 14951,
+          "p95": 18340,
+          "p99": 30815,
+          "max": 31372,
+          "avg": 9179,
+          "stdev": 5059
+        },
+        "histogram": {
+          "0-5s": 33,
+          "5-10s": 90,
+          "10-15s": 41,
+          "15-20s": 11,
+          "20-30s": 5,
+          "30-45s": 2,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 225.5,
+        "main_mb": 48.3,
+        "sub_mb": 177.2
+      }
+    },
+    {
+      "label": "Scale=500sites,conc=200",
+      "config": {
+        "num_sites": 500,
+        "site_concurrency": 200,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 8.5,
+      "throughput_sites_per_min": 3528.5,
+      "throughput_pages_per_sec": 1.5,
+      "main_page": {
+        "total": 500,
+        "success": 7,
+        "failure": 493,
+        "success_rate": 1.4,
+        "latency": {
+          "min": 2301,
+          "p10": 2301,
+          "p25": 2667,
+          "p50": 2819,
+          "p75": 3208,
+          "p90": 4549,
+          "p95": 4549,
+          "p99": 4549,
+          "max": 4549,
+          "avg": 3049,
+          "stdev": 720
+        },
+        "errors": {
+          "other:ClientHttpProxyError": 473,
+          "http_407": 19,
+          "connection_error": 1
+        },
+        "status_codes": {
+          "200": 7
+        },
+        "avg_size_kb": 198.1
+      },
+      "subpages": {
+        "total_links_found": 269,
+        "total_attempted": 35,
+        "avg_links_per_site": 38.4,
+        "avg_attempted_per_site": 5.0,
+        "total_requests": 35,
+        "success": 6,
+        "failure": 29,
+        "success_rate": 17.1,
+        "latency_success": {
+          "min": 576,
+          "p10": 576,
+          "p25": 599,
+          "p50": 641,
+          "p75": 880,
+          "p90": 955,
+          "p95": 955,
+          "p99": 955,
+          "max": 955,
+          "avg": 715,
+          "stdev": 162
+        },
+        "latency_failure": {
+          "min": 347,
+          "p10": 348,
+          "p25": 350,
+          "p50": 352,
+          "p75": 360,
+          "p90": 374,
+          "p95": 377,
+          "p99": 411,
+          "max": 411,
+          "avg": 358,
+          "stdev": 13
+        },
+        "histogram_success": {
+          "0-1s": 6,
+          "1-2s": 0,
+          "2-3s": 0,
+          "3-5s": 0,
+          "5-8s": 0,
+          "8-10s": 0,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {
+          "other:ClientHttpProxyError": 28,
+          "http_404": 1
+        },
+        "status_codes": {
+          "200": 6
+        },
+        "avg_size_kb": 190.7,
+        "retries_total": 29,
+        "avg_retries_per_page": 0.83
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 957,
+          "p10": 1006,
+          "p25": 1069,
+          "p50": 1145,
+          "p75": 1187,
+          "p90": 1227,
+          "p95": 1240,
+          "p99": 4841,
+          "max": 8484,
+          "avg": 1201,
+          "stdev": 573
+        },
+        "latency_success": {
+          "min": 3786,
+          "p10": 3786,
+          "p25": 4078,
+          "p50": 4219,
+          "p75": 5024,
+          "p90": 6430,
+          "p95": 6430,
+          "p99": 6430,
+          "max": 6430,
+          "avg": 4647,
+          "stdev": 900
+        },
+        "histogram": {
+          "0-5s": 5,
+          "5-10s": 2,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          "30-45s": 0,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 2.5,
+        "main_mb": 1.4,
+        "sub_mb": 1.1
+      }
+    },
+    {
+      "label": "Scale=1000sites,conc=500",
+      "config": {
+        "num_sites": 1000,
+        "site_concurrency": 500,
+        "timeout_s": 12,
+        "max_subpages": 5,
+        "per_domain_concurrency": 5,
+        "intra_delay_s": 0,
+        "inter_batch_delay_s": 0,
+        "batch_size": 10,
+        "max_retries": 1,
+        "retry_delay_s": 0
+      },
+      "wall_time_s": 10.2,
+      "throughput_sites_per_min": 5884.4,
+      "throughput_pages_per_sec": 0.0,
+      "main_page": {
+        "total": 1000,
+        "success": 0,
+        "failure": 1000,
+        "success_rate": 0.0,
+        "latency": {},
+        "errors": {
+          "other:ClientHttpProxyError": 964,
+          "http_407": 35,
+          "connection_error": 1
+        },
+        "status_codes": {},
+        "avg_size_kb": 0.0
+      },
+      "subpages": {
+        "total_links_found": 0,
+        "total_attempted": 0,
+        "avg_links_per_site": 0.0,
+        "avg_attempted_per_site": 0.0,
+        "total_requests": 0,
+        "success": 0,
+        "failure": 0,
+        "success_rate": 0.0,
+        "latency_success": {},
+        "latency_failure": {},
+        "histogram_success": {
+          "0-1s": 0,
+          "1-2s": 0,
+          "2-3s": 0,
+          "3-5s": 0,
+          "5-8s": 0,
+          "8-10s": 0,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          ">30s": 0
+        },
+        "errors": {},
+        "status_codes": {},
+        "avg_size_kb": 0.0,
+        "retries_total": 0,
+        "avg_retries_per_page": 0.0
+      },
+      "per_site": {
+        "latency_all": {
+          "min": 1892,
+          "p10": 2233,
+          "p25": 2343,
+          "p50": 2609,
+          "p75": 3061,
+          "p90": 6460,
+          "p95": 6726,
+          "p99": 7035,
+          "max": 8898,
+          "avg": 3377,
+          "stdev": 1653
+        },
+        "latency_success": {},
+        "histogram": {
+          "0-5s": 0,
+          "5-10s": 0,
+          "10-15s": 0,
+          "15-20s": 0,
+          "20-30s": 0,
+          "30-45s": 0,
+          "45-60s": 0,
+          "60-90s": 0,
+          ">90s": 0
+        }
+      },
+      "bandwidth": {
+        "total_mb": 0.0,
+        "main_mb": 0.0,
+        "sub_mb": 0.0
+      }
+    }
+  ]
+}

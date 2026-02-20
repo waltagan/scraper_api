@@ -1,8 +1,8 @@
 """
-Batch Scrape Processor - Pipeline de scraping em massa.
+Batch Scrape Processor — pipeline de scraping em massa.
 
-Suporta N instâncias paralelas, cada uma com seus próprios workers,
-processando partições diferentes das empresas pendentes.
+N instâncias paralelas, cada uma com workers, processando partições diferentes.
+Pipeline único (sem fast/retry track). Workers controlam concorrência.
 """
 
 import asyncio
@@ -15,9 +15,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
-from app.services.scraper import scrape_all_subpages
+from app.services.scraper.scraper_service import scrape_all_subpages
 from app.core.chunking import process_content
 from app.services.database_service import get_db_service
+from app.services.scraper.constants import WORKERS_PER_INSTANCE, NUM_INSTANCES, FLUSH_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -62,22 +63,10 @@ def _classify_error(error_msg: str) -> str:
 
 
 def _bucket_fail_reason(reason: str) -> str:
-    """
-    Agrupa razões detalhadas de falha em buckets acionáveis.
-    
-    Formato de entrada esperado:
-      - probe_<ProbeErrorType.value>  (ex: probe_dns_error, probe_connection_timeout)
-      - scrape_proxy_fail(<detail>)   (ex: scrape_proxy_fail(proxy_fail:proxy_timeout))
-      - scrape_blocked_<type>         (ex: scrape_blocked_cloudflare)
-      - scrape_error(<detail>)
-      - reuse_<type>
-      - scrape_concurrency_timeout
-    """
     if not reason:
         return "unknown"
     r = reason.lower()
 
-    # --- PROBE sub-tipos (site inacessível) ---
     if r.startswith("probe_"):
         if "dns" in r:
             return "probe:dns"
@@ -93,35 +82,8 @@ def _bucket_fail_reason(reason: str) -> str:
             return "probe:server_error"
         if "redirect" in r:
             return "probe:redirect_loop"
-        if "http_error" in r:
-            return "probe:http_error"
-        if "unknown" in r:
-            return "probe:unknown"
         return "probe:other"
 
-    # --- ANALYZER reuse sub-tipos ---
-    if "reuse_no_html" in r:
-        return "analyzer:no_html"
-    if "reuse_status" in r:
-        return "analyzer:bad_status"
-    if "reuse_short_content" in r:
-        return "analyzer:short_content"
-    if "reuse_soft_404" in r:
-        return "analyzer:soft_404"
-    if "reuse_cloudflare" in r:
-        return "analyzer:cloudflare"
-
-    # --- CONCURRENCY ---
-    if "concurrency_timeout" in r:
-        return "infra:concurrency_timeout"
-
-    # --- SCRAPE BLOCKED ---
-    if "blocked" in r:
-        if "cloudflare" in r:
-            return "scrape:blocked_cloudflare"
-        return "scrape:blocked_waf"
-
-    # --- PROXY FAIL sub-tipos (extrair detalhe dos parênteses) ---
     if "proxy_fail" in r:
         if "proxy_timeout" in r or "timed out" in r:
             return "proxy:timeout"
@@ -131,91 +93,49 @@ def _bucket_fail_reason(reason: str) -> str:
             return "proxy:http_403"
         if "http_5" in r:
             return "proxy:http_5xx"
-        if "http_4" in r:
-            return "proxy:http_4xx"
         if "ssl" in r:
             return "proxy:ssl"
-        if "no_curl_cffi" in r:
-            return "proxy:no_client"
         if "empty_response" in r:
             return "proxy:empty_response"
         return "proxy:other"
 
-    # --- SCRAPE resultado ---
+    if "blocked" in r:
+        if "cloudflare" in r:
+            return "scrape:blocked_cloudflare"
+        return "scrape:blocked_waf"
+
     if "soft 404" in r or "soft_404" in r:
         return "scrape:soft_404"
     if "cloudflare" in r:
         return "scrape:cloudflare"
+    if "timeout" in r:
+        return "scrape:timeout"
     if "scrape_error" in r:
         return "scrape:error"
     if "scrape_null" in r:
         return "scrape:null_response"
-    if "scrape_exception" in r:
-        return "scrape:exception"
-    if "timeout" in r:
-        return "scrape:timeout"
 
     return f"other:{reason[:30]}"
 
 
-def _build_failure_diagnosis(
-    fail_reasons: Dict[str, int],
-    total_processed: int,
-) -> dict:
-    """
-    Agrupa fail_reasons em categorias acionáveis para diagnóstico rápido.
-    
-    Categorias:
-      - site_offline: DNS, refused, server_error → site genuinamente fora do ar (nada a fazer)
-      - proxy_infra: timeout, connection, ssl via proxy → problema de infraestrutura proxy
-      - blocked: WAF, Cloudflare, HTTP 403 → precisamos melhorar evasão
-      - content_issue: soft_404, short_content, no_html → site sem conteúdo útil
-      - our_infra: concurrency_timeout → nosso servidor precisa de mais recursos
-      - other: demais erros
-    """
+def _build_failure_diagnosis(fail_reasons: Dict[str, int], total_processed: int) -> dict:
     categories: Dict[str, Dict[str, int]] = {
-        "site_offline": {},
-        "proxy_infra": {},
-        "blocked": {},
-        "content_issue": {},
-        "our_infra": {},
-        "other": {},
+        "site_offline": {}, "proxy_infra": {}, "blocked": {},
+        "content_issue": {}, "other": {},
     }
-
     mapping = {
-        "probe:dns": "site_offline",
-        "probe:refused": "site_offline",
-        "probe:server_error": "site_offline",
-        "probe:redirect_loop": "site_offline",
-        "probe:timeout": "proxy_infra",
-        "probe:ssl": "proxy_infra",
-        "probe:unknown": "proxy_infra",
-        "probe:other": "proxy_infra",
-        "probe:http_error": "proxy_infra",
-        "probe:blocked": "blocked",
-        "proxy:timeout": "proxy_infra",
-        "proxy:connection": "proxy_infra",
-        "proxy:ssl": "proxy_infra",
-        "proxy:empty_response": "proxy_infra",
-        "proxy:no_client": "proxy_infra",
-        "proxy:other": "proxy_infra",
-        "proxy:http_403": "blocked",
-        "proxy:http_4xx": "blocked",
+        "probe:dns": "site_offline", "probe:refused": "site_offline",
+        "probe:server_error": "site_offline", "probe:redirect_loop": "site_offline",
+        "probe:timeout": "proxy_infra", "probe:ssl": "proxy_infra",
+        "probe:other": "proxy_infra", "probe:blocked": "blocked",
+        "proxy:timeout": "proxy_infra", "proxy:connection": "proxy_infra",
+        "proxy:ssl": "proxy_infra", "proxy:empty_response": "proxy_infra",
+        "proxy:other": "proxy_infra", "proxy:http_403": "blocked",
         "proxy:http_5xx": "site_offline",
-        "scrape:blocked_waf": "blocked",
-        "scrape:blocked_cloudflare": "blocked",
-        "scrape:cloudflare": "blocked",
-        "scrape:soft_404": "content_issue",
-        "scrape:error": "other",
-        "scrape:null_response": "other",
-        "scrape:exception": "other",
+        "scrape:blocked_waf": "blocked", "scrape:blocked_cloudflare": "blocked",
+        "scrape:cloudflare": "blocked", "scrape:soft_404": "content_issue",
+        "scrape:error": "other", "scrape:null_response": "other",
         "scrape:timeout": "proxy_infra",
-        "analyzer:no_html": "content_issue",
-        "analyzer:bad_status": "content_issue",
-        "analyzer:short_content": "content_issue",
-        "analyzer:soft_404": "content_issue",
-        "analyzer:cloudflare": "blocked",
-        "infra:concurrency_timeout": "our_infra",
     }
 
     for reason, count in fail_reasons.items():
@@ -234,21 +154,11 @@ def _build_failure_diagnosis(
                 "breakdown": dict(sorted(reasons.items(), key=lambda x: -x[1])),
             }
 
-    labels = {
-        "site_offline": "Site genuinamente fora do ar (DNS, refused, 5xx) → nada a fazer",
-        "proxy_infra": "Falha de proxy (timeout, conexão, SSL) → melhorar proxies/timeouts",
-        "blocked": "Bloqueado por WAF/Cloudflare/403 → melhorar evasão/fingerprint",
-        "content_issue": "Site sem conteúdo útil (soft 404, vazio) → nada a fazer",
-        "our_infra": "Nosso servidor sobrecarregado (concurrency timeout) → escalar",
-        "other": "Erros diversos → investigar individualmente",
-    }
-
     return {
         "total_failures": total_failures,
         "total_processed": total_processed,
         "failure_rate_pct": round(total_failures / total_processed * 100, 1) if total_processed else 0,
         "categories": summary,
-        "category_labels": labels,
     }
 
 
@@ -256,12 +166,7 @@ def _percentiles(sorted_values: List[float], pcts: List[int]) -> Dict[str, float
     n = len(sorted_values)
     if n == 0:
         return {f"p{p}": 0 for p in pcts}
-    result = {}
-    for p in pcts:
-        idx = int(n * p / 100)
-        idx = min(idx, n - 1)
-        result[f"p{p}"] = round(sorted_values[idx], 1)
-    return result
+    return {f"p{p}": round(sorted_values[min(int(n * p / 100), n - 1)], 1) for p in pcts}
 
 
 @dataclass
@@ -279,16 +184,10 @@ class CompanyResult:
 
 
 class BatchInstance:
-    """Uma instância individual de batch processing com seus próprios workers."""
+    """Uma instância individual com seus próprios workers."""
 
-    def __init__(
-        self,
-        instance_id: int,
-        batch_id: str,
-        worker_count: int,
-        flush_size: int,
-        companies: List[Dict[str, Any]],
-    ):
+    def __init__(self, instance_id: int, batch_id: str, worker_count: int,
+                 flush_size: int, companies: List[Dict[str, Any]]):
         self.instance_id = instance_id
         self.batch_id = batch_id
         self.worker_count = worker_count
@@ -326,14 +225,10 @@ class BatchInstance:
         self._zero_links_companies: int = 0
 
     async def run(self):
-        """Executa esta instância: carrega queue, roda workers, flush final."""
         self.status = "running"
         self._start_time = time.time()
         label = f"[Batch {self.batch_id} I{self.instance_id}]"
-
-        logger.info(
-            f"{label} Iniciando: {self.total} empresas, {self.worker_count} workers"
-        )
+        logger.info(f"{label} Iniciando: {self.total} empresas, {self.worker_count} workers")
 
         try:
             ramp_batch = 200
@@ -345,7 +240,6 @@ class BatchInstance:
 
             for company in self.companies:
                 await self._queue.put(company)
-
             for _ in range(self.worker_count):
                 await self._queue.put(None)
 
@@ -354,10 +248,7 @@ class BatchInstance:
 
             self.status = "completed"
             elapsed = time.time() - self._start_time
-            logger.info(
-                f"{label} Concluido em {elapsed:.0f}s: "
-                f"{self.success_count} sucesso, {self.error_count} erros"
-            )
+            logger.info(f"{label} Concluido em {elapsed:.0f}s: {self.success_count} ok, {self.error_count} erros")
         except asyncio.CancelledError:
             await self._flush_buffer(force=True)
             self.status = "cancelled"
@@ -377,8 +268,7 @@ class BatchInstance:
 
             t0 = time.perf_counter()
             result = await self._process_company(item, worker_id)
-            elapsed_ms = (time.perf_counter() - t0) * 1000
-            result.processing_time_ms = elapsed_ms
+            result.processing_time_ms = (time.perf_counter() - t0) * 1000
 
             self.in_progress -= 1
 
@@ -386,8 +276,7 @@ class BatchInstance:
             async with self._buffer_lock:
                 self._buffer.append(result)
                 self.processed += 1
-
-                bisect.insort(self._processing_times_sorted, elapsed_ms)
+                bisect.insort(self._processing_times_sorted, result.processing_time_ms)
                 if result.pages_scraped > 0:
                     self._pages_per_company.append(result.pages_scraped)
                 self._retries_total += result.retries_used
@@ -406,9 +295,7 @@ class BatchInstance:
             if pending_flush is not None:
                 await self._flush_buffer_data(pending_flush)
 
-    async def _process_company(
-        self, company: Dict[str, Any], worker_id: int
-    ) -> CompanyResult:
+    async def _process_company(self, company: Dict[str, Any], worker_id: int) -> CompanyResult:
         cnpj = company['cnpj_basico']
         url = company['website_url']
         discovery_id = company.get('wd_id')
@@ -421,10 +308,8 @@ class BatchInstance:
                     ctx_label=f"[B{self.batch_id}I{self.instance_id}]",
                     request_id=cnpj,
                 )
-
                 self._aggregate_scrape_meta(result)
                 pages = result.pages
-
                 total_pages = len(pages) if pages else 0
                 successful_pages = [p for p in (pages or []) if p.success]
 
@@ -434,11 +319,9 @@ class BatchInstance:
                         first_err = next((p.error for p in pages if p.error), None)
                         if first_err:
                             error_msg = f"Nenhum conteudo obtido: {first_err}"
-
                     if attempt < max_retries and _is_transient(error_msg):
                         await asyncio.sleep(2 ** (attempt + 1))
                         continue
-
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
                         website_url=url, error=error_msg[:500],
@@ -448,17 +331,14 @@ class BatchInstance:
                 parts = []
                 visited = []
                 for page in successful_pages:
-                    parts.append(
-                        f"--- PAGE START: {page.url} ---\n{page.content}\n--- PAGE END ---"
-                    )
+                    parts.append(f"--- PAGE START: {page.url} ---\n{page.content}\n--- PAGE END ---")
                     visited.append(page.url)
 
                 aggregated = "\n\n".join(parts)
                 if len(aggregated.strip()) < 100:
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
-                        website_url=url,
-                        error=f"Conteudo agregado insuficiente ({len(aggregated)} chars)",
+                        website_url=url, error=f"Conteudo insuficiente ({len(aggregated)} chars)",
                         pages_scraped=len(successful_pages),
                         total_pages_attempted=total_pages, retries_used=attempt,
                     )
@@ -467,7 +347,7 @@ class BatchInstance:
                 if not chunks:
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
-                        website_url=url, error="Nenhum chunk gerado apos processamento",
+                        website_url=url, error="Nenhum chunk gerado",
                         pages_scraped=len(successful_pages),
                         total_pages_attempted=total_pages, retries_used=attempt,
                     )
@@ -482,14 +362,11 @@ class BatchInstance:
                     pages_scraped=len(successful_pages),
                     total_pages_attempted=total_pages, retries_used=attempt,
                 )
-
             except Exception as e:
                 error_msg = f"{type(e).__name__}: {str(e)}"
-
                 if attempt < max_retries and _is_transient(error_msg):
                     await asyncio.sleep(2 ** (attempt + 1))
                     continue
-
                 short_tb = traceback.format_exc()[-300:]
                 self._record_error(cnpj, url, error_msg)
                 return CompanyResult(
@@ -500,12 +377,10 @@ class BatchInstance:
 
         return CompanyResult(
             cnpj_basico=cnpj, discovery_id=discovery_id,
-            website_url=url, error="Maximo de retries atingido",
-            retries_used=max_retries,
+            website_url=url, error="Max retries", retries_used=max_retries,
         )
 
     def _aggregate_scrape_meta(self, result) -> None:
-        """Agrega metadados do ScrapeResult nos contadores da instância."""
         self._links_in_html_total += result.links_in_html
         self._links_after_filter_total += result.links_after_filter
         self._links_selected_total += result.links_selected
@@ -522,23 +397,19 @@ class BatchInstance:
             self._subpage_error_cats[cat] = self._subpage_error_cats.get(cat, 0) + count
 
     async def _flush_buffer(self, force: bool = False):
-        """Flush chamado em contextos onde o buffer ainda não foi extraído."""
-        if not force:
-            to_flush = self._buffer
-            self._buffer = []
-        else:
+        if force:
             async with self._buffer_lock:
                 to_flush = self._buffer
                 self._buffer = []
-
+        else:
+            to_flush = self._buffer
+            self._buffer = []
         if to_flush:
             await self._flush_buffer_data(to_flush)
 
     async def _flush_buffer_data(self, to_flush: list):
-        """Escreve resultados no DB — executa FORA do lock para não bloquear workers."""
         if not to_flush:
             return
-
         records = []
         for result in to_flush:
             if result.success and result.chunks:
@@ -546,7 +417,6 @@ class BatchInstance:
                     page_source = None
                     if hasattr(chunk, 'pages_included') and chunk.pages_included:
                         page_source = ','.join(chunk.pages_included[:5])
-
                     records.append((
                         result.cnpj_basico, result.discovery_id,
                         result.website_url, chunk.index, chunk.total_chunks,
@@ -557,44 +427,33 @@ class BatchInstance:
                     result.cnpj_basico, result.discovery_id,
                     result.website_url, 0, 0, None, 0, None, result.error,
                 ))
-
         try:
             db = get_db_service()
             await db.save_scrape_results_mega_batch(records)
             self.flushes_done += 1
-            label = f"[Batch {self.batch_id} I{self.instance_id}]"
             logger.info(
-                f"{label} Flush #{self.flushes_done}: "
+                f"[Batch {self.batch_id} I{self.instance_id}] Flush #{self.flushes_done}: "
                 f"{len(to_flush)} empresas, {len(records)} records"
             )
         except Exception as e:
             logger.error(f"[Batch {self.batch_id} I{self.instance_id}] Flush error: {e}", exc_info=True)
-            self._record_error("FLUSH", "DB", str(e))
 
     def _record_error(self, cnpj: str, url: str, error: str):
-        self.last_errors.append({
-            "cnpj": cnpj, "url": url[:80], "error": error[:200],
-            "time": time.time(),
-        })
+        self.last_errors.append({"cnpj": cnpj, "url": url[:80], "error": error[:200], "time": time.time()})
         if len(self.last_errors) > 10:
             self.last_errors = self.last_errors[-10:]
 
 
 class BatchScrapeProcessor:
-    """
-    Orquestrador multi-instância.
-
-    Carrega todas as empresas pendentes, divide em N partições iguais,
-    e lança N BatchInstance em paralelo, cada uma com seus workers.
-    """
+    """Orquestrador multi-instância."""
 
     def __init__(
         self,
-        worker_count: int = 2000,
-        flush_size: int = 1000,
+        worker_count: int = WORKERS_PER_INSTANCE * NUM_INSTANCES,
+        flush_size: int = FLUSH_SIZE,
         status_filter: Optional[List[str]] = None,
         limit: Optional[int] = None,
-        instances: int = 10,
+        instances: int = NUM_INSTANCES,
     ):
         self.batch_id = str(uuid.uuid4())[:8]
         self.worker_count = worker_count
@@ -605,7 +464,6 @@ class BatchScrapeProcessor:
 
         self._task: Optional[asyncio.Task] = None
         self._instances: List[BatchInstance] = []
-
         self.total = 0
         self.status = "idle"
         self._start_time: float = 0
@@ -660,58 +518,23 @@ class BatchScrapeProcessor:
         self._start_time = time.time()
 
         loop = asyncio.get_running_loop()
-        loop.set_default_executor(
-            concurrent.futures.ThreadPoolExecutor(max_workers=400)
-        )
+        loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=400))
 
-        from app.services.scraper.constants import FAST_TRACK_CONFIG, scraper_config
-        from app.services.scraper_manager import concurrency_manager
         from app.services.scraper_manager.proxy_manager import proxy_pool
-        scraper_config.update(**FAST_TRACK_CONFIG)
-        concurrency_manager.update_limits(
-            global_limit=FAST_TRACK_CONFIG.get('site_semaphore_limit', 5000),
-            per_domain_limit=FAST_TRACK_CONFIG.get('per_domain_limit', 25),
-            slow_domain_limit=5,
-        )
 
         proxy_count = await proxy_pool.preload()
         if proxy_count == 0:
-            logger.error(f"[Batch {self.batch_id}] ❌ ZERO proxies! Abortando.")
+            logger.error(f"[Batch {self.batch_id}] ZERO proxies! Abortando.")
             self.status = "error"
             return
 
-        is_gateway = proxy_pool._gateway_mode
-        if is_gateway:
-            logger.info(f"[Batch {self.batch_id}] 🌐 Gateway mode — health check rápido...")
-        else:
-            logger.info(f"[Batch {self.batch_id}] 🏥 Iniciando health check de {proxy_count} proxies...")
-
         self._proxy_health = await proxy_pool.health_check()
+        if not self._proxy_health.get("healthy", False):
+            logger.error(f"[Batch {self.batch_id}] Gateway proxy falhou! Abortando.")
+            self.status = "error"
+            return
 
-        if is_gateway:
-            gw_healthy = self._proxy_health.get("healthy", False)
-            if not gw_healthy:
-                logger.error(f"[Batch {self.batch_id}] ❌ Gateway proxy falhou no health check! Abortando.")
-                self.status = "error"
-                return
-            logger.info(
-                f"[Batch {self.batch_id}] 🌐 Gateway OK — "
-                f"latência média={self._proxy_health.get('latency_ms', {}).get('avg', 0):.0f}ms"
-            )
-        else:
-            active = len(proxy_pool._proxies)
-            logger.info(
-                f"[Batch {self.batch_id}] 🏥 Health check: {active}/{proxy_count} proxies saudáveis "
-                f"({self._proxy_health.get('healthy_pct', 0)}%)"
-            )
-            if active == 0:
-                logger.error(f"[Batch {self.batch_id}] ❌ ZERO proxies saudáveis! Abortando.")
-                self.status = "error"
-                return
-
-        logger.info(
-            f"[Batch {self.batch_id}] Carregando empresas pendentes..."
-        )
+        logger.info(f"[Batch {self.batch_id}] Gateway OK. Carregando empresas...")
         all_companies = await self._load_all_companies()
 
         if not all_companies:
@@ -720,15 +543,12 @@ class BatchScrapeProcessor:
             return
 
         self.total = len(all_companies)
-
-        # Dividir em N partições
         workers_per_instance = max(1, self.worker_count // self.num_instances)
         partitions = self._partition(all_companies, self.num_instances)
 
         logger.info(
             f"[Batch {self.batch_id}] {self.total} empresas, "
-            f"{self.num_instances} instâncias × {workers_per_instance} workers, "
-            f"{proxy_count} proxies"
+            f"{self.num_instances} instâncias x {workers_per_instance} workers"
         )
 
         try:
@@ -738,33 +558,27 @@ class BatchScrapeProcessor:
                 if not partition:
                     continue
                 inst = BatchInstance(
-                    instance_id=idx,
-                    batch_id=self.batch_id,
+                    instance_id=idx, batch_id=self.batch_id,
                     worker_count=workers_per_instance,
-                    flush_size=self.flush_size,
-                    companies=partition,
+                    flush_size=self.flush_size, companies=partition,
                 )
                 self._instances.append(inst)
                 tasks.append(asyncio.create_task(inst.run()))
 
             await asyncio.gather(*tasks)
-
             self.status = "completed"
             elapsed = time.time() - self._start_time
             logger.info(
                 f"[Batch {self.batch_id}] CONCLUIDO em {elapsed:.0f}s: "
-                f"{self.success_count} sucesso, {self.error_count} erros, "
-                f"{self.flushes_done} flushes, {self.num_instances} instâncias"
+                f"{self.success_count} ok, {self.error_count} erros"
             )
         except asyncio.CancelledError:
-            logger.warning(f"[Batch {self.batch_id}] Cancelado")
             self.status = "cancelled"
         except Exception as e:
             logger.error(f"[Batch {self.batch_id}] Erro fatal: {e}", exc_info=True)
             self.status = "error"
 
     async def _load_all_companies(self) -> List[Dict[str, Any]]:
-        """Carrega todas as empresas pendentes via paginação."""
         db = get_db_service()
         all_companies = []
         last_id = 0
@@ -773,31 +587,22 @@ class BatchScrapeProcessor:
         while True:
             if self.limit and len(all_companies) >= self.limit:
                 break
-
             remaining = (self.limit - len(all_companies)) if self.limit else page_size
             fetch_size = min(page_size, remaining)
-
             companies = await db.get_pending_scrape_companies(
-                limit=fetch_size,
-                after_id=last_id,
-                status_filter=self.status_filter,
+                limit=fetch_size, after_id=last_id, status_filter=self.status_filter,
             )
-
             if not companies:
                 break
-
             all_companies.extend(companies)
             last_id = max(c['wd_id'] for c in companies)
-
             if self.limit and len(all_companies) >= self.limit:
                 all_companies = all_companies[:self.limit]
                 break
-
         return all_companies
 
     @staticmethod
     def _partition(items: list, n: int) -> List[list]:
-        """Divide lista em N partições equilibradas (round-robin)."""
         partitions = [[] for _ in range(n)]
         for idx, item in enumerate(items):
             partitions[idx % n].append(item)
@@ -815,20 +620,16 @@ class BatchScrapeProcessor:
         all_pages: List[int] = []
         total_retries = 0
         peak_in_progress = 0
-
         instance_stats = []
+
         for inst in self._instances:
             inst_elapsed = time.time() - inst._start_time if inst._start_time else 0
             inst_tp = (inst.processed / inst_elapsed * 60) if inst_elapsed > 0 else 0
             instance_stats.append({
-                "id": inst.instance_id,
-                "status": inst.status,
-                "processed": inst.processed,
-                "success": inst.success_count,
-                "errors": inst.error_count,
-                "throughput_per_min": round(inst_tp, 1),
+                "id": inst.instance_id, "status": inst.status,
+                "processed": inst.processed, "success": inst.success_count,
+                "errors": inst.error_count, "throughput_per_min": round(inst_tp, 1),
             })
-
             all_times.extend(inst._processing_times_sorted)
             all_pages.extend(inst._pages_per_company)
             total_retries += inst._retries_total
@@ -853,19 +654,14 @@ class BatchScrapeProcessor:
                 subpage_err_cats[cat] = subpage_err_cats.get(cat, 0) + count
 
         all_times.sort()
-
-        pct_levels = [50, 60, 70, 80, 90, 95, 99]
-        time_percentiles = _percentiles(all_times, pct_levels)
-
+        time_percentiles = _percentiles(all_times, [50, 60, 70, 80, 90, 95, 99])
         avg_time = round(sum(all_times) / len(all_times), 1) if all_times else 0
         min_time = round(all_times[0], 1) if all_times else 0
         max_time = round(all_times[-1], 1) if all_times else 0
         avg_pages = round(sum(all_pages) / len(all_pages), 1) if all_pages else 0
-
         success_rate = round(self.success_count / processed * 100, 1) if processed > 0 else 0
 
         infra = self._get_infrastructure_stats()
-
         diagnosis = _build_failure_diagnosis(main_page_fail_reasons, processed)
 
         return {
@@ -884,12 +680,7 @@ class BatchScrapeProcessor:
             "elapsed_seconds": round(elapsed, 1),
             "flushes_done": self.flushes_done,
             "buffer_size": self.buffer_size,
-            "processing_time_ms": {
-                "avg": avg_time,
-                "min": min_time,
-                "max": max_time,
-                **time_percentiles,
-            },
+            "processing_time_ms": {"avg": avg_time, "min": min_time, "max": max_time, **time_percentiles},
             "error_breakdown": dict(sorted(all_error_cats.items(), key=lambda x: -x[1])),
             "pages_per_company_avg": avg_pages,
             "total_retries": total_retries,
@@ -898,10 +689,6 @@ class BatchScrapeProcessor:
                 "links_in_html_total": links_in_html,
                 "links_after_filter": links_after_filter,
                 "links_selected": links_selected,
-                "links_per_company_avg": round(links_in_html / processed, 1) if processed > 0 else 0,
-                "selected_per_company_avg": round(links_selected / processed, 1) if processed > 0 else 0,
-                "zero_links_companies": zero_links,
-                "zero_links_pct": round(zero_links / processed * 100, 1) if processed > 0 else 0,
                 "main_page_failures": main_page_failures,
                 "main_page_fail_reasons": dict(sorted(main_page_fail_reasons.items(), key=lambda x: -x[1])),
                 "subpages_attempted": subpages_attempted,
@@ -916,7 +703,6 @@ class BatchScrapeProcessor:
         }
 
     def _get_infrastructure_stats(self) -> dict:
-        """Coleta métricas dos componentes de infraestrutura."""
         stats: Dict[str, Any] = {}
         try:
             from app.services.scraper_manager.proxy_manager import proxy_pool
@@ -926,21 +712,6 @@ class BatchScrapeProcessor:
             stats["proxy_pool"] = pool_status
         except Exception:
             stats["proxy_pool"] = {"error": "unavailable"}
-        try:
-            from app.services.scraper_manager import concurrency_manager
-            stats["concurrency"] = concurrency_manager.get_status()
-        except Exception:
-            stats["concurrency"] = {"error": "unavailable"}
-        try:
-            from app.services.scraper_manager import domain_rate_limiter
-            stats["rate_limiter"] = domain_rate_limiter.get_status()
-        except Exception:
-            stats["rate_limiter"] = {"error": "unavailable"}
-        try:
-            from app.services.scraper_manager import circuit_breaker
-            stats["circuit_breaker"] = circuit_breaker.get_status()
-        except Exception:
-            stats["circuit_breaker"] = {"error": "unavailable"}
         return stats
 
     async def cancel(self):

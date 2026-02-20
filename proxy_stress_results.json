@@ -1,0 +1,1028 @@
+{
+  "proxy": "us.rotgb.711proxy.com:10000",
+  "timestamp": "2026-02-20 17:07:24",
+  "total_urls_in_db": 1000,
+  "tests": [
+    {
+      "label": "C=10 (baseline)",
+      "concurrency": 10,
+      "timeout_s": 30,
+      "total_requests": 100,
+      "success_count": 93,
+      "failure_count": 7,
+      "success_rate_pct": 93.0,
+      "wall_time_s": 42.8,
+      "throughput_rps": 2.3,
+      "bandwidth": {
+        "total_mb": 22.9,
+        "success_mb": 22.9,
+        "avg_page_kb": 251.7
+      },
+      "latency_all": {
+        "min": 620,
+        "p10": 1987,
+        "p25": 2340,
+        "p50": 2876,
+        "p75": 4813,
+        "p90": 6832,
+        "p95": 8442,
+        "p99": 11407,
+        "max": 11407,
+        "avg": 3725,
+        "stdev": 2123
+      },
+      "latency_success": {
+        "min": 620,
+        "p10": 2121,
+        "p25": 2442,
+        "p50": 2945,
+        "p75": 4836,
+        "p90": 6832,
+        "p95": 8442,
+        "p99": 11407,
+        "max": 11407,
+        "avg": 3847,
+        "stdev": 2145
+      },
+      "latency_failure": {
+        "min": 1090,
+        "p10": 1090,
+        "p25": 1591,
+        "p50": 1950,
+        "p75": 2670,
+        "p90": 3224,
+        "p95": 3224,
+        "p99": 3224,
+        "max": 3224,
+        "avg": 2105,
+        "stdev": 704
+      },
+      "latency_histogram_success": {
+        "0-1s": 3,
+        "1-2s": 5,
+        "2-3s": 41,
+        "3-5s": 24,
+        "5-8s": 14,
+        "8-10s": 4,
+        "10-15s": 2,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 0,
+        "1-2s": 4,
+        "2-3s": 2,
+        "3-5s": 1,
+        "5-8s": 0,
+        "8-10s": 0,
+        "10-15s": 0,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "status_codes": {
+        "200": 93,
+        "403": 4,
+        "404": 1
+      },
+      "error_breakdown": {
+        "": 5,
+        "connection_error": 2
+      },
+      "content_types": {
+        "text/html": 93
+      },
+      "fail_speed": {
+        "fast_lt3s": 6,
+        "medium_3_10s": 1,
+        "slow_10_25s": 0,
+        "timeout_gt25s": 0
+      }
+    },
+    {
+      "label": "C=50",
+      "concurrency": 50,
+      "timeout_s": 30,
+      "total_requests": 200,
+      "success_count": 178,
+      "failure_count": 22,
+      "success_rate_pct": 89.0,
+      "wall_time_s": 21.2,
+      "throughput_rps": 9.4,
+      "bandwidth": {
+        "total_mb": 45.4,
+        "success_mb": 45.3,
+        "avg_page_kb": 260.7
+      },
+      "latency_all": {
+        "min": 348,
+        "p10": 1729,
+        "p25": 2391,
+        "p50": 2992,
+        "p75": 4413,
+        "p90": 6631,
+        "p95": 8089,
+        "p99": 13045,
+        "max": 14445,
+        "avg": 3604,
+        "stdev": 2192
+      },
+      "latency_success": {
+        "min": 663,
+        "p10": 2122,
+        "p25": 2515,
+        "p50": 3075,
+        "p75": 4448,
+        "p90": 6583,
+        "p95": 7871,
+        "p99": 13045,
+        "max": 14445,
+        "avg": 3725,
+        "stdev": 2064
+      },
+      "latency_failure": {
+        "min": 348,
+        "p10": 356,
+        "p25": 952,
+        "p50": 2085,
+        "p75": 2163,
+        "p90": 7743,
+        "p95": 10130,
+        "p99": 10365,
+        "max": 10365,
+        "avg": 2625,
+        "stdev": 2913
+      },
+      "latency_histogram_success": {
+        "0-1s": 8,
+        "1-2s": 5,
+        "2-3s": 69,
+        "3-5s": 62,
+        "5-8s": 26,
+        "8-10s": 6,
+        "10-15s": 2,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 6,
+        "1-2s": 4,
+        "2-3s": 8,
+        "3-5s": 1,
+        "5-8s": 1,
+        "8-10s": 0,
+        "10-15s": 2,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "status_codes": {
+        "200": 178,
+        "403": 8,
+        "404": 1
+      },
+      "error_breakdown": {
+        "connection_error": 11,
+        "": 9,
+        "payload_error": 1,
+        "timeout": 1
+      },
+      "content_types": {
+        "text/html": 178
+      },
+      "fail_speed": {
+        "fast_lt3s": 18,
+        "medium_3_10s": 2,
+        "slow_10_25s": 2,
+        "timeout_gt25s": 0
+      }
+    },
+    {
+      "label": "C=100",
+      "concurrency": 100,
+      "timeout_s": 30,
+      "total_requests": 500,
+      "success_count": 447,
+      "failure_count": 53,
+      "success_rate_pct": 89.4,
+      "wall_time_s": 45.8,
+      "throughput_rps": 10.9,
+      "bandwidth": {
+        "total_mb": 105.8,
+        "success_mb": 105.7,
+        "avg_page_kb": 242.1
+      },
+      "latency_all": {
+        "min": 352,
+        "p10": 1682,
+        "p25": 2359,
+        "p50": 3053,
+        "p75": 4356,
+        "p90": 6344,
+        "p95": 8158,
+        "p99": 19052,
+        "max": 30626,
+        "avg": 3728,
+        "stdev": 2908
+      },
+      "latency_success": {
+        "min": 563,
+        "p10": 1997,
+        "p25": 2462,
+        "p50": 3173,
+        "p75": 4414,
+        "p90": 6292,
+        "p95": 7822,
+        "p99": 12943,
+        "max": 27147,
+        "avg": 3758,
+        "stdev": 2394
+      },
+      "latency_failure": {
+        "min": 352,
+        "p10": 361,
+        "p25": 1130,
+        "p50": 1970,
+        "p75": 2916,
+        "p90": 7085,
+        "p95": 20536,
+        "p99": 30626,
+        "max": 30626,
+        "avg": 3479,
+        "stdev": 5653
+      },
+      "latency_histogram_success": {
+        "0-1s": 21,
+        "1-2s": 24,
+        "2-3s": 153,
+        "3-5s": 173,
+        "5-8s": 55,
+        "8-10s": 11,
+        "10-15s": 8,
+        "15-20s": 1,
+        "20-30s": 1,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 13,
+        "1-2s": 14,
+        "2-3s": 13,
+        "3-5s": 7,
+        "5-8s": 1,
+        "8-10s": 0,
+        "10-15s": 2,
+        "15-20s": 0,
+        "20-30s": 2,
+        ">30s": 1
+      },
+      "status_codes": {
+        "200": 446,
+        "403": 23,
+        "400": 3,
+        "404": 2,
+        "522": 1,
+        "307": 1
+      },
+      "error_breakdown": {
+        "": 29,
+        "connection_error": 18,
+        "payload_error": 4,
+        "timeout": 2
+      },
+      "content_types": {
+        "text/html": 446,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 40,
+        "medium_3_10s": 8,
+        "slow_10_25s": 4,
+        "timeout_gt25s": 1
+      }
+    },
+    {
+      "label": "C=200",
+      "concurrency": 200,
+      "timeout_s": 30,
+      "total_requests": 700,
+      "success_count": 605,
+      "failure_count": 95,
+      "success_rate_pct": 86.4,
+      "wall_time_s": 41.0,
+      "throughput_rps": 17.1,
+      "bandwidth": {
+        "total_mb": 150.8,
+        "success_mb": 150.6,
+        "avg_page_kb": 254.9
+      },
+      "latency_all": {
+        "min": 353,
+        "p10": 1790,
+        "p25": 2476,
+        "p50": 3208,
+        "p75": 4500,
+        "p90": 6371,
+        "p95": 8351,
+        "p99": 16392,
+        "max": 30636,
+        "avg": 3851,
+        "stdev": 2802
+      },
+      "latency_success": {
+        "min": 612,
+        "p10": 2117,
+        "p25": 2586,
+        "p50": 3282,
+        "p75": 4513,
+        "p90": 6234,
+        "p95": 7359,
+        "p99": 11405,
+        "max": 20596,
+        "avg": 3799,
+        "stdev": 2150
+      },
+      "latency_failure": {
+        "min": 353,
+        "p10": 833,
+        "p25": 1586,
+        "p50": 2392,
+        "p75": 3959,
+        "p90": 10744,
+        "p95": 10953,
+        "p99": 30636,
+        "max": 30636,
+        "avg": 4179,
+        "stdev": 5344
+      },
+      "latency_histogram_success": {
+        "0-1s": 35,
+        "1-2s": 20,
+        "2-3s": 181,
+        "3-5s": 253,
+        "5-8s": 92,
+        "8-10s": 11,
+        "10-15s": 10,
+        "15-20s": 2,
+        "20-30s": 1,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 14,
+        "1-2s": 20,
+        "2-3s": 27,
+        "3-5s": 15,
+        "5-8s": 5,
+        "8-10s": 1,
+        "10-15s": 9,
+        "15-20s": 1,
+        "20-30s": 1,
+        ">30s": 2
+      },
+      "status_codes": {
+        "200": 604,
+        "403": 30,
+        "400": 5,
+        "404": 3,
+        "522": 1,
+        "307": 1
+      },
+      "error_breakdown": {
+        "": 39,
+        "connection_error": 31,
+        "payload_error": 12,
+        "timeout": 11,
+        "other:ClientResponseError": 2
+      },
+      "content_types": {
+        "text/html": 604,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 61,
+        "medium_3_10s": 21,
+        "slow_10_25s": 11,
+        "timeout_gt25s": 2
+      }
+    },
+    {
+      "label": "C=500",
+      "concurrency": 500,
+      "timeout_s": 30,
+      "total_requests": 1000,
+      "success_count": 860,
+      "failure_count": 140,
+      "success_rate_pct": 86.0,
+      "wall_time_s": 36.0,
+      "throughput_rps": 27.8,
+      "bandwidth": {
+        "total_mb": 204.4,
+        "success_mb": 204.1,
+        "avg_page_kb": 243.0
+      },
+      "latency_all": {
+        "min": 387,
+        "p10": 1968,
+        "p25": 2585,
+        "p50": 3195,
+        "p75": 4303,
+        "p90": 6475,
+        "p95": 8073,
+        "p99": 19292,
+        "max": 31001,
+        "avg": 3922,
+        "stdev": 3259
+      },
+      "latency_success": {
+        "min": 474,
+        "p10": 2244,
+        "p25": 2702,
+        "p50": 3257,
+        "p75": 4313,
+        "p90": 6113,
+        "p95": 7341,
+        "p99": 10766,
+        "max": 30909,
+        "avg": 3777,
+        "stdev": 2115
+      },
+      "latency_failure": {
+        "min": 387,
+        "p10": 733,
+        "p25": 1385,
+        "p50": 2402,
+        "p75": 4079,
+        "p90": 10965,
+        "p95": 30078,
+        "p99": 30961,
+        "max": 31001,
+        "avg": 4811,
+        "stdev": 6911
+      },
+      "latency_histogram_success": {
+        "0-1s": 39,
+        "1-2s": 15,
+        "2-3s": 294,
+        "3-5s": 360,
+        "5-8s": 122,
+        "8-10s": 16,
+        "10-15s": 11,
+        "15-20s": 2,
+        "20-30s": 0,
+        ">30s": 1
+      },
+      "latency_histogram_failure": {
+        "0-1s": 25,
+        "1-2s": 28,
+        "2-3s": 35,
+        "3-5s": 20,
+        "5-8s": 11,
+        "8-10s": 0,
+        "10-15s": 11,
+        "15-20s": 2,
+        "20-30s": 1,
+        ">30s": 7
+      },
+      "status_codes": {
+        "200": 859,
+        "403": 39,
+        "400": 5,
+        "404": 4,
+        "429": 3,
+        "522": 1,
+        "307": 1
+      },
+      "error_breakdown": {
+        "": 52,
+        "connection_error": 48,
+        "payload_error": 21,
+        "timeout": 17,
+        "other:ClientResponseError": 2
+      },
+      "content_types": {
+        "text/html": 859,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 88,
+        "medium_3_10s": 31,
+        "slow_10_25s": 14,
+        "timeout_gt25s": 7
+      }
+    },
+    {
+      "label": "T=5s",
+      "concurrency": 200,
+      "timeout_s": 5,
+      "total_requests": 500,
+      "success_count": 401,
+      "failure_count": 99,
+      "success_rate_pct": 80.2,
+      "wall_time_s": 12.0,
+      "throughput_rps": 41.6,
+      "bandwidth": {
+        "total_mb": 91.2,
+        "success_mb": 91.1,
+        "avg_page_kb": 232.6
+      },
+      "latency_all": {
+        "min": 375,
+        "p10": 1883,
+        "p25": 2309,
+        "p50": 2971,
+        "p75": 4008,
+        "p90": 5148,
+        "p95": 5670,
+        "p99": 5966,
+        "max": 5987,
+        "avg": 3186,
+        "stdev": 1299
+      },
+      "latency_success": {
+        "min": 449,
+        "p10": 1973,
+        "p25": 2323,
+        "p50": 2855,
+        "p75": 3572,
+        "p90": 4542,
+        "p95": 4899,
+        "p99": 5670,
+        "max": 5730,
+        "avg": 3004,
+        "stdev": 1043
+      },
+      "latency_failure": {
+        "min": 375,
+        "p10": 1059,
+        "p25": 2127,
+        "p50": 5001,
+        "p75": 5481,
+        "p90": 5958,
+        "p95": 5966,
+        "p99": 5987,
+        "max": 5987,
+        "avg": 3924,
+        "stdev": 1862
+      },
+      "latency_histogram_success": {
+        "0-1s": 18,
+        "1-2s": 25,
+        "2-3s": 174,
+        "3-5s": 166,
+        "5-8s": 18,
+        "8-10s": 0,
+        "10-15s": 0,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 9,
+        "1-2s": 10,
+        "2-3s": 17,
+        "3-5s": 10,
+        "5-8s": 53,
+        "8-10s": 0,
+        "10-15s": 0,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "status_codes": {
+        "200": 400,
+        "403": 22,
+        "400": 3,
+        "404": 2,
+        "503": 2,
+        "307": 1
+      },
+      "error_breakdown": {
+        "timeout": 53,
+        "": 29,
+        "connection_error": 12,
+        "payload_error": 5
+      },
+      "content_types": {
+        "text/html": 400,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 36,
+        "medium_3_10s": 63,
+        "slow_10_25s": 0,
+        "timeout_gt25s": 0
+      }
+    },
+    {
+      "label": "T=10s",
+      "concurrency": 200,
+      "timeout_s": 10,
+      "total_requests": 500,
+      "success_count": 439,
+      "failure_count": 61,
+      "success_rate_pct": 87.8,
+      "wall_time_s": 17.0,
+      "throughput_rps": 29.4,
+      "bandwidth": {
+        "total_mb": 100.6,
+        "success_mb": 100.5,
+        "avg_page_kb": 234.5
+      },
+      "latency_all": {
+        "min": 349,
+        "p10": 1938,
+        "p25": 2440,
+        "p50": 3128,
+        "p75": 4016,
+        "p90": 5974,
+        "p95": 7720,
+        "p99": 10831,
+        "max": 10970,
+        "avg": 3542,
+        "stdev": 1938
+      },
+      "latency_success": {
+        "min": 586,
+        "p10": 2055,
+        "p25": 2519,
+        "p50": 3191,
+        "p75": 3979,
+        "p90": 5447,
+        "p95": 6974,
+        "p99": 9493,
+        "max": 10310,
+        "avg": 3478,
+        "stdev": 1577
+      },
+      "latency_failure": {
+        "min": 349,
+        "p10": 915,
+        "p25": 1511,
+        "p50": 2410,
+        "p75": 4416,
+        "p90": 10316,
+        "p95": 10884,
+        "p99": 10970,
+        "max": 10970,
+        "avg": 4003,
+        "stdev": 3585
+      },
+      "latency_histogram_success": {
+        "0-1s": 19,
+        "1-2s": 17,
+        "2-3s": 153,
+        "3-5s": 193,
+        "5-8s": 46,
+        "8-10s": 9,
+        "10-15s": 2,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 11,
+        "1-2s": 9,
+        "2-3s": 18,
+        "3-5s": 8,
+        "5-8s": 2,
+        "8-10s": 1,
+        "10-15s": 12,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "status_codes": {
+        "200": 438,
+        "403": 21,
+        "400": 3,
+        "404": 2,
+        "307": 1
+      },
+      "error_breakdown": {
+        "": 26,
+        "connection_error": 22,
+        "timeout": 10,
+        "payload_error": 3
+      },
+      "content_types": {
+        "text/html": 438,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 38,
+        "medium_3_10s": 11,
+        "slow_10_25s": 12,
+        "timeout_gt25s": 0
+      }
+    },
+    {
+      "label": "T=15s",
+      "concurrency": 200,
+      "timeout_s": 15,
+      "total_requests": 500,
+      "success_count": 440,
+      "failure_count": 60,
+      "success_rate_pct": 88.0,
+      "wall_time_s": 21.0,
+      "throughput_rps": 23.8,
+      "bandwidth": {
+        "total_mb": 103.7,
+        "success_mb": 103.6,
+        "avg_page_kb": 241.2
+      },
+      "latency_all": {
+        "min": 354,
+        "p10": 1820,
+        "p25": 2281,
+        "p50": 2886,
+        "p75": 3820,
+        "p90": 5497,
+        "p95": 6849,
+        "p99": 15071,
+        "max": 15936,
+        "avg": 3401,
+        "stdev": 2208
+      },
+      "latency_success": {
+        "min": 483,
+        "p10": 1991,
+        "p25": 2320,
+        "p50": 2940,
+        "p75": 3890,
+        "p90": 5420,
+        "p95": 6503,
+        "p99": 11158,
+        "max": 14160,
+        "avg": 3355,
+        "stdev": 1751
+      },
+      "latency_failure": {
+        "min": 354,
+        "p10": 511,
+        "p25": 1561,
+        "p50": 2152,
+        "p75": 3166,
+        "p90": 10617,
+        "p95": 15477,
+        "p99": 15936,
+        "max": 15936,
+        "avg": 3732,
+        "stdev": 4276
+      },
+      "latency_histogram_success": {
+        "0-1s": 20,
+        "1-2s": 27,
+        "2-3s": 185,
+        "3-5s": 148,
+        "5-8s": 51,
+        "8-10s": 4,
+        "10-15s": 5,
+        "15-20s": 0,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 11,
+        "1-2s": 15,
+        "2-3s": 14,
+        "3-5s": 8,
+        "5-8s": 4,
+        "8-10s": 0,
+        "10-15s": 3,
+        "15-20s": 5,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "status_codes": {
+        "200": 439,
+        "403": 21,
+        "400": 3,
+        "404": 2,
+        "307": 1
+      },
+      "error_breakdown": {
+        "": 26,
+        "connection_error": 23,
+        "timeout": 6,
+        "payload_error": 5
+      },
+      "content_types": {
+        "text/html": 439,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 40,
+        "medium_3_10s": 12,
+        "slow_10_25s": 8,
+        "timeout_gt25s": 0
+      }
+    },
+    {
+      "label": "T=20s",
+      "concurrency": 200,
+      "timeout_s": 20,
+      "total_requests": 500,
+      "success_count": 436,
+      "failure_count": 64,
+      "success_rate_pct": 87.2,
+      "wall_time_s": 26.0,
+      "throughput_rps": 19.2,
+      "bandwidth": {
+        "total_mb": 103.3,
+        "success_mb": 103.2,
+        "avg_page_kb": 242.3
+      },
+      "latency_all": {
+        "min": 361,
+        "p10": 1764,
+        "p25": 2334,
+        "p50": 2830,
+        "p75": 3691,
+        "p90": 5414,
+        "p95": 7444,
+        "p99": 10958,
+        "max": 20950,
+        "avg": 3348,
+        "stdev": 2266
+      },
+      "latency_success": {
+        "min": 505,
+        "p10": 2051,
+        "p25": 2440,
+        "p50": 2879,
+        "p75": 3696,
+        "p90": 5364,
+        "p95": 7064,
+        "p99": 8986,
+        "max": 16945,
+        "avg": 3334,
+        "stdev": 1712
+      },
+      "latency_failure": {
+        "min": 361,
+        "p10": 460,
+        "p25": 1469,
+        "p50": 1985,
+        "p75": 3153,
+        "p90": 10096,
+        "p95": 10938,
+        "p99": 20950,
+        "max": 20950,
+        "avg": 3440,
+        "stdev": 4519
+      },
+      "latency_histogram_success": {
+        "0-1s": 18,
+        "1-2s": 18,
+        "2-3s": 207,
+        "3-5s": 138,
+        "5-8s": 42,
+        "8-10s": 10,
+        "10-15s": 2,
+        "15-20s": 1,
+        "20-30s": 0,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 12,
+        "1-2s": 21,
+        "2-3s": 12,
+        "3-5s": 10,
+        "5-8s": 2,
+        "8-10s": 0,
+        "10-15s": 4,
+        "15-20s": 0,
+        "20-30s": 3,
+        ">30s": 0
+      },
+      "status_codes": {
+        "200": 435,
+        "403": 19,
+        "400": 3,
+        "404": 2,
+        "307": 1
+      },
+      "error_breakdown": {
+        "connection_error": 28,
+        "": 24,
+        "timeout": 7,
+        "payload_error": 5
+      },
+      "content_types": {
+        "text/html": 435,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 45,
+        "medium_3_10s": 12,
+        "slow_10_25s": 7,
+        "timeout_gt25s": 0
+      }
+    },
+    {
+      "label": "T=30s",
+      "concurrency": 200,
+      "timeout_s": 30,
+      "total_requests": 500,
+      "success_count": 443,
+      "failure_count": 57,
+      "success_rate_pct": 88.6,
+      "wall_time_s": 35.0,
+      "throughput_rps": 14.3,
+      "bandwidth": {
+        "total_mb": 109.4,
+        "success_mb": 109.3,
+        "avg_page_kb": 252.6
+      },
+      "latency_all": {
+        "min": 352,
+        "p10": 1812,
+        "p25": 2307,
+        "p50": 2869,
+        "p75": 3866,
+        "p90": 6031,
+        "p95": 7622,
+        "p99": 15655,
+        "max": 30395,
+        "avg": 3557,
+        "stdev": 2827
+      },
+      "latency_success": {
+        "min": 554,
+        "p10": 2041,
+        "p25": 2402,
+        "p50": 2953,
+        "p75": 3911,
+        "p90": 6069,
+        "p95": 7475,
+        "p99": 11570,
+        "max": 29230,
+        "avg": 3568,
+        "stdev": 2340
+      },
+      "latency_failure": {
+        "min": 352,
+        "p10": 388,
+        "p25": 1655,
+        "p50": 2159,
+        "p75": 3042,
+        "p90": 4792,
+        "p95": 21535,
+        "p99": 30395,
+        "max": 30395,
+        "avg": 3471,
+        "stdev": 5290
+      },
+      "latency_histogram_success": {
+        "0-1s": 18,
+        "1-2s": 25,
+        "2-3s": 186,
+        "3-5s": 143,
+        "5-8s": 54,
+        "8-10s": 7,
+        "10-15s": 8,
+        "15-20s": 1,
+        "20-30s": 1,
+        ">30s": 0
+      },
+      "latency_histogram_failure": {
+        "0-1s": 8,
+        "1-2s": 17,
+        "2-3s": 17,
+        "3-5s": 10,
+        "5-8s": 1,
+        "8-10s": 1,
+        "10-15s": 0,
+        "15-20s": 0,
+        "20-30s": 2,
+        ">30s": 1
+      },
+      "status_codes": {
+        "200": 442,
+        "403": 22,
+        "400": 3,
+        "404": 2,
+        "503": 1,
+        "522": 1,
+        "307": 1
+      },
+      "error_breakdown": {
+        "": 29,
+        "connection_error": 23,
+        "payload_error": 4,
+        "timeout": 1
+      },
+      "content_types": {
+        "text/html": 442,
+        "charset=utf-8": 1
+      },
+      "fail_speed": {
+        "fast_lt3s": 42,
+        "medium_3_10s": 12,
+        "slow_10_25s": 2,
+        "timeout_gt25s": 1
+      }
+    }
+  ]
+}

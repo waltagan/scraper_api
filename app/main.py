@@ -26,7 +26,7 @@ except ImportError:
     print("[WARN] python-dotenv nao instalado - usando variaveis de ambiente do sistema")
 
 from app.schemas.profile import CompanyProfile
-from app.services.scraper import scrape_url
+from app.services.scraper import scrape_all_subpages
 from app.services.discovery import find_company_website
 from app.core.security import get_api_key
 from app.core.logging_utils import setup_logging
@@ -231,15 +231,13 @@ async def process_analysis(url: str, ctx_label: str = "", request_id: str = "") 
     
     v2.0: Módulo de documentos (PDF/DOC) removido para simplificar fluxo.
     """
-    # 1. Scrape the main website AND subpages
-    markdown, _, scraped_urls = await scrape_url(url, max_subpages=50, ctx_label=ctx_label, request_id=request_id)
-    if not markdown:
+    result = await scrape_all_subpages(url, max_subpages=5, ctx_label=ctx_label, request_id=request_id)
+    successful_pages = [p for p in result.pages if p.success]
+    if not successful_pages:
         raise Exception("Failed to scrape content from the URL")
-    
-    # 2. Construir perfil básico **sem uso de LLM**
-    #    Neste estágio, apenas registramos as fontes coletadas.
+
     profile = CompanyProfile()
-    profile.sources = list(set(scraped_urls))
+    profile.sources = list(set(p.url for p in successful_pages))
 
     return profile
 

@@ -1,0 +1,12 @@
+{
+  "request_timeout": 12,
+  "probe_timeout": 12,
+  "max_retries": 1,
+  "retry_delay": 0,
+  "max_subpages": 15,
+  "per_domain_concurrent": 5,
+  "workers_per_instance": 200,
+  "num_instances": 3,
+  "flush_size": 1000,
+  "min_content_length": 100
+}
