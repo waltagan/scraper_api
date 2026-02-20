@@ -191,8 +191,11 @@ async def cffi_scrape_safe(
     """
     Versão safe do cffi_scrape que não propaga exceções.
     Retorna tupla vazia em caso de erro.
+    Seta cffi_scrape_safe.last_error para diagnóstico.
     """
+    cffi_scrape_safe.last_error = None
     if not HAS_CURL_CFFI:
+        cffi_scrape_safe.last_error = "no_curl_cffi"
         return "", set(), set()
     
     try:
@@ -207,14 +210,27 @@ async def cffi_scrape_safe(
         ) as s:
             resp = await s.get(url)
             if resp.status_code != 200:
-                raise Exception(f"Status {resp.status_code}")
+                cffi_scrape_safe.last_error = f"http_{resp.status_code}"
+                return "", set(), set()
             
             content_type = resp.headers.get('content-type', '')
             text = _decode_content(resp.content, content_type)
             
             return parse_html(text, url)
-    except:
+    except Exception as e:
+        err_name = type(e).__name__
+        err_msg = str(e)[:60]
+        if "timeout" in err_msg.lower() or "timed out" in err_msg.lower():
+            cffi_scrape_safe.last_error = "proxy_timeout"
+        elif "connect" in err_msg.lower() or "refused" in err_msg.lower():
+            cffi_scrape_safe.last_error = "proxy_connection_error"
+        elif "ssl" in err_msg.lower():
+            cffi_scrape_safe.last_error = "ssl_error"
+        else:
+            cffi_scrape_safe.last_error = f"{err_name}:{err_msg[:30]}"
         return "", set(), set()
+
+cffi_scrape_safe.last_error = None
 
 
 async def system_curl_scrape(

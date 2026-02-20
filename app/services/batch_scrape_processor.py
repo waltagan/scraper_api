@@ -61,6 +61,42 @@ def _classify_error(error_msg: str) -> str:
     return "other"
 
 
+def _bucket_fail_reason(reason: str) -> str:
+    """Agrupa razões detalhadas de falha em buckets para estatísticas."""
+    if not reason:
+        return "unknown"
+    r = reason.lower()
+    if "probe_unreachable" in r:
+        return "probe_unreachable"
+    if "reuse_no_html" in r:
+        return "analyzer_no_html"
+    if "reuse_status" in r:
+        return "analyzer_bad_status"
+    if "reuse_short_content" in r:
+        return "analyzer_short_content"
+    if "reuse_soft_404" in r:
+        return "analyzer_soft_404"
+    if "reuse_cloudflare" in r:
+        return "analyzer_cloudflare"
+    if "concurrency_timeout" in r:
+        return "concurrency_timeout"
+    if "blocked" in r:
+        return "scrape_blocked"
+    if "proxy_fail" in r:
+        return "scrape_proxy_fail"
+    if "soft 404" in r:
+        return "scrape_soft_404"
+    if "cloudflare" in r:
+        return "scrape_cloudflare"
+    if "timeout" in r:
+        return "scrape_timeout"
+    if "scrape_error" in r:
+        return "scrape_error"
+    if "scrape_null" in r:
+        return "scrape_null_response"
+    return f"other({reason[:30]})"
+
+
 def _percentiles(sorted_values: List[float], pcts: List[int]) -> Dict[str, float]:
     n = len(sorted_values)
     if n == 0:
@@ -131,6 +167,7 @@ class BatchInstance:
         self._subpages_ok_total: int = 0
         self._subpage_error_cats: Dict[str, int] = {}
         self._main_page_failures: int = 0
+        self._main_page_fail_reasons: Dict[str, int] = {}
         self._zero_links_companies: int = 0
 
     async def run(self):
@@ -321,6 +358,9 @@ class BatchInstance:
         self._subpages_ok_total += result.subpages_ok
         if not result.main_page_ok:
             self._main_page_failures += 1
+            reason = result.main_page_fail_reason or "unknown"
+            bucket = _bucket_fail_reason(reason)
+            self._main_page_fail_reasons[bucket] = self._main_page_fail_reasons.get(bucket, 0) + 1
         if result.links_in_html == 0 and result.main_page_ok:
             self._zero_links_companies += 1
         for cat, count in result.subpage_errors.items():
@@ -629,6 +669,10 @@ class BatchScrapeProcessor:
         subpages_attempted = sum(i._subpages_attempted_total for i in self._instances)
         subpages_ok = sum(i._subpages_ok_total for i in self._instances)
         main_page_failures = sum(i._main_page_failures for i in self._instances)
+        main_page_fail_reasons: Dict[str, int] = {}
+        for inst in self._instances:
+            for reason, count in inst._main_page_fail_reasons.items():
+                main_page_fail_reasons[reason] = main_page_fail_reasons.get(reason, 0) + count
         zero_links = sum(i._zero_links_companies for i in self._instances)
         subpage_err_cats: Dict[str, int] = {}
         for inst in self._instances:
@@ -683,6 +727,7 @@ class BatchScrapeProcessor:
                 "zero_links_companies": zero_links,
                 "zero_links_pct": round(zero_links / processed * 100, 1) if processed > 0 else 0,
                 "main_page_failures": main_page_failures,
+                "main_page_fail_reasons": dict(sorted(main_page_fail_reasons.items(), key=lambda x: -x[1])),
                 "subpages_attempted": subpages_attempted,
                 "subpages_ok": subpages_ok,
                 "subpages_failed": subpages_attempted - subpages_ok,

@@ -370,3 +370,1063 @@ run2 - meio da run
     }
   ]
 }
+
+
+run3 {
+  "batch_id": "05f93eed",
+  "status": "completed",
+  "total": 2000,
+  "processed": 2000,
+  "success_count": 968,
+  "error_count": 1032,
+  "success_rate_pct": 48.4,
+  "remaining": 0,
+  "in_progress": 0,
+  "peak_in_progress": 2000,
+  "throughput_per_min": 211.9,
+  "eta_minutes": null,
+  "elapsed_seconds": 566.2,
+  "flushes_done": 10,
+  "buffer_size": 0,
+  "processing_time_ms": {
+    "avg": 251264.3,
+    "min": 2914.9,
+    "max": 520783.2,
+    "p50": 234493.8,
+    "p60": 256683.5,
+    "p70": 315500.6,
+    "p80": 363598.5,
+    "p90": 435272.5,
+    "p95": 471721.1,
+    "p99": 495689.2
+  },
+  "error_breakdown": {
+    "empty_content": 1032
+  },
+  "pages_per_company_avg": 7,
+  "total_retries": 0,
+  "subpage_pipeline": {
+    "links_in_html_total": 29779,
+    "links_after_filter": 29779,
+    "links_selected": 17527,
+    "links_per_company_avg": 14.9,
+    "selected_per_company_avg": 8.8,
+    "zero_links_companies": 74,
+    "zero_links_pct": 3.7,
+    "main_page_failures": 1032,
+    "subpages_attempted": 10107,
+    "subpages_ok": 5812,
+    "subpages_failed": 4295,
+    "subpage_success_rate_pct": 57.5,
+    "subpage_error_breakdown": {
+      "scrape_fail": 1602,
+      "timeout_slot": 355
+    }
+  },
+  "infrastructure": {
+    "proxy_pool": {
+      "loaded": true,
+      "total_proxies": 1000,
+      "proxy_allocations": 35980,
+      "total_outcomes": 27518,
+      "successful": 6828,
+      "failed": 20690,
+      "success_rate": "24.8%"
+    },
+    "concurrency": {
+      "active_requests": 0,
+      "total_requests": 20492,
+      "peak_concurrent": 2716,
+      "global_limit": 15000,
+      "per_domain_limit": 25,
+      "slow_domains_count": 846,
+      "tracked_domains": 931,
+      "utilization": "0.0%"
+    },
+    "rate_limiter": {
+      "domains_tracked": 846,
+      "slow_domains_count": 0,
+      "total_requests": 22714,
+      "throttled_requests": 0,
+      "throttle_rate": "0.0%",
+      "config": {
+        "default_rpm": 300,
+        "burst_size": 60,
+        "slow_domain_rpm": 60
+      }
+    },
+    "circuit_breaker": {
+      "domains_tracked": 846,
+      "states": {
+        "closed": 846,
+        "open": 0,
+        "half_open": 0
+      },
+      "total_blocked": 0,
+      "total_opened": 0,
+      "config": {
+        "failure_threshold": 12,
+        "recovery_timeout": 30,
+        "half_open_max_tests": 3
+      }
+    }
+  },
+  "last_errors": [],
+  "instances": [
+    {
+      "id": 0,
+      "status": "completed",
+      "processed": 200,
+      "success": 103,
+      "errors": 97,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 1,
+      "status": "completed",
+      "processed": 200,
+      "success": 106,
+      "errors": 94,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 2,
+      "status": "completed",
+      "processed": 200,
+      "success": 101,
+      "errors": 99,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 3,
+      "status": "completed",
+      "processed": 200,
+      "success": 108,
+      "errors": 92,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 4,
+      "status": "completed",
+      "processed": 200,
+      "success": 92,
+      "errors": 108,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 5,
+      "status": "completed",
+      "processed": 200,
+      "success": 87,
+      "errors": 113,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 6,
+      "status": "completed",
+      "processed": 200,
+      "success": 96,
+      "errors": 104,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 7,
+      "status": "completed",
+      "processed": 200,
+      "success": 94,
+      "errors": 106,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 8,
+      "status": "completed",
+      "processed": 200,
+      "success": 88,
+      "errors": 112,
+      "throughput_per_min": 21.3
+    },
+    {
+      "id": 9,
+      "status": "completed",
+      "processed": 200,
+      "success": 93,
+      "errors": 107,
+      "throughput_per_min": 21.3
+    }
+  ]
+}
+
+
+run4
+
+{
+  "batch_id": "96eed17d",
+  "status": "running",
+  "total": 2000,
+  "processed": 1853,
+  "success_count": 786,
+  "error_count": 1067,
+  "success_rate_pct": 42.4,
+  "remaining": 147,
+  "in_progress": 147,
+  "peak_in_progress": 2000,
+  "throughput_per_min": 156.4,
+  "eta_minutes": 0.9,
+  "elapsed_seconds": 711,
+  "flushes_done": 0,
+  "buffer_size": 1653,
+  "processing_time_ms": {
+    "avg": 485389.7,
+    "min": 4029.4,
+    "max": 681009.3,
+    "p50": 512937.7,
+    "p60": 547481.7,
+    "p70": 554862.1,
+    "p80": 574469.5,
+    "p90": 608378.3,
+    "p95": 645042.9,
+    "p99": 671721.9
+  },
+  "error_breakdown": {
+    "empty_content": 1067
+  },
+  "pages_per_company_avg": 5.9,
+  "total_retries": 0,
+  "subpage_pipeline": {
+    "links_in_html_total": 27474,
+    "links_after_filter": 27474,
+    "links_selected": 15459,
+    "links_per_company_avg": 14.8,
+    "selected_per_company_avg": 8.3,
+    "zero_links_companies": 34,
+    "zero_links_pct": 1.8,
+    "main_page_failures": 1067,
+    "subpages_attempted": 7946,
+    "subpages_ok": 3857,
+    "subpages_failed": 4089,
+    "subpage_success_rate_pct": 48.5,
+    "subpage_error_breakdown": {
+      "scrape_fail": 1388,
+      "timeout_slot": 85
+    }
+  },
+  "infrastructure": {
+    "proxy_pool": {
+      "loaded": true,
+      "total_proxies": 1000,
+      "active_proxies": 998,
+      "health_checked": true,
+      "proxy_allocations": 40120,
+      "total_outcomes": 31713,
+      "successful": 5078,
+      "failed": 26635,
+      "success_rate": "16.0%",
+      "health_check": {
+        "total_tested": 1000,
+        "healthy": 998,
+        "dead": 2,
+        "healthy_pct": 99.8,
+        "pool_active": 998,
+        "check_time_ms": 22578,
+        "latency_ms": {
+          "avg": 1071,
+          "min": 682.9,
+          "max": 2868,
+          "p50": 1034.6,
+          "p95": 1552.1
+        },
+        "error_breakdown": {
+          "TimeoutError": 1,
+          "status_502": 1
+        }
+      }
+    },
+    "concurrency": {
+      "active_requests": 223,
+      "total_requests": 26839,
+      "peak_concurrent": 4318,
+      "global_limit": 15000,
+      "per_domain_limit": 25,
+      "slow_domains_count": 795,
+      "tracked_domains": 821,
+      "utilization": "1.5%"
+    },
+    "rate_limiter": {
+      "domains_tracked": 769,
+      "slow_domains_count": 0,
+      "total_requests": 31035,
+      "throttled_requests": 0,
+      "throttle_rate": "0.0%",
+      "config": {
+        "default_rpm": 300,
+        "burst_size": 60,
+        "slow_domain_rpm": 60
+      }
+    },
+    "circuit_breaker": {
+      "domains_tracked": 769,
+      "states": {
+        "closed": 769,
+        "open": 0,
+        "half_open": 0
+      },
+      "total_blocked": 0,
+      "total_opened": 0,
+      "config": {
+        "failure_threshold": 12,
+        "recovery_timeout": 30,
+        "half_open_max_tests": 3
+      }
+    }
+  },
+  "last_errors": [],
+  "instances": [
+    {
+      "id": 0,
+      "status": "running",
+      "processed": 196,
+      "success": 124,
+      "errors": 72,
+      "throughput_per_min": 17.1
+    },
+    {
+      "id": 1,
+      "status": "running",
+      "processed": 200,
+      "success": 98,
+      "errors": 102,
+      "throughput_per_min": 17.5
+    },
+    {
+      "id": 2,
+      "status": "running",
+      "processed": 194,
+      "success": 98,
+      "errors": 96,
+      "throughput_per_min": 16.9
+    },
+    {
+      "id": 3,
+      "status": "running",
+      "processed": 188,
+      "success": 94,
+      "errors": 94,
+      "throughput_per_min": 16.4
+    },
+    {
+      "id": 4,
+      "status": "running",
+      "processed": 185,
+      "success": 76,
+      "errors": 109,
+      "throughput_per_min": 16.2
+    },
+    {
+      "id": 5,
+      "status": "running",
+      "processed": 188,
+      "success": 82,
+      "errors": 106,
+      "throughput_per_min": 16.4
+    },
+    {
+      "id": 6,
+      "status": "running",
+      "processed": 184,
+      "success": 63,
+      "errors": 121,
+      "throughput_per_min": 16.1
+    },
+    {
+      "id": 7,
+      "status": "running",
+      "processed": 166,
+      "success": 36,
+      "errors": 130,
+      "throughput_per_min": 14.5
+    },
+    {
+      "id": 8,
+      "status": "running",
+      "processed": 198,
+      "success": 67,
+      "errors": 131,
+      "throughput_per_min": 17.3
+    },
+    {
+      "id": 9,
+      "status": "running",
+      "processed": 154,
+      "success": 48,
+      "errors": 106,
+      "throughput_per_min": 13.5
+    }
+  ]
+}
+
+run5
+{
+  "batch_id": "ba6e5de5",
+  "status": "running",
+  "total": 2000,
+  "processed": 1996,
+  "success_count": 900,
+  "error_count": 1096,
+  "success_rate_pct": 45.1,
+  "remaining": 4,
+  "in_progress": 4,
+  "peak_in_progress": 2000,
+  "throughput_per_min": 200.5,
+  "eta_minutes": 0,
+  "elapsed_seconds": 597.4,
+  "flushes_done": 6,
+  "buffer_size": 796,
+  "processing_time_ms": {
+    "avg": 263852.7,
+    "min": 3236.1,
+    "max": 539555.9,
+    "p50": 260283.5,
+    "p60": 270688.4,
+    "p70": 295027.3,
+    "p80": 330161.2,
+    "p90": 439132.9,
+    "p95": 475173.6,
+    "p99": 511668.6
+  },
+  "error_breakdown": {
+    "empty_content": 1096
+  },
+  "pages_per_company_avg": 5.1,
+  "total_retries": 0,
+  "subpage_pipeline": {
+    "links_in_html_total": 24261,
+    "links_after_filter": 24261,
+    "links_selected": 14428,
+    "links_per_company_avg": 12.2,
+    "selected_per_company_avg": 7.2,
+    "zero_links_companies": 80,
+    "zero_links_pct": 4,
+    "main_page_failures": 1096,
+    "subpages_attempted": 8476,
+    "subpages_ok": 3669,
+    "subpages_failed": 4807,
+    "subpage_success_rate_pct": 43.3,
+    "subpage_error_breakdown": {
+      "scrape_fail": 2312,
+      "timeout_slot": 190
+    }
+  },
+  "infrastructure": {
+    "proxy_pool": {
+      "loaded": true,
+      "total_proxies": 2500,
+      "active_proxies": 2493,
+      "health_checked": true,
+      "proxy_allocations": 33311,
+      "total_outcomes": 24110,
+      "successful": 4730,
+      "failed": 19380,
+      "success_rate": "19.6%",
+      "per_proxy_analysis": {
+        "proxies_analyzed": 2493,
+        "proxies_used": 2493,
+        "proxies_unused": 7,
+        "success_rate_distribution": {
+          "avg_pct": 19.5,
+          "std_dev_pct": 12.6,
+          "min_pct": 0,
+          "max_pct": 66.7,
+          "p10": 0,
+          "p25": 10,
+          "p50": 20,
+          "p75": 27.3,
+          "p90": 36.4
+        },
+        "buckets": {
+          "90_100_pct": 0,
+          "70_90_pct": 0,
+          "50_70_pct": 44,
+          "30_50_pct": 536,
+          "10_30_pct": 1426,
+          "0_10_pct": 487
+        },
+        "verdict": "MODERADA — variação moderada (std=13%). Maioria dos proxies performa similar, alguns outliers.",
+        "worst_5": [
+          {
+            "proxy_id": ".200.81:6664",
+            "requests": 14,
+            "outcomes": 8,
+            "successes": 0,
+            "failures": 8,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": "197.223:6462",
+            "requests": 14,
+            "outcomes": 7,
+            "successes": 0,
+            "failures": 7,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": ".92.137:6071",
+            "requests": 14,
+            "outcomes": 7,
+            "successes": 0,
+            "failures": 7,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": ".102.94:5333",
+            "requests": 14,
+            "outcomes": 7,
+            "successes": 0,
+            "failures": 7,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": "3.91.81:6514",
+            "requests": 14,
+            "outcomes": 7,
+            "successes": 0,
+            "failures": 7,
+            "success_rate_pct": 0
+          }
+        ],
+        "best_5": [
+          {
+            "proxy_id": ".109.16:6949",
+            "requests": 13,
+            "outcomes": 9,
+            "successes": 6,
+            "failures": 3,
+            "success_rate_pct": 66.7
+          },
+          {
+            "proxy_id": "175.137:6410",
+            "requests": 13,
+            "outcomes": 9,
+            "successes": 6,
+            "failures": 3,
+            "success_rate_pct": 66.7
+          },
+          {
+            "proxy_id": ".109.91:7024",
+            "requests": 13,
+            "outcomes": 6,
+            "successes": 4,
+            "failures": 2,
+            "success_rate_pct": 66.7
+          },
+          {
+            "proxy_id": "172.211:6483",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 5,
+            "failures": 3,
+            "success_rate_pct": 62.5
+          },
+          {
+            "proxy_id": "101.130:6063",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 5,
+            "failures": 3,
+            "success_rate_pct": 62.5
+          }
+        ]
+      },
+      "health_check": {
+        "total_tested": 2500,
+        "healthy": 2493,
+        "dead": 7,
+        "healthy_pct": 99.7,
+        "pool_active": 2493,
+        "check_time_ms": 54995,
+        "latency_ms": {
+          "avg": 1087.9,
+          "min": 639.8,
+          "max": 3493.8,
+          "p50": 1015.8,
+          "p95": 1662.2
+        },
+        "error_breakdown": {
+          "status_502": 7
+        }
+      }
+    },
+    "concurrency": {
+      "active_requests": 10,
+      "total_requests": 18545,
+      "peak_concurrent": 3918,
+      "global_limit": 15000,
+      "per_domain_limit": 25,
+      "slow_domains_count": 738,
+      "tracked_domains": 860,
+      "utilization": "0.1%"
+    },
+    "rate_limiter": {
+      "domains_tracked": 781,
+      "slow_domains_count": 0,
+      "total_requests": 20489,
+      "throttled_requests": 0,
+      "throttle_rate": "0.0%",
+      "config": {
+        "default_rpm": 300,
+        "burst_size": 60,
+        "slow_domain_rpm": 60
+      }
+    },
+    "circuit_breaker": {
+      "domains_tracked": 781,
+      "states": {
+        "closed": 780,
+        "open": 0,
+        "half_open": 1
+      },
+      "total_blocked": 0,
+      "total_opened": 1,
+      "config": {
+        "failure_threshold": 12,
+        "recovery_timeout": 30,
+        "half_open_max_tests": 3
+      }
+    }
+  },
+  "last_errors": [],
+  "instances": [
+    {
+      "id": 0,
+      "status": "completed",
+      "processed": 200,
+      "success": 100,
+      "errors": 100,
+      "throughput_per_min": 22.2
+    },
+    {
+      "id": 1,
+      "status": "completed",
+      "processed": 200,
+      "success": 105,
+      "errors": 95,
+      "throughput_per_min": 22.2
+    },
+    {
+      "id": 2,
+      "status": "completed",
+      "processed": 200,
+      "success": 103,
+      "errors": 97,
+      "throughput_per_min": 22.2
+    },
+    {
+      "id": 3,
+      "status": "completed",
+      "processed": 200,
+      "success": 85,
+      "errors": 115,
+      "throughput_per_min": 22.2
+    },
+    {
+      "id": 4,
+      "status": "completed",
+      "processed": 200,
+      "success": 78,
+      "errors": 122,
+      "throughput_per_min": 22.2
+    },
+    {
+      "id": 5,
+      "status": "completed",
+      "processed": 200,
+      "success": 86,
+      "errors": 114,
+      "throughput_per_min": 22.2
+    },
+    {
+      "id": 6,
+      "status": "running",
+      "processed": 198,
+      "success": 105,
+      "errors": 93,
+      "throughput_per_min": 22
+    },
+    {
+      "id": 7,
+      "status": "running",
+      "processed": 200,
+      "success": 73,
+      "errors": 127,
+      "throughput_per_min": 22.2
+    },
+    {
+      "id": 8,
+      "status": "running",
+      "processed": 199,
+      "success": 96,
+      "errors": 103,
+      "throughput_per_min": 22.1
+    },
+    {
+      "id": 9,
+      "status": "running",
+      "processed": 199,
+      "success": 69,
+      "errors": 130,
+      "throughput_per_min": 22.1
+    }
+  ]
+}
+
+run7
+
+{
+  "batch_id": "7c34db4b",
+  "status": "completed",
+  "total": 2000,
+  "processed": 2000,
+  "success_count": 1003,
+  "error_count": 997,
+  "success_rate_pct": 50.1,
+  "remaining": 0,
+  "in_progress": 0,
+  "peak_in_progress": 2000,
+  "throughput_per_min": 133.7,
+  "eta_minutes": null,
+  "elapsed_seconds": 897.3,
+  "flushes_done": 10,
+  "buffer_size": 0,
+  "processing_time_ms": {
+    "avg": 373523.1,
+    "min": 3164.9,
+    "max": 822334.5,
+    "p50": 386124.6,
+    "p60": 422569.5,
+    "p70": 453391,
+    "p80": 486067,
+    "p90": 535320.1,
+    "p95": 563840.6,
+    "p99": 723915.1
+  },
+  "error_breakdown": {
+    "empty_content": 991,
+    "timeout": 6
+  },
+  "pages_per_company_avg": 8.9,
+  "total_retries": 12,
+  "subpage_pipeline": {
+    "links_in_html_total": 36822,
+    "links_after_filter": 36822,
+    "links_selected": 17855,
+    "links_per_company_avg": 18.4,
+    "selected_per_company_avg": 8.9,
+    "zero_links_companies": 92,
+    "zero_links_pct": 4.6,
+    "main_page_failures": 991,
+    "subpages_attempted": 9763,
+    "subpages_ok": 7957,
+    "subpages_failed": 1806,
+    "subpage_success_rate_pct": 81.5,
+    "subpage_error_breakdown": {
+      "scrape_fail": 873,
+      "timeout_slot": 37
+    }
+  },
+  "infrastructure": {
+    "proxy_pool": {
+      "loaded": true,
+      "total_proxies": 2500,
+      "active_proxies": 2497,
+      "health_checked": true,
+      "proxy_allocations": 31113,
+      "total_outcomes": 22620,
+      "successful": 9067,
+      "failed": 13553,
+      "success_rate": "40.1%",
+      "per_proxy_analysis": {
+        "proxies_analyzed": 2497,
+        "proxies_used": 2497,
+        "proxies_unused": 3,
+        "success_rate_distribution": {
+          "avg_pct": 40.4,
+          "std_dev_pct": 17,
+          "min_pct": 0,
+          "max_pct": 100,
+          "p10": 20,
+          "p25": 28.6,
+          "p50": 40,
+          "p75": 50,
+          "p90": 62.5
+        },
+        "buckets": {
+          "90_100_pct": 1,
+          "70_90_pct": 133,
+          "50_70_pct": 705,
+          "30_50_pct": 1033,
+          "10_30_pct": 569,
+          "0_10_pct": 56
+        },
+        "verdict": "MODERADA — variação moderada (std=17%). Maioria dos proxies performa similar, alguns outliers.",
+        "worst_5": [
+          {
+            "proxy_id": ".254.27:6009",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 0,
+            "failures": 8,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": ".53.177:6916",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 0,
+            "failures": 8,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": ".25.120:5555",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 0,
+            "failures": 8,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": ".53.128:6867",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 0,
+            "failures": 8,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": ".253.48:6666",
+            "requests": 13,
+            "outcomes": 10,
+            "successes": 0,
+            "failures": 10,
+            "success_rate_pct": 0
+          }
+        ],
+        "best_5": [
+          {
+            "proxy_id": ".91.230:6663",
+            "requests": 13,
+            "outcomes": 5,
+            "successes": 5,
+            "failures": 0,
+            "success_rate_pct": 100
+          },
+          {
+            "proxy_id": "2.20.83:6015",
+            "requests": 12,
+            "outcomes": 9,
+            "successes": 8,
+            "failures": 1,
+            "success_rate_pct": 88.9
+          },
+          {
+            "proxy_id": "172.158:6430",
+            "requests": 12,
+            "outcomes": 8,
+            "successes": 7,
+            "failures": 1,
+            "success_rate_pct": 87.5
+          },
+          {
+            "proxy_id": "102.186:5425",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 7,
+            "failures": 1,
+            "success_rate_pct": 87.5
+          },
+          {
+            "proxy_id": "170.235:6204",
+            "requests": 13,
+            "outcomes": 8,
+            "successes": 7,
+            "failures": 1,
+            "success_rate_pct": 87.5
+          }
+        ]
+      },
+      "health_check": {
+        "total_tested": 2500,
+        "healthy": 2497,
+        "dead": 3,
+        "healthy_pct": 99.9,
+        "pool_active": 2497,
+        "check_time_ms": 54688,
+        "latency_ms": {
+          "avg": 1072.6,
+          "min": 698.4,
+          "max": 3434.1,
+          "p50": 1002.8,
+          "p95": 1612.1
+        },
+        "error_breakdown": {
+          "status_502": 3
+        }
+      }
+    },
+    "concurrency": {
+      "active_requests": 0,
+      "total_requests": 24094,
+      "peak_concurrent": 4240,
+      "global_limit": 15000,
+      "per_domain_limit": 5,
+      "slow_domains_count": 878,
+      "tracked_domains": 2016,
+      "utilization": "0.0%"
+    },
+    "rate_limiter": {
+      "domains_tracked": 858,
+      "slow_domains_count": 0,
+      "total_requests": 18148,
+      "throttled_requests": 0,
+      "throttle_rate": "0.0%",
+      "config": {
+        "default_rpm": 300,
+        "burst_size": 60,
+        "slow_domain_rpm": 60
+      }
+    },
+    "circuit_breaker": {
+      "domains_tracked": 858,
+      "states": {
+        "closed": 857,
+        "open": 0,
+        "half_open": 1
+      },
+      "total_blocked": 0,
+      "total_opened": 1,
+      "config": {
+        "failure_threshold": 12,
+        "recovery_timeout": 30,
+        "half_open_max_tests": 3
+      }
+    }
+  },
+  "last_errors": [
+    {
+      "cnpj": "45018369",
+      "url": "null",
+      "error": "TimeoutError: Timeout aguardando slot de domínio ",
+      "time": 1771595219.88669
+    },
+    {
+      "cnpj": "03053407",
+      "url": "null",
+      "error": "TimeoutError: Timeout aguardando slot de domínio ",
+      "time": 1771595219.88631
+    },
+    {
+      "cnpj": "01487757",
+      "url": "null",
+      "error": "TimeoutError: Timeout aguardando slot de domínio ",
+      "time": 1771595219.88592
+    },
+    {
+      "cnpj": "06939486",
+      "url": "null",
+      "error": "TimeoutError: Timeout aguardando slot de domínio ",
+      "time": 1771595219.88556
+    },
+    {
+      "cnpj": "52882562",
+      "url": "null",
+      "error": "TimeoutError: Timeout aguardando slot de domínio ",
+      "time": 1771595219.88519
+    },
+    {
+      "cnpj": "07284448",
+      "url": "null",
+      "error": "TimeoutError: Timeout aguardando slot de domínio ",
+      "time": 1771595219.88471
+    }
+  ],
+  "instances": [
+    {
+      "id": 0,
+      "status": "completed",
+      "processed": 200,
+      "success": 99,
+      "errors": 101,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 1,
+      "status": "completed",
+      "processed": 200,
+      "success": 100,
+      "errors": 100,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 2,
+      "status": "completed",
+      "processed": 200,
+      "success": 102,
+      "errors": 98,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 3,
+      "status": "completed",
+      "processed": 200,
+      "success": 108,
+      "errors": 92,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 4,
+      "status": "completed",
+      "processed": 200,
+      "success": 87,
+      "errors": 113,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 5,
+      "status": "completed",
+      "processed": 200,
+      "success": 99,
+      "errors": 101,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 6,
+      "status": "completed",
+      "processed": 200,
+      "success": 116,
+      "errors": 84,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 7,
+      "status": "completed",
+      "processed": 200,
+      "success": 112,
+      "errors": 88,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 8,
+      "status": "completed",
+      "processed": 200,
+      "success": 98,
+      "errors": 102,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 9,
+      "status": "completed",
+      "processed": 200,
+      "success": 82,
+      "errors": 118,
+      "throughput_per_min": 14.3
+    }
+  ]
+}

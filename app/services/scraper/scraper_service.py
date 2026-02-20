@@ -75,33 +75,27 @@ def _try_reuse_analyzer_html(
     url: str,
     site_profile: SiteProfile,
     strategies: List[ScrapingStrategy],
-) -> Optional[ScrapedPage]:
+) -> tuple:
     """
     Reutiliza o HTML capturado pelo site_analyzer como main page.
-    Se o analyzer já trouxe HTML com conteúdo real, usa ele - mesmo
-    que protection_detector tenha sinalizado (falsos positivos comuns).
-    Rejeita apenas se HTML vazio, challenge real, ou soft 404.
+    Returns:
+        (ScrapedPage, "") on success, or (None, "reason") on failure.
     """
     if not site_profile.raw_html:
-        logger.debug(f"[reuse] {url}: sem raw_html")
-        return None
+        return None, "reuse_no_html"
     if site_profile.status_code and site_profile.status_code >= 400:
-        logger.debug(f"[reuse] {url}: status {site_profile.status_code}")
-        return None
+        return None, f"reuse_status_{site_profile.status_code}"
 
     text, docs, links = parse_html(site_profile.raw_html, url)
 
     if not text or len(text) < 100:
-        logger.debug(f"[reuse] {url}: conteúdo curto ({len(text) if text else 0} chars)")
-        return None
+        return None, f"reuse_short_content({len(text) if text else 0}chars)"
     if is_cloudflare_challenge(text):
-        logger.debug(f"[reuse] {url}: cloudflare challenge real")
-        return None
+        return None, "reuse_cloudflare"
     if is_soft_404(text):
-        logger.debug(f"[reuse] {url}: soft 404")
-        return None
+        return None, "reuse_soft_404"
 
-    return ScrapedPage(
+    page = ScrapedPage(
         url=url,
         content=text,
         links=list(links),
@@ -110,6 +104,7 @@ def _try_reuse_analyzer_html(
         response_time_ms=site_profile.response_time_ms,
         strategy_used=strategies[0] if strategies else ScrapingStrategy.FAST,
     )
+    return page, ""
 
 
 async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", request_id: str = "") -> Tuple[str, List[str], List[str]]:
@@ -153,9 +148,9 @@ async def scrape_url(url: str, max_subpages: int = 100, ctx_label: str = "", req
     strategies = strategy_selector.select(site_profile)
 
     # 4. SCRAPE MAIN PAGE (reutilizar HTML do analyzer quando possível)
-    main_page = _try_reuse_analyzer_html(url, site_profile, strategies)
+    main_page, _reuse_reason = _try_reuse_analyzer_html(url, site_profile, strategies)
     if not main_page or not main_page.success:
-        main_page = await _scrape_main_page(url, strategies, site_profile, ctx_label, request_id)
+        main_page, _scrape_reason = await _scrape_main_page(url, strategies, site_profile, ctx_label, request_id)
     
     if not main_page or not main_page.success:
         error_diagnosis = _diagnose_scrape_failure(main_page, url)
@@ -262,6 +257,7 @@ async def scrape_all_subpages(
         except URLNotReachable as e:
             log_msg = e.get_log_message() if hasattr(e, 'get_log_message') else str(e)
             logger.error(f"{ctx_label} ❌ URL inacessível: {url} - {log_msg}")
+            meta.main_page_fail_reason = "probe_unreachable"
             meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
             return meta
         except Exception as e:
@@ -272,23 +268,26 @@ async def scrape_all_subpages(
 
     # 4. REUTILIZAR HTML DO ANALYZER COMO MAIN PAGE
     t0 = time.perf_counter()
-    main_page = _try_reuse_analyzer_html(url, site_profile, strategies)
+    main_page, reuse_reason = _try_reuse_analyzer_html(url, site_profile, strategies)
     reused = main_page is not None and main_page.success
+    scrape_fail_reason = ""
     if not reused:
         logger.info(
-            f"{ctx_label}📄 Reuse falhou (prot={site_profile.protection_type.value}, "
+            f"{ctx_label}📄 Reuse falhou ({reuse_reason}, prot={site_profile.protection_type.value}, "
             f"status={site_profile.status_code}), chamando _scrape_main_page..."
         )
-        main_page = await _scrape_main_page(url, strategies, site_profile, ctx_label, request_id)
+        main_page, scrape_fail_reason = await _scrape_main_page(url, strategies, site_profile, ctx_label, request_id)
     phases['main_page'] = (time.perf_counter() - t0) * 1000
 
     if not main_page or not main_page.success:
+        fail_reason = scrape_fail_reason or reuse_reason or "unknown"
         error_diagnosis = _diagnose_scrape_failure(main_page, url)
         elapsed = (time.perf_counter() - overall_start) * 1000
         logger.error(
             f"{ctx_label} ❌ Falha main page {url} ({elapsed:.0f}ms) "
-            f"phases={phases} - {error_diagnosis['log_message']}"
+            f"reason={fail_reason} reuse={reuse_reason} phases={phases} - {error_diagnosis['log_message']}"
         )
+        meta.main_page_fail_reason = fail_reason
         meta.total_time_ms = elapsed
         return meta
 
@@ -616,11 +615,15 @@ async def _scrape_main_page(
     site_profile: SiteProfile,
     ctx_label: str = "",
     request_id: str = ""
-) -> Optional[ScrapedPage]:
-    """Faz scrape da main page com fallback entre estratégias."""
+) -> tuple:
+    """
+    Faz scrape da main page com fallback entre estratégias.
+    Returns:
+        (ScrapedPage, "") on success, or (None, "fail_reason") on failure.
+    """
     main_start = time.perf_counter()
-    total_strategies = len(strategies)
-    last_reason = "error"
+    last_reason = "scrape_unknown"
+    strategy_errors = []
     
     for idx, strategy in enumerate(strategies):
         config = strategy_selector.get_strategy_config(strategy)
@@ -631,9 +634,8 @@ async def _scrape_main_page(
             
             if page and page.success:
                 page.response_time_ms = (time.perf_counter() - main_start) * 1000
-                return page
+                return page, ""
             
-            # Verificar se é proteção que bloqueia
             if page and page.content:
                 protection = protection_detector.detect(
                     response_body=page.content,
@@ -641,28 +643,46 @@ async def _scrape_main_page(
                 )
                 if protection_detector.is_blocking_protection(protection):
                     rec = protection_detector.get_retry_recommendation(protection)
-                    last_reason = "blocked"
+                    last_reason = f"scrape_blocked_{protection.value}"
+                    strategy_errors.append(f"{strategy.value}:blocked_{protection.value}")
                     logger.warning(
                         f"{ctx_label} ⚠️ Proteção {protection.value} detectada. "
                         f"Aguardando {rec['delay_seconds']}s..."
                     )
                     await asyncio.sleep(rec['delay_seconds'])
                 else:
-                    last_reason = "error"
+                    err_detail = page.error or "no_content"
+                    last_reason = f"scrape_error({err_detail[:40]})"
+                    strategy_errors.append(f"{strategy.value}:{err_detail[:30]}")
+            elif page:
+                err_detail = page.error or "empty_response"
+                last_reason = f"scrape_proxy_fail({err_detail[:40]})"
+                strategy_errors.append(f"{strategy.value}:{err_detail[:30]}")
             else:
-                last_reason = "timeout" if not page else "error"
+                last_reason = "scrape_null_response"
+                strategy_errors.append(f"{strategy.value}:null")
                     
+        except TimeoutError:
+            last_reason = "scrape_concurrency_timeout"
+            strategy_errors.append(f"{strategy.value}:concurrency_timeout")
+            logger.warning(f"{ctx_label} ⚠️ Estratégia {strategy.value} concurrency timeout")
+            continue
         except asyncio.TimeoutError:
-            last_reason = "timeout"
-            logger.warning(f"{ctx_label} ⚠️ Estratégia {strategy.value} timeout")
+            last_reason = "scrape_concurrency_timeout"
+            strategy_errors.append(f"{strategy.value}:concurrency_timeout")
+            logger.warning(f"{ctx_label} ⚠️ Estratégia {strategy.value} concurrency timeout")
             continue
         except Exception as e:
-            last_reason = "error"
+            last_reason = f"scrape_exception({type(e).__name__})"
+            strategy_errors.append(f"{strategy.value}:{type(e).__name__}")
             logger.warning(f"{ctx_label} ⚠️ Estratégia {strategy.value} falhou: {e}")
             continue
     
-    logger.error(f"{ctx_label} ❌ Todas estratégias falharam para {url}")
-    return None
+    logger.error(
+        f"{ctx_label} ❌ Todas estratégias falharam para {url} | "
+        f"reason={last_reason} | details={strategy_errors}"
+    )
+    return None, last_reason
 
 
 async def _execute_strategy(
@@ -700,23 +720,41 @@ async def _do_scrape(
     try:
         text, docs, links = await cffi_scrape_safe(url, proxy)
 
-        is_404 = is_soft_404(text) if text else True
-        is_cf = is_cloudflare_challenge(text) if text else False
+        if not text:
+            transport_err = cffi_scrape_safe.last_error or "empty_response"
+            return ScrapedPage(
+                url=url, content="", error=f"proxy_fail:{transport_err}"
+            )
+
+        is_cf = is_cloudflare_challenge(text)
+        if is_cf:
+            return ScrapedPage(
+                url=url, content="", error="Cloudflare",
+                links=list(links), document_links=list(docs),
+                status_code=403
+            )
+
+        is_404 = is_soft_404(text)
+        if is_404:
+            return ScrapedPage(
+                url=url, content="", error="Soft 404",
+                links=list(links), document_links=list(docs),
+                status_code=404
+            )
 
         return ScrapedPage(
             url=url,
-            content=text if not is_404 and not is_cf else "",
+            content=text,
             links=list(links),
             document_links=list(docs),
-            status_code=200 if text and not is_404 else 404,
-            error="Soft 404" if is_404 else ("Cloudflare" if is_cf else None)
+            status_code=200,
         )
 
     except Exception as e:
         return ScrapedPage(
             url=url,
             content="",
-            error=str(e)
+            error=f"scrape_exception:{type(e).__name__}:{str(e)[:50]}"
         )
 
 

@@ -129,4 +129,5 @@ class ScrapeResult:
     subpage_errors: Dict[str, int] = field(default_factory=dict)
     main_page_ok: bool = False
     total_time_ms: float = 0.0
+    main_page_fail_reason: str = ""
 
