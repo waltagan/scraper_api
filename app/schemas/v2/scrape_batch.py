@@ -8,7 +8,7 @@ from typing import Optional, List
 class BatchScrapeRequest(BaseModel):
     """Request para iniciar batch scrape."""
     limit: Optional[int] = Field(None, description="Maximo de empresas a processar (None = todas pendentes)")
-    worker_count: int = Field(600, ge=1, le=1000, description="Numero de workers paralelos")
+    worker_count: int = Field(2000, ge=1, le=5000, description="Numero de workers paralelos")
     flush_size: int = Field(1000, ge=10, le=5000, description="Tamanho do buffer antes de flush no DB")
     status_filter: List[str] = Field(
         default=['muito_alto', 'alto', 'medio'],
