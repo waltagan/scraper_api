@@ -120,48 +120,55 @@ class SiteAnalyzer:
         return profile
     
     async def _probe_site(self, url: str) -> Tuple[str, dict, int, float]:
-        """
-        Faz probe do site via proxy (NUNCA usa IP local).
-        """
+        """Faz probe do site via proxy com retry automático em erros de proxy."""
         if not HAS_CURL_CFFI:
             raise RuntimeError("curl_cffi não está instalado")
 
-        from app.services.scraper_manager.proxy_manager import proxy_pool
-        proxy = await proxy_pool.get_healthy_proxy()
+        from app.services.scraper_manager.proxy_manager import (
+            proxy_pool, record_proxy_success, record_proxy_failure,
+        )
 
-        headers_to_send, impersonate = build_headers()
+        max_retries = 2
+        used_proxies: set = set()
 
-        last_html = ""
-        last_headers = {}
-        last_status = 0
-
-        try:
-            async with AsyncSession(
-                impersonate=impersonate,
-                proxy=proxy,
-                timeout=self.timeout,
-                verify=False
-            ) as session:
-                start = time.perf_counter()
-                resp = await session.get(url, headers=headers_to_send)
-                elapsed = (time.perf_counter() - start) * 1000
-
-                last_html = resp.text
-                last_headers = dict(resp.headers)
-                last_status = resp.status_code
-
-                if proxy:
-                    from app.services.scraper_manager.proxy_manager import record_proxy_success
-                    record_proxy_success(proxy)
-
-                return last_html, last_headers, last_status, elapsed
-
-        except Exception as e:
+        for attempt in range(max_retries):
+            proxy = (
+                proxy_pool.get_proxy_excluding(used_proxies)
+                if used_proxies else proxy_pool.get_next_proxy()
+            )
             if proxy:
-                from app.services.scraper_manager.proxy_manager import record_proxy_failure
-                record_proxy_failure(proxy, str(e)[:80])
-            logger.debug(f"Probe falhou: {e}")
-            return "", {}, 0, self.timeout * 1000
+                used_proxies.add(proxy)
+
+            headers_to_send, impersonate = build_headers()
+
+            try:
+                async with AsyncSession(
+                    impersonate=impersonate,
+                    proxy=proxy,
+                    timeout=self.timeout,
+                    verify=False,
+                ) as session:
+                    start = time.perf_counter()
+                    resp = await session.get(url, headers=headers_to_send)
+                    elapsed = (time.perf_counter() - start) * 1000
+
+                    if proxy:
+                        record_proxy_success(proxy)
+                    return resp.text, dict(resp.headers), resp.status_code, elapsed
+
+            except Exception as e:
+                if proxy:
+                    record_proxy_failure(proxy, str(e)[:80])
+
+                if attempt < max_retries - 1:
+                    err_str = str(e).lower()
+                    if any(x in err_str for x in ("timeout", "connect", "refused", "reset")):
+                        logger.info(f"🔄 Analyzer retry {attempt+2}/{max_retries} para {url}")
+                        continue
+                logger.debug(f"Analyzer probe falhou: {e}")
+                return "", {}, 0, self.timeout * 1000
+
+        return "", {}, 0, self.timeout * 1000
     
     def _detect_site_type(self, html: str) -> SiteType:
         """Detecta se o site é SPA, estático ou híbrido."""

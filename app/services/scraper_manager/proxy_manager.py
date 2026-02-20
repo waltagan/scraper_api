@@ -11,8 +11,9 @@ Estratégia:
 
 import asyncio
 import logging
+import random
 import time
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Set
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,12 @@ logger = logging.getLogger(__name__)
 TEST_URL = "http://httpbin.org/ip"
 HEALTH_CHECK_TIMEOUT = 8
 HEALTH_CHECK_CONCURRENCY = 50
+
+# Smart proxy routing — proxies melhores recebem mais tráfego
+WARMUP_REQUESTS = 500
+WEIGHT_UPDATE_INTERVAL = 200
+MIN_OUTCOMES_FOR_WEIGHT = 5
+DISCARD_THRESHOLD = 0.10
 
 
 @dataclass
@@ -60,6 +67,11 @@ class ProxyPool:
         self._total_requests = 0
         self._successful_requests = 0
         self._failed_requests = 0
+        # Smart proxy routing
+        self._weighted_proxies: List[str] = []
+        self._weights: List[float] = []
+        self._last_weight_update: int = 0
+        self._discarded_proxies: Set[str] = set()
 
     async def preload(self) -> int:
         """
@@ -203,23 +215,99 @@ class ProxyPool:
         }
 
     def get_next_proxy(self) -> Optional[str]:
-        """
-        Retorna o próximo proxy via round-robin (apenas saudáveis pós-health-check).
-        """
-        if not self._proxies:
-            return None
+        """Retorna proxy usando seleção ponderada (após warmup) ou round-robin."""
+        proxy = self._select_proxy()
+        if proxy:
+            self._track_allocation(proxy)
+        return proxy
 
-        idx = self._index % len(self._proxies)
-        self._index += 1
-        proxy = self._proxies[idx]
+    def get_proxy_excluding(self, exclude: Optional[Set[str]] = None) -> Optional[str]:
+        """Retorna proxy evitando os do set (usado para retry com proxy diferente)."""
+        if not exclude:
+            return self.get_next_proxy()
+        proxy = self._select_proxy(exclude=exclude)
+        if proxy:
+            self._track_allocation(proxy)
+        return proxy
 
+    def _track_allocation(self, proxy: str):
         self._total_requests += 1
         stats = self._stats.get(proxy)
         if stats:
             stats.requests += 1
             stats.last_used = time.time()
 
-        return proxy
+    def _select_proxy(self, exclude: Optional[Set[str]] = None) -> Optional[str]:
+        if not self._proxies:
+            return None
+        total_outcomes = self._successful_requests + self._failed_requests
+        if total_outcomes < WARMUP_REQUESTS:
+            return self._round_robin_select(exclude)
+        if total_outcomes - self._last_weight_update >= WEIGHT_UPDATE_INTERVAL:
+            self._update_proxy_weights()
+        if self._weighted_proxies and self._weights:
+            return self._weighted_select(exclude)
+        return self._round_robin_select(exclude)
+
+    def _round_robin_select(self, exclude: Optional[Set[str]] = None) -> Optional[str]:
+        if not self._proxies:
+            return None
+        for _ in range(len(self._proxies)):
+            idx = self._index % len(self._proxies)
+            self._index += 1
+            proxy = self._proxies[idx]
+            if not exclude or proxy not in exclude:
+                return proxy
+        idx = self._index % len(self._proxies)
+        self._index += 1
+        return self._proxies[idx]
+
+    def _weighted_select(self, exclude: Optional[Set[str]] = None) -> Optional[str]:
+        if not exclude:
+            return random.choices(self._weighted_proxies, weights=self._weights, k=1)[0]
+        candidates = [
+            (p, w) for p, w in zip(self._weighted_proxies, self._weights)
+            if p not in exclude
+        ]
+        if not candidates:
+            return self._round_robin_select(exclude)
+        proxies, weights = zip(*candidates)
+        return random.choices(proxies, weights=weights, k=1)[0]
+
+    def _update_proxy_weights(self):
+        """Recalcula pesos: sqrt(success_rate) → comprime diferença para não saturar bons proxies."""
+        active: List[str] = []
+        weights: List[float] = []
+        discarded: Set[str] = set()
+
+        for proxy in self._proxies:
+            stats = self._stats.get(proxy)
+            if not stats:
+                active.append(proxy)
+                weights.append(1.0)
+                continue
+            outcomes = stats.successes + stats.failures
+            if outcomes < MIN_OUTCOMES_FOR_WEIGHT:
+                active.append(proxy)
+                weights.append(1.0)
+                continue
+            rate = stats.successes / outcomes
+            if rate < DISCARD_THRESHOLD:
+                discarded.add(proxy)
+                continue
+            active.append(proxy)
+            weights.append(max(0.1, rate ** 0.5))
+
+        self._weighted_proxies = active
+        self._weights = weights
+        self._discarded_proxies = discarded
+        self._last_weight_update = self._successful_requests + self._failed_requests
+
+        if discarded:
+            logger.info(
+                f"[ProxyPool] ⚖️ Pesos atualizados: {len(active)} ativos, "
+                f"{len(discarded)} descartados (<{DISCARD_THRESHOLD*100:.0f}% success)"
+            )
 
     async def get_healthy_proxy(self, max_attempts: int = 5) -> Optional[str]:
         """Compatibilidade com código existente."""
@@ -260,7 +348,10 @@ class ProxyPool:
             "loaded": self._loaded,
             "total_proxies": len(self._all_proxies),
             "active_proxies": len(self._proxies),
+            "weighted_proxies": len(self._weighted_proxies),
+            "discarded_proxies": len(self._discarded_proxies),
             "health_checked": self._health_checked,
+            "smart_routing": total_outcomes >= WARMUP_REQUESTS,
             "proxy_allocations": self._total_requests,
             "total_outcomes": total_outcomes,
             "successful": self._successful_requests,

@@ -631,7 +631,7 @@ async def _scrape_main_page(
         config = strategy_selector.get_strategy_config(strategy)
         
         try:
-            async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="main_page"):
+            async with concurrency_manager.acquire(url, timeout=90.0, request_id=request_id, substage="main_page"):
                 page = await _execute_strategy(url, strategy, config, ctx_label)
             
             if page and page.success:
@@ -691,24 +691,47 @@ async def _execute_strategy(
     url: str,
     strategy: ScrapingStrategy,
     config: dict,
-    ctx_label: str = ""
+    ctx_label: str = "",
+    max_proxy_retries: int = 2,
 ) -> Optional[ScrapedPage]:
-    """Executa estratégia de scraping (SEMPRE via proxy)."""
-    headers, impersonate = build_headers()
+    """Executa estratégia com retry automático de proxy em erros de infra."""
+    used_proxies: set = set()
+    last_page = None
 
-    proxy = proxy_pool.get_next_proxy()
-    if not proxy:
-        proxy = await get_healthy_proxy()
+    for attempt in range(1 + max_proxy_retries):
+        headers, impersonate = build_headers()
+        proxy = (
+            proxy_pool.get_proxy_excluding(used_proxies)
+            if used_proxies else proxy_pool.get_next_proxy()
+        )
+        if not proxy:
+            proxy = await get_healthy_proxy()
+        if proxy:
+            used_proxies.add(proxy)
 
-    page = await _do_scrape(url, proxy, headers, config["timeout"], ctx_label)
-    page.strategy_used = strategy
+        page = await _do_scrape(url, proxy, headers, config["timeout"], ctx_label)
+        page.strategy_used = strategy
 
-    if page.success and proxy:
-        record_proxy_success(proxy)
-    elif not page.success and proxy:
-        record_proxy_failure(proxy, page.error or "unknown")
+        if page.success:
+            if proxy:
+                record_proxy_success(proxy)
+            return page
 
-    return page
+        if proxy:
+            record_proxy_failure(proxy, page.error or "unknown")
+        last_page = page
+
+        if _is_site_rejection(page.error):
+            return page
+
+        if attempt < max_proxy_retries:
+            logger.info(
+                f"{ctx_label} 🔄 Proxy retry {attempt+2}/{1+max_proxy_retries} "
+                f"main_page {url[:50]}"
+            )
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+
+    return last_page
 
 
 async def _do_scrape(
@@ -859,6 +882,7 @@ async def _scrape_batch_parallel(
             return ScrapedPage(url=url, content="", error="Circuit open")
 
         normalized_url = normalize_url(url)
+        failed_proxies: set = set()
 
         for attempt in range(1 + max_retries):
             try:
@@ -866,7 +890,10 @@ async def _scrape_batch_parallel(
                     return ScrapedPage(url=normalized_url, content="", error="Rate limit timeout")
 
                 async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="subpages"):
-                    used_proxy = proxy_pool.get_next_proxy()
+                    used_proxy = (
+                        proxy_pool.get_proxy_excluding(failed_proxies)
+                        if failed_proxies else proxy_pool.get_next_proxy()
+                    )
                     ref = smart_referer(url)
                     headers, impersonate = build_headers(referer=ref)
                     async with AsyncSession(
@@ -888,6 +915,7 @@ async def _scrape_batch_parallel(
 
                     if used_proxy:
                         record_proxy_failure(used_proxy, page.error or "unknown")
+                        failed_proxies.add(used_proxy)
 
                     if _is_site_rejection(page.error):
                         record_failure(url)
