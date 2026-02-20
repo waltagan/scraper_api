@@ -275,3 +275,95 @@ async def health_check():
         "database": db_status,
         "service": "B2B Flash Profiler"
     }
+
+
+@app.get("/debug/network-test")
+async def network_test():
+    """Testa bandwidth e latência de rede do container."""
+    import subprocess, os, platform
+
+    results = {
+        "hostname": platform.node(),
+        "cpu_count": os.cpu_count(),
+        "platform": platform.platform(),
+    }
+
+    try:
+        mem = subprocess.run(
+            ["free", "-h"], capture_output=True, text=True, timeout=5
+        )
+        results["memory"] = mem.stdout.strip() if mem.returncode == 0 else "N/A"
+    except Exception:
+        results["memory"] = "N/A (command not available)"
+
+    test_urls = [
+        ("cloudflare", "https://speed.cloudflare.com/__down?bytes=10000000"),
+        ("google_br", "https://www.google.com.br"),
+    ]
+    for label, url in test_urls:
+        try:
+            r = subprocess.run(
+                ["curl", "-o", "/dev/null", "-s", "-w",
+                 "speed_download=%{speed_download} time_namelookup=%{time_namelookup} "
+                 "time_connect=%{time_connect} time_starttransfer=%{time_starttransfer} "
+                 "time_total=%{time_total}",
+                 "--max-time", "15", url],
+                capture_output=True, text=True, timeout=20
+            )
+            if r.returncode == 0:
+                parts = dict(p.split("=") for p in r.stdout.strip().split() if "=" in p)
+                speed_bytes = float(parts.get("speed_download", 0))
+                results[label] = {
+                    "speed_mbps": round(speed_bytes * 8 / 1_000_000, 1),
+                    "dns_ms": round(float(parts.get("time_namelookup", 0)) * 1000),
+                    "connect_ms": round(float(parts.get("time_connect", 0)) * 1000),
+                    "ttfb_ms": round(float(parts.get("time_starttransfer", 0)) * 1000),
+                    "total_ms": round(float(parts.get("time_total", 0)) * 1000),
+                }
+        except Exception as e:
+            results[label] = {"error": str(e)}
+
+    try:
+        from app.services.scraper_manager.proxy_manager import proxy_pool
+        proxy = proxy_pool.get_next_proxy()
+        if proxy:
+            r = subprocess.run(
+                ["curl", "-o", "/dev/null", "-s", "--proxy", proxy, "-w",
+                 "speed_download=%{speed_download} time_total=%{time_total} "
+                 "time_connect=%{time_connect}",
+                 "--max-time", "15", "https://www.google.com.br"],
+                capture_output=True, text=True, timeout=20
+            )
+            if r.returncode == 0:
+                parts = dict(p.split("=") for p in r.stdout.strip().split() if "=" in p)
+                results["proxy_test"] = {
+                    "proxy": proxy[:40] + "...",
+                    "speed_mbps": round(float(parts.get("speed_download", 0)) * 8 / 1_000_000, 1),
+                    "connect_ms": round(float(parts.get("time_connect", 0)) * 1000),
+                    "total_ms": round(float(parts.get("time_total", 0)) * 1000),
+                }
+        else:
+            results["proxy_test"] = {"error": "No proxy loaded"}
+    except Exception as e:
+        results["proxy_test"] = {"error": str(e)}
+
+    try:
+        r = subprocess.run(
+            ["curl", "-o", "/dev/null", "-s", "-w",
+             "speed_download=%{speed_download} time_total=%{time_total}",
+             "--max-time", "20",
+             "https://speed.cloudflare.com/__down?bytes=100000000"],
+            capture_output=True, text=True, timeout=25
+        )
+        if r.returncode == 0:
+            parts = dict(p.split("=") for p in r.stdout.strip().split() if "=" in p)
+            speed_bytes = float(parts.get("speed_download", 0))
+            results["bandwidth_100mb"] = {
+                "speed_mbps": round(speed_bytes * 8 / 1_000_000, 1),
+                "speed_MBs": round(speed_bytes / 1_000_000, 1),
+                "total_s": round(float(parts.get("time_total", 0)), 2),
+            }
+    except Exception as e:
+        results["bandwidth_100mb"] = {"error": str(e)}
+
+    return results
