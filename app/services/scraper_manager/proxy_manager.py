@@ -1,12 +1,12 @@
 """
-Proxy Manager - Pool de proxies com rotação round-robin e health check.
+Proxy Manager - Pool de proxies com rotação e health check.
 
-Estratégia:
-- Pre-load de TODOS os proxies no startup (antes do primeiro request)
-- Health check pré-batch: testa todos e filtra mortos
-- Round-robin atômico sobre proxies SAUDÁVEIS
-- Tracking de falhas por proxy para métricas
-- Todas requisições DEVEM passar pelo proxy (nunca IP local)
+Dois modos de operação:
+1. LIST MODE (Webshare): Pre-load de todos os proxies, health check, round-robin/weighted.
+2. GATEWAY MODE (711Proxy): Single endpoint com rotação automática pelo provider.
+   - Não precisa de health check individual (1 gateway = N IPs rotativos)
+   - Não precisa de weighted selection (provider faz o balanceamento)
+   - Concorrência ilimitada no proxy (provider gerencia)
 """
 
 import asyncio
@@ -22,7 +22,6 @@ TEST_URL = "http://httpbin.org/ip"
 HEALTH_CHECK_TIMEOUT = 8
 HEALTH_CHECK_CONCURRENCY = 50
 
-# Smart proxy routing — proxies melhores recebem mais tráfego
 WARMUP_REQUESTS = 500
 WEIGHT_UPDATE_INTERVAL = 200
 MIN_OUTCOMES_FOR_WEIGHT = 5
@@ -51,8 +50,9 @@ class HealthCheckResult:
 
 class ProxyPool:
     """
-    Pool de proxies com rotação round-robin + health check pré-batch.
-    Após health_check(), apenas proxies saudáveis entram na rotação.
+    Pool de proxies com dois modos:
+    - List mode: round-robin/weighted + health check (Webshare datacenter)
+    - Gateway mode: single rotating endpoint (711Proxy residential)
     """
 
     def __init__(self):
@@ -67,18 +67,31 @@ class ProxyPool:
         self._total_requests = 0
         self._successful_requests = 0
         self._failed_requests = 0
-        # Smart proxy routing
         self._weighted_proxies: List[str] = []
         self._weights: List[float] = []
         self._last_weight_update: int = 0
         self._discarded_proxies: Set[str] = set()
+        self._gateway_mode = False
+        self._gateway_url: str = ""
 
     async def preload(self) -> int:
-        """
-        Carrega todos os proxies do Webshare.
-        Retorna quantidade de proxies carregados.
-        """
+        """Carrega proxies. Detecta automaticamente gateway vs list mode."""
         from app.core.proxy import proxy_manager
+
+        if proxy_manager.is_gateway_mode:
+            self._gateway_mode = True
+            self._gateway_url = proxy_manager.gateway_url
+            self._all_proxies = [self._gateway_url]
+            self._proxies = [self._gateway_url]
+            self._stats[self._gateway_url] = ProxyStats(proxy=self._gateway_url)
+            self._loaded = True
+            logger.info(
+                f"[ProxyPool] 🌐 GATEWAY MODE ativo — "
+                f"endpoint: {self._gateway_url[:50]}... "
+                f"(rotação automática pelo provider, sem health check individual)"
+            )
+            return 1
+
         await proxy_manager._refresh_proxies(force=True)
         self._all_proxies = list(proxy_manager.proxies)
 
@@ -93,7 +106,7 @@ class ProxyPool:
 
         self._loaded = True
         self._index = 0
-        logger.info(f"[ProxyPool] ✅ {len(self._all_proxies)} proxies carregados")
+        logger.info(f"[ProxyPool] ✅ {len(self._all_proxies)} proxies carregados (list mode)")
         return len(self._all_proxies)
 
     async def health_check(
@@ -102,10 +115,10 @@ class ProxyPool:
         timeout: int = HEALTH_CHECK_TIMEOUT,
         concurrency: int = HEALTH_CHECK_CONCURRENCY,
     ) -> dict:
-        """
-        Testa TODOS os proxies e filtra mortos da rotação.
-        Retorna estatísticas detalhadas do health check.
-        """
+        """Testa proxies e filtra mortos. Em gateway mode, faz teste rápido do endpoint."""
+        if self._gateway_mode:
+            return await self._gateway_health_check(test_url, timeout)
+
         if not self._all_proxies:
             await self.preload()
         if not self._all_proxies:
@@ -188,7 +201,9 @@ class ProxyPool:
                 "min": round(latencies[0], 1),
                 "max": round(latencies[-1], 1),
                 "p50": round(latencies[len(latencies) // 2], 1),
-                "p95": round(latencies[int(len(latencies) * 0.95)], 1) if len(latencies) > 1 else round(latencies[0], 1),
+                "p95": round(
+                    latencies[int(len(latencies) * 0.95)], 1
+                ) if len(latencies) > 1 else round(latencies[0], 1),
             },
             "error_breakdown": error_cats,
         }
@@ -201,10 +216,88 @@ class ProxyPool:
 
         return stats
 
+    async def _gateway_health_check(self, test_url: str, timeout: int) -> dict:
+        """Health check simplificado para gateway mode — testa 3x para medir latência."""
+        logger.info(f"[ProxyPool] 🌐 Gateway health check: testando {self._gateway_url[:50]}...")
+        latencies = []
+        errors = []
+        start = time.perf_counter()
+
+        for i in range(3):
+            t0 = time.perf_counter()
+            try:
+                from curl_cffi.requests import AsyncSession
+                from app.services.scraper.constants import get_random_impersonate
+                async with AsyncSession(
+                    impersonate=get_random_impersonate(),
+                    proxy=self._gateway_url,
+                    timeout=timeout,
+                    verify=False,
+                ) as session:
+                    resp = await asyncio.wait_for(session.get(test_url), timeout=timeout)
+                    lat = (time.perf_counter() - t0) * 1000
+                    if resp.status_code == 200:
+                        latencies.append(lat)
+                    else:
+                        errors.append(f"status_{resp.status_code}")
+            except Exception as e:
+                errors.append(type(e).__name__)
+
+        total_time = (time.perf_counter() - start) * 1000
+        healthy = len(latencies) > 0
+        self._health_checked = True
+
+        if healthy:
+            self._health_results = [
+                HealthCheckResult(
+                    proxy=self._gateway_url, healthy=True,
+                    latency_ms=sum(latencies) / len(latencies)
+                )
+            ]
+        else:
+            self._health_results = [
+                HealthCheckResult(
+                    proxy=self._gateway_url, healthy=False,
+                    error=errors[0] if errors else "unknown"
+                )
+            ]
+
+        avg_lat = sum(latencies) / len(latencies) if latencies else 0
+        stats = {
+            "mode": "gateway",
+            "gateway_url": self._gateway_url[:50] + "...",
+            "tests_run": 3,
+            "tests_ok": len(latencies),
+            "tests_failed": len(errors),
+            "healthy": healthy,
+            "pool_active": 1 if healthy else 0,
+            "check_time_ms": round(total_time),
+            "latency_ms": {
+                "avg": round(avg_lat, 1),
+                "min": round(min(latencies), 1) if latencies else 0,
+                "max": round(max(latencies), 1) if latencies else 0,
+            },
+            "errors": errors if errors else None,
+        }
+
+        status_emoji = "✅" if healthy else "❌"
+        logger.info(
+            f"[ProxyPool] 🌐 Gateway health check {status_emoji}: "
+            f"{len(latencies)}/3 OK, latência média={avg_lat:.0f}ms"
+        )
+        return stats
+
     def get_health_status(self) -> dict:
         """Retorna resultados do último health check."""
         if not self._health_checked:
             return {"health_checked": False}
+        if self._gateway_mode:
+            return {
+                "health_checked": True,
+                "mode": "gateway",
+                "gateway_healthy": any(r.healthy for r in self._health_results),
+                "pool_active": 1,
+            }
         healthy = sum(1 for r in self._health_results if r.healthy)
         return {
             "health_checked": True,
@@ -215,14 +308,24 @@ class ProxyPool:
         }
 
     def get_next_proxy(self) -> Optional[str]:
-        """Retorna proxy usando seleção ponderada (após warmup) ou round-robin."""
+        """Retorna proxy. Em gateway mode, sempre retorna o gateway URL."""
+        if self._gateway_mode:
+            self._total_requests += 1
+            stats = self._stats.get(self._gateway_url)
+            if stats:
+                stats.requests += 1
+                stats.last_used = time.time()
+            return self._gateway_url
         proxy = self._select_proxy()
         if proxy:
             self._track_allocation(proxy)
         return proxy
 
     def get_proxy_excluding(self, exclude: Optional[Set[str]] = None) -> Optional[str]:
-        """Retorna proxy evitando os do set (usado para retry com proxy diferente)."""
+        """Retorna proxy evitando os do set.
+        Em gateway mode, sempre retorna o gateway (auto-rotação)."""
+        if self._gateway_mode:
+            return self.get_next_proxy()
         if not exclude:
             return self.get_next_proxy()
         proxy = self._select_proxy(exclude=exclude)
@@ -264,7 +367,9 @@ class ProxyPool:
 
     def _weighted_select(self, exclude: Optional[Set[str]] = None) -> Optional[str]:
         if not exclude:
-            return random.choices(self._weighted_proxies, weights=self._weights, k=1)[0]
+            return random.choices(
+                self._weighted_proxies, weights=self._weights, k=1
+            )[0]
         candidates = [
             (p, w) for p, w in zip(self._weighted_proxies, self._weights)
             if p not in exclude
@@ -275,7 +380,10 @@ class ProxyPool:
         return random.choices(proxies, weights=weights, k=1)[0]
 
     def _update_proxy_weights(self):
-        """Recalcula pesos: sqrt(success_rate) → comprime diferença para não saturar bons proxies."""
+        """Recalcula pesos: sqrt(success_rate). Desativado em gateway mode."""
+        if self._gateway_mode:
+            return
+
         active: List[str] = []
         weights: List[float] = []
         discarded: Set[str] = set()
@@ -311,6 +419,8 @@ class ProxyPool:
 
     async def get_healthy_proxy(self, max_attempts: int = 5) -> Optional[str]:
         """Compatibilidade com código existente."""
+        if self._gateway_mode:
+            return self._gateway_url
         if not self._loaded or not self._proxies:
             loaded = await self.preload()
             if loaded == 0:
@@ -340,18 +450,16 @@ class ProxyPool:
 
     def get_status(self) -> dict:
         """Retorna status do pool."""
-        if not self._proxies:
+        if not self._proxies and not self._gateway_mode:
             return {"loaded": False, "total": 0}
 
         total_outcomes = self._successful_requests + self._failed_requests
         status = {
             "loaded": self._loaded,
-            "total_proxies": len(self._all_proxies),
-            "active_proxies": len(self._proxies),
-            "weighted_proxies": len(self._weighted_proxies),
-            "discarded_proxies": len(self._discarded_proxies),
+            "mode": "gateway" if self._gateway_mode else "list",
+            "total_proxies": 1 if self._gateway_mode else len(self._all_proxies),
+            "active_proxies": 1 if self._gateway_mode else len(self._proxies),
             "health_checked": self._health_checked,
-            "smart_routing": total_outcomes >= WARMUP_REQUESTS,
             "proxy_allocations": self._total_requests,
             "total_outcomes": total_outcomes,
             "successful": self._successful_requests,
@@ -360,16 +468,31 @@ class ProxyPool:
                 f"{self._successful_requests / total_outcomes:.1%}"
                 if total_outcomes > 0 else "N/A"
             ),
-            "per_proxy_analysis": self.get_per_proxy_analysis(),
         }
+        if self._gateway_mode:
+            status["gateway_url"] = self._gateway_url[:50] + "..."
+            status["note"] = "Gateway mode: IPs rotativos automáticos pelo provider"
+        else:
+            status["weighted_proxies"] = len(self._weighted_proxies)
+            status["discarded_proxies"] = len(self._discarded_proxies)
+            status["smart_routing"] = total_outcomes >= WARMUP_REQUESTS
+            status["per_proxy_analysis"] = self.get_per_proxy_analysis()
         return status
 
     def get_per_proxy_analysis(self, min_requests: int = 3) -> dict:
-        """
-        Analisa performance individual de cada proxy.
-        Retorna distribuição, buckets de sucesso, e piores/melhores proxies.
-        Só inclui proxies com >= min_requests outcomes para evitar ruído.
-        """
+        """Analisa performance individual. Não aplicável em gateway mode."""
+        if self._gateway_mode:
+            total_outcomes = self._successful_requests + self._failed_requests
+            rate = (
+                self._successful_requests / total_outcomes * 100
+            ) if total_outcomes > 0 else 0
+            return {
+                "mode": "gateway",
+                "total_outcomes": total_outcomes,
+                "success_rate_pct": round(rate, 1),
+                "note": "Análise per-proxy não aplicável em gateway mode",
+            }
+
         rates: List[float] = []
         used_count = 0
         unused_count = 0
@@ -443,7 +566,8 @@ class ProxyPool:
         if std_dev < 10:
             return (
                 f"UNIFORME — todos os proxies têm taxa similar (~{avg_rate:.0f}%). "
-                f"O problema NÃO é proxy individual, é como os sites respondem ao tipo de proxy (datacenter)."
+                f"O problema NÃO é proxy individual, é como os sites "
+                f"respondem ao tipo de proxy (datacenter)."
             )
         elif std_dev < 25:
             return (
@@ -453,7 +577,8 @@ class ProxyPool:
         else:
             return (
                 f"DISPERSA — grande variação (std={std_dev:.0f}%). "
-                f"Alguns proxies são muito piores que outros. Filtrar proxies ruins pode ajudar."
+                f"Alguns proxies são muito piores que outros. "
+                f"Filtrar proxies ruins pode ajudar."
             )
 
     def reset_metrics(self):

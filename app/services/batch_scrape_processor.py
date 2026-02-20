@@ -680,17 +680,34 @@ class BatchScrapeProcessor:
             self.status = "error"
             return
 
-        logger.info(f"[Batch {self.batch_id}] 🏥 Iniciando health check de {proxy_count} proxies...")
+        is_gateway = proxy_pool._gateway_mode
+        if is_gateway:
+            logger.info(f"[Batch {self.batch_id}] 🌐 Gateway mode — health check rápido...")
+        else:
+            logger.info(f"[Batch {self.batch_id}] 🏥 Iniciando health check de {proxy_count} proxies...")
+
         self._proxy_health = await proxy_pool.health_check()
-        active = len(proxy_pool._proxies)
-        logger.info(
-            f"[Batch {self.batch_id}] 🏥 Health check: {active}/{proxy_count} proxies saudáveis "
-            f"({self._proxy_health.get('healthy_pct', 0)}%)"
-        )
-        if active == 0:
-            logger.error(f"[Batch {self.batch_id}] ❌ ZERO proxies saudáveis! Abortando.")
-            self.status = "error"
-            return
+
+        if is_gateway:
+            gw_healthy = self._proxy_health.get("healthy", False)
+            if not gw_healthy:
+                logger.error(f"[Batch {self.batch_id}] ❌ Gateway proxy falhou no health check! Abortando.")
+                self.status = "error"
+                return
+            logger.info(
+                f"[Batch {self.batch_id}] 🌐 Gateway OK — "
+                f"latência média={self._proxy_health.get('latency_ms', {}).get('avg', 0):.0f}ms"
+            )
+        else:
+            active = len(proxy_pool._proxies)
+            logger.info(
+                f"[Batch {self.batch_id}] 🏥 Health check: {active}/{proxy_count} proxies saudáveis "
+                f"({self._proxy_health.get('healthy_pct', 0)}%)"
+            )
+            if active == 0:
+                logger.error(f"[Batch {self.batch_id}] ❌ ZERO proxies saudáveis! Abortando.")
+                self.status = "error"
+                return
 
         logger.info(
             f"[Batch {self.batch_id}] Carregando empresas pendentes..."
