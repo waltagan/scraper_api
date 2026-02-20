@@ -145,9 +145,9 @@ FAST_TRACK_CONFIG = _fast_track_from_json or {
     'proxy_max_failures': 5,
     'per_domain_limit': 5,
     'batch_size': 10,
-    'batch_min_delay': 0.2,
-    'batch_max_delay': 0.8,
-    'intra_batch_delay': 0.15,
+    'batch_min_delay': 0.5,
+    'batch_max_delay': 2.0,
+    'intra_batch_delay': 0.5,
     'subpage_max_retries': 2
 }
 
