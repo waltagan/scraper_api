@@ -110,6 +110,10 @@ def _bucket_fail_reason(reason: str) -> str:
         return "scrape:cloudflare"
     if "timeout" in r:
         return "scrape:timeout"
+    if "thin_content" in r:
+        return "scrape:thin_content"
+    if "empty_content" in r:
+        return "scrape:empty_content"
     if "scrape_error" in r:
         return "scrape:error"
     if "scrape_null" in r:

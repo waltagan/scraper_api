@@ -60,6 +60,7 @@ def _classify_probe_error(error: Exception, url: str) -> Tuple[ProbeErrorType, s
 
 RETRYABLE_PROBE_ERRORS = frozenset({
     ProbeErrorType.CONNECTION_TIMEOUT,
+    ProbeErrorType.CONNECTION_REFUSED,
     ProbeErrorType.UNKNOWN,
     ProbeErrorType.BLOCKED,
 })
