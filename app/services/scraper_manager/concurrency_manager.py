@@ -119,6 +119,7 @@ class ConcurrencyManager:
         acquired_global = False
         acquired_domain = False
         
+        incremented = False
         try:
             # Adquirir slot global
             try:
@@ -144,12 +145,9 @@ class ConcurrencyManager:
             except asyncio.TimeoutError:
                 raise TimeoutError(f"Timeout aguardando slot de domínio {domain}")
             
-            # Medir tempo total de espera
-            wait_ms = (time.monotonic() - start_time) * 1000
-            
-            
-            # Atualizar métricas
+            # Atualizar métricas somente após AMBOS os slots adquiridos
             self._active_requests += 1
+            incremented = True
             self._total_requests += 1
             self._domain_request_counts[domain] = (
                 self._domain_request_counts.get(domain, 0) + 1
@@ -159,11 +157,11 @@ class ConcurrencyManager:
             yield True
             
         finally:
-            # Liberar slots
             if acquired_domain:
                 domain_sem.release()
             if acquired_global:
                 self._global_semaphore.release()
+            if incremented:
                 self._active_requests -= 1
     
     async def acquire_domain_only(self, url: str, timeout: float = 30.0) -> bool:

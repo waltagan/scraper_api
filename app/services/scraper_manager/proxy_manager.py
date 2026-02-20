@@ -132,17 +132,19 @@ class ProxyPool:
             return {"loaded": False, "total": 0}
 
         total_failures = sum(s.failures for s in self._stats.values())
+        tracked = self._successful_requests + total_failures
         return {
             "loaded": self._loaded,
-            "total": len(self._proxies),
-            "total_requests": self._total_requests,
-            "successful_requests": self._successful_requests,
-            "total_failures": total_failures,
+            "total_proxies": len(self._proxies),
+            "requests_dispatched": self._total_requests,
+            "outcomes_tracked": tracked,
+            "successful": self._successful_requests,
+            "failed": total_failures,
             "success_rate": (
-                f"{self._successful_requests / self._total_requests:.1%}"
-                if self._total_requests > 0 else "N/A"
+                f"{self._successful_requests / tracked:.1%}"
+                if tracked > 0 else "N/A"
             ),
-            "current_index": self._index,
+            "untracked": self._total_requests - tracked,
         }
 
     def reset_metrics(self):

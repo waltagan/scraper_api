@@ -782,6 +782,7 @@ async def _scrape_subpages_batch(
                 ctx_label,
                 request_id,
                 shared_session=shared_session,
+                shared_proxy=shared_proxy,
             )
             results.extend(batch_results)
             total_processed += len(batch)
@@ -819,6 +820,7 @@ async def _scrape_batch_parallel(
     ctx_label: str = "",
     request_id: str = "",
     shared_session=None,
+    shared_proxy: Optional[str] = None,
 ) -> List[ScrapedPage]:
     """Processa um batch de URLs em paralelo (TODAS via proxy)."""
 
@@ -839,14 +841,15 @@ async def _scrape_batch_parallel(
 
             async with concurrency_manager.acquire(url, timeout=5.0, request_id=request_id, substage="subpages"):
                 if shared_session:
+                    used_proxy = shared_proxy
                     page = await _scrape_single_subpage(
                         normalized_url, shared_session, effective_timeout, ctx_label
                     )
                 else:
-                    sub_proxy = proxy_pool.get_next_proxy()
+                    used_proxy = proxy_pool.get_next_proxy()
                     async with AsyncSession(
                         impersonate="chrome120",
-                        proxy=sub_proxy,
+                        proxy=used_proxy,
                         timeout=effective_timeout,
                         verify=False
                     ) as session:
@@ -856,8 +859,12 @@ async def _scrape_batch_parallel(
 
                 if page.success:
                     record_success(url)
+                    if used_proxy:
+                        record_proxy_success(used_proxy)
                 else:
                     record_failure(url)
+                    if used_proxy:
+                        record_proxy_failure(used_proxy, page.error or "unknown")
                 return page
 
         except TimeoutError:
