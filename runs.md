@@ -1526,3 +1526,327 @@ run7
   }
 }
 ```
+
+
+run 
+{
+  "batch_id": "d5c83504",
+  "status": "running",
+  "total": 1000,
+  "processed": 816,
+  "success_count": 354,
+  "error_count": 462,
+  "success_rate_pct": 43.4,
+  "remaining": 184,
+  "in_progress": 184,
+  "peak_in_progress": 1000,
+  "throughput_per_min": 116.1,
+  "eta_minutes": 1.6,
+  "elapsed_seconds": 421.7,
+  "flushes_done": 0,
+  "buffer_size": 816,
+  "processing_time_ms": {
+    "avg": 205131.1,
+    "min": 2437,
+    "max": 360610.3,
+    "p50": 178366.8,
+    "p60": 236323.6,
+    "p70": 269311.1,
+    "p80": 282165.1,
+    "p90": 326339.3,
+    "p95": 327309,
+    "p99": 354400
+  },
+  "error_breakdown": {
+    "empty_content": 462
+  },
+  "pages_per_company_avg": 7.3,
+  "total_retries": 0,
+  "subpage_pipeline": {
+    "links_in_html_total": 7997,
+    "links_after_filter": 7997,
+    "links_selected": 4171,
+    "links_per_company_avg": 9.8,
+    "selected_per_company_avg": 5.1,
+    "zero_links_companies": 48,
+    "zero_links_pct": 5.9,
+    "main_page_failures": 462,
+    "main_page_fail_reasons": {
+      "probe:timeout": 350,
+      "proxy:timeout": 48,
+      "scrape:error": 30,
+      "probe:ssl": 12,
+      "proxy:empty_response": 11,
+      "proxy:http_5xx": 7,
+      "proxy:connection": 4
+    },
+    "subpages_attempted": 2520,
+    "subpages_ok": 2239,
+    "subpages_failed": 281,
+    "subpage_success_rate_pct": 88.8,
+    "subpage_error_breakdown": {
+      "scrape_fail": 128,
+      "timeout_slot": 5
+    }
+  },
+  "infrastructure": {
+    "proxy_pool": {
+      "loaded": true,
+      "total_proxies": 2500,
+      "active_proxies": 2500,
+      "health_checked": true,
+      "proxy_allocations": 16069,
+      "total_outcomes": 9538,
+      "successful": 4427,
+      "failed": 5111,
+      "success_rate": "46.4%",
+      "per_proxy_analysis": {
+        "proxies_analyzed": 2280,
+        "proxies_used": 2500,
+        "proxies_unused": 0,
+        "success_rate_distribution": {
+          "avg_pct": 47.3,
+          "std_dev_pct": 25.5,
+          "min_pct": 0,
+          "max_pct": 100,
+          "p10": 16.7,
+          "p25": 33.3,
+          "p50": 50,
+          "p75": 66.7,
+          "p90": 75
+        },
+        "buckets": {
+          "90_100_pct": 125,
+          "70_90_pct": 316,
+          "50_70_pct": 773,
+          "30_50_pct": 553,
+          "10_30_pct": 314,
+          "0_10_pct": 199
+        },
+        "verdict": "DISPERSA — grande variação (std=26%). Alguns proxies são muito piores que outros. Filtrar proxies ruins pode ajudar.",
+        "worst_5": [
+          {
+            "proxy_id": "197.223:6462",
+            "requests": 7,
+            "outcomes": 4,
+            "successes": 0,
+            "failures": 4,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": "252.186:6454",
+            "requests": 7,
+            "outcomes": 3,
+            "successes": 0,
+            "failures": 3,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": ".92.137:6071",
+            "requests": 7,
+            "outcomes": 3,
+            "successes": 0,
+            "failures": 3,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": "3.91.81:6514",
+            "requests": 7,
+            "outcomes": 5,
+            "successes": 0,
+            "failures": 5,
+            "success_rate_pct": 0
+          },
+          {
+            "proxy_id": "240.136:7172",
+            "requests": 7,
+            "outcomes": 5,
+            "successes": 0,
+            "failures": 5,
+            "success_rate_pct": 0
+          }
+        ],
+        "best_5": [
+          {
+            "proxy_id": "8.67.36:6968",
+            "requests": 6,
+            "outcomes": 3,
+            "successes": 3,
+            "failures": 0,
+            "success_rate_pct": 100
+          },
+          {
+            "proxy_id": "252.129:6397",
+            "requests": 6,
+            "outcomes": 4,
+            "successes": 4,
+            "failures": 0,
+            "success_rate_pct": 100
+          },
+          {
+            "proxy_id": "8.67.16:6948",
+            "requests": 6,
+            "outcomes": 4,
+            "successes": 4,
+            "failures": 0,
+            "success_rate_pct": 100
+          },
+          {
+            "proxy_id": ".171.69:6037",
+            "requests": 6,
+            "outcomes": 5,
+            "successes": 5,
+            "failures": 0,
+            "success_rate_pct": 100
+          },
+          {
+            "proxy_id": ".92.161:6095",
+            "requests": 6,
+            "outcomes": 5,
+            "successes": 5,
+            "failures": 0,
+            "success_rate_pct": 100
+          }
+        ]
+      },
+      "health_check": {
+        "total_tested": 2500,
+        "healthy": 2500,
+        "dead": 0,
+        "healthy_pct": 100,
+        "pool_active": 2500,
+        "check_time_ms": 54292,
+        "latency_ms": {
+          "avg": 1070.5,
+          "min": 685,
+          "max": 2842.6,
+          "p50": 1002.8,
+          "p95": 1584.2
+        },
+        "error_breakdown": {
+
+        }
+      }
+    },
+    "concurrency": {
+      "active_requests": 481,
+      "total_requests": 10706,
+      "peak_concurrent": 1868,
+      "global_limit": 15000,
+      "per_domain_limit": 5,
+      "slow_domains_count": 304,
+      "tracked_domains": 1054,
+      "utilization": "3.2%"
+    },
+    "rate_limiter": {
+      "domains_tracked": 431,
+      "slow_domains_count": 0,
+      "total_requests": 8540,
+      "throttled_requests": 0,
+      "throttle_rate": "0.0%",
+      "config": {
+        "default_rpm": 300,
+        "burst_size": 60,
+        "slow_domain_rpm": 60
+      }
+    },
+    "circuit_breaker": {
+      "domains_tracked": 431,
+      "states": {
+        "closed": 431,
+        "open": 0,
+        "half_open": 0
+      },
+      "total_blocked": 0,
+      "total_opened": 0,
+      "config": {
+        "failure_threshold": 12,
+        "recovery_timeout": 30,
+        "half_open_max_tests": 3
+      }
+    }
+  },
+  "last_errors": [],
+  "instances": [
+    {
+      "id": 0,
+      "status": "running",
+      "processed": 81,
+      "success": 34,
+      "errors": 47,
+      "throughput_per_min": 13.3
+    },
+    {
+      "id": 1,
+      "status": "running",
+      "processed": 78,
+      "success": 37,
+      "errors": 41,
+      "throughput_per_min": 12.8
+    },
+    {
+      "id": 2,
+      "status": "running",
+      "processed": 80,
+      "success": 37,
+      "errors": 43,
+      "throughput_per_min": 13.2
+    },
+    {
+      "id": 3,
+      "status": "running",
+      "processed": 84,
+      "success": 30,
+      "errors": 54,
+      "throughput_per_min": 13.8
+    },
+    {
+      "id": 4,
+      "status": "running",
+      "processed": 82,
+      "success": 38,
+      "errors": 44,
+      "throughput_per_min": 13.5
+    },
+    {
+      "id": 5,
+      "status": "running",
+      "processed": 76,
+      "success": 27,
+      "errors": 49,
+      "throughput_per_min": 12.5
+    },
+    {
+      "id": 6,
+      "status": "running",
+      "processed": 78,
+      "success": 35,
+      "errors": 43,
+      "throughput_per_min": 12.8
+    },
+    {
+      "id": 7,
+      "status": "running",
+      "processed": 87,
+      "success": 47,
+      "errors": 40,
+      "throughput_per_min": 14.3
+    },
+    {
+      "id": 8,
+      "status": "running",
+      "processed": 78,
+      "success": 35,
+      "errors": 43,
+      "throughput_per_min": 12.8
+    },
+    {
+      "id": 9,
+      "status": "running",
+      "processed": 92,
+      "success": 34,
+      "errors": 58,
+      "throughput_per_min": 15.1
+    }
+  ]
+}
