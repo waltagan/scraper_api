@@ -257,7 +257,9 @@ async def scrape_all_subpages(
         except URLNotReachable as e:
             log_msg = e.get_log_message() if hasattr(e, 'get_log_message') else str(e)
             logger.error(f"{ctx_label} ❌ URL inacessível: {url} - {log_msg}")
-            meta.main_page_fail_reason = "probe_unreachable"
+            error_type = getattr(e, 'error_type', None)
+            probe_detail = error_type.value if error_type else "unknown"
+            meta.main_page_fail_reason = f"probe_{probe_detail}"
             meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
             return meta
         except Exception as e:

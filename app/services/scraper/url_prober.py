@@ -229,42 +229,48 @@ class URLProber:
     ) -> Tuple[Optional[Tuple[float, int]], Optional[Tuple[ProbeErrorType, str]]]:
         """
         Testa URL e retorna resultado ou informação de erro detalhada.
-        
-        Returns:
-            Tuple de (resultado, erro_info)
-            - resultado: (tempo_ms, status_code) ou None
-            - erro_info: (tipo_erro, mensagem) ou None
+        Captura exceções de cada client HTTP para diagnóstico preciso.
         """
         async with self.semaphore:
-            last_error = None
+            client_exceptions: List[Exception] = []
             
-            # Tentar curl_cffi primeiro
             if HAS_CURL_CFFI:
-                result = await self._test_with_curl_cffi(url)
+                result, exc = await self._test_with_curl_cffi(url)
                 if result:
                     return result, None
+                if exc:
+                    client_exceptions.append(exc)
             
-            # Fallback para httpx
             if HAS_HTTPX:
-                result = await self._test_with_httpx(url)
+                result, exc = await self._test_with_httpx(url)
                 if result:
                     return result, None
+                if exc:
+                    client_exceptions.append(exc)
             
-            # Fallback para system curl
-            result = await self._test_with_system_curl(url)
+            result, exc = await self._test_with_system_curl(url)
             if result:
                 return result, None
+            if exc:
+                client_exceptions.append(exc)
             
-            # Se chegou aqui, todos falharam - tentar detectar o tipo de erro
-            error_info = await self._diagnose_connection_error(url)
+            error_info = self._diagnose_from_exceptions(client_exceptions, url)
             return None, error_info
     
-    async def _diagnose_connection_error(
+    def _diagnose_from_exceptions(
         self,
+        exceptions: List[Exception],
         url: str
     ) -> Tuple[ProbeErrorType, str]:
-        """Diagnóstico simplificado (sem testes diretos de DNS/TCP via IP local)."""
-        return ProbeErrorType.UNKNOWN, f"Todas tentativas via proxy falharam para {url}"
+        """Classifica a melhor exceção capturada dos HTTP clients."""
+        if not exceptions:
+            return ProbeErrorType.UNKNOWN, f"Todas tentativas via proxy falharam para {url} (sem exceção capturada)"
+        
+        classified = [
+            (url, *_classify_probe_error(exc, url))
+            for exc in exceptions
+        ]
+        return self._get_best_error_diagnosis(classified, url)
     
     def _generate_variations(self, base_url: str) -> List[str]:
         """
@@ -311,21 +317,12 @@ class URLProber:
         return sorted_vars
     
     async def _test_url(self, url: str) -> Optional[Tuple[float, int]]:
-        """
-        Testa uma URL específica.
-        Usa curl_cffi se disponível, senão httpx, senão system curl.
-        
-        Args:
-            url: URL para testar
-        
-        Returns:
-            Tuple de (tempo_ms, status_code) ou None se falhar
-        """
+        """Testa uma URL específica. Retorna (tempo_ms, status_code) ou None."""
         result, _ = await self._test_url_with_error(url)
         return result
     
-    async def _test_with_curl_cffi(self, url: str) -> Optional[Tuple[float, int]]:
-        """Testa URL com curl_cffi via proxy."""
+    async def _test_with_curl_cffi(self, url: str) -> Tuple[Optional[Tuple[float, int]], Optional[Exception]]:
+        """Testa URL com curl_cffi via proxy. Retorna (result, exception)."""
         try:
             from app.services.scraper_manager.proxy_manager import proxy_pool
             proxy = proxy_pool.get_next_proxy()
@@ -349,7 +346,7 @@ class URLProber:
                         resp = await session.get(url, headers=headers, allow_redirects=True)
                         elapsed = (time.perf_counter() - start) * 1000
 
-                    return elapsed, resp.status_code
+                    return (elapsed, resp.status_code), None
 
                 except Exception as head_error:
                     error_str = str(head_error).lower()
@@ -357,15 +354,15 @@ class URLProber:
                         start = time.perf_counter()
                         resp = await session.get(url, headers=headers, allow_redirects=True)
                         elapsed = (time.perf_counter() - start) * 1000
-                        return elapsed, resp.status_code
+                        return (elapsed, resp.status_code), None
                     raise
 
         except Exception as e:
             logger.debug(f"curl_cffi falhou para {url}: {e}")
-            return None
+            return None, e
     
-    async def _test_with_httpx(self, url: str) -> Optional[Tuple[float, int]]:
-        """Testa URL com httpx via proxy."""
+    async def _test_with_httpx(self, url: str) -> Tuple[Optional[Tuple[float, int]], Optional[Exception]]:
+        """Testa URL com httpx via proxy. Retorna (result, exception)."""
         try:
             from app.services.scraper_manager.proxy_manager import proxy_pool
             proxy = proxy_pool.get_next_proxy()
@@ -390,20 +387,20 @@ class URLProber:
                         resp = await client.get(url, headers=headers)
                         elapsed = (time.perf_counter() - start) * 1000
 
-                    return elapsed, resp.status_code
+                    return (elapsed, resp.status_code), None
 
                 except httpx.TooManyRedirects:
                     start = time.perf_counter()
                     resp = await client.get(url, headers=headers)
                     elapsed = (time.perf_counter() - start) * 1000
-                    return elapsed, resp.status_code
+                    return (elapsed, resp.status_code), None
 
         except Exception as e:
             logger.debug(f"httpx falhou para {url}: {e}")
-            return None
+            return None, e
     
-    async def _test_with_system_curl(self, url: str) -> Optional[Tuple[float, int]]:
-        """Testa URL com system curl via proxy (último recurso)."""
+    async def _test_with_system_curl(self, url: str) -> Tuple[Optional[Tuple[float, int]], Optional[Exception]]:
+        """Testa URL com system curl via proxy (último recurso). Retorna (result, exception)."""
         try:
             from app.services.scraper_manager.proxy_manager import proxy_pool
             proxy = proxy_pool.get_next_proxy()
@@ -449,7 +446,7 @@ class URLProber:
                     if res.returncode == 0 and res.stdout.strip():
                         status_code = int(res.stdout.strip())
 
-                return elapsed, status_code
+                return (elapsed, status_code), None
 
             if res.returncode == 47:
                 cmd_get = [
@@ -468,12 +465,12 @@ class URLProber:
                 )
                 elapsed = (time.perf_counter() - start) * 1000
                 if res.returncode == 0 and res.stdout.strip():
-                    return elapsed, int(res.stdout.strip())
+                    return (elapsed, int(res.stdout.strip())), None
 
-            return None
+            return None, RuntimeError(f"system curl returncode={res.returncode} stderr={res.stderr[:80]}")
         except Exception as e:
             logger.debug(f"system curl falhou para {url}: {e}")
-            return None
+            return None, e
     
     async def find_best_variation(
         self, 

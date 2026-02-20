@@ -62,39 +62,194 @@ def _classify_error(error_msg: str) -> str:
 
 
 def _bucket_fail_reason(reason: str) -> str:
-    """Agrupa razões detalhadas de falha em buckets para estatísticas."""
+    """
+    Agrupa razões detalhadas de falha em buckets acionáveis.
+    
+    Formato de entrada esperado:
+      - probe_<ProbeErrorType.value>  (ex: probe_dns_error, probe_connection_timeout)
+      - scrape_proxy_fail(<detail>)   (ex: scrape_proxy_fail(proxy_fail:proxy_timeout))
+      - scrape_blocked_<type>         (ex: scrape_blocked_cloudflare)
+      - scrape_error(<detail>)
+      - reuse_<type>
+      - scrape_concurrency_timeout
+    """
     if not reason:
         return "unknown"
     r = reason.lower()
-    if "probe_unreachable" in r:
-        return "probe_unreachable"
+
+    # --- PROBE sub-tipos (site inacessível) ---
+    if r.startswith("probe_"):
+        if "dns" in r:
+            return "probe:dns"
+        if "connection_timeout" in r or ("timeout" in r and "concurrency" not in r):
+            return "probe:timeout"
+        if "refused" in r or "reset" in r:
+            return "probe:refused"
+        if "ssl" in r:
+            return "probe:ssl"
+        if "blocked" in r or "403" in r:
+            return "probe:blocked"
+        if "server_error" in r or "500" in r:
+            return "probe:server_error"
+        if "redirect" in r:
+            return "probe:redirect_loop"
+        if "http_error" in r:
+            return "probe:http_error"
+        if "unknown" in r:
+            return "probe:unknown"
+        return "probe:other"
+
+    # --- ANALYZER reuse sub-tipos ---
     if "reuse_no_html" in r:
-        return "analyzer_no_html"
+        return "analyzer:no_html"
     if "reuse_status" in r:
-        return "analyzer_bad_status"
+        return "analyzer:bad_status"
     if "reuse_short_content" in r:
-        return "analyzer_short_content"
+        return "analyzer:short_content"
     if "reuse_soft_404" in r:
-        return "analyzer_soft_404"
+        return "analyzer:soft_404"
     if "reuse_cloudflare" in r:
-        return "analyzer_cloudflare"
+        return "analyzer:cloudflare"
+
+    # --- CONCURRENCY ---
     if "concurrency_timeout" in r:
-        return "concurrency_timeout"
+        return "infra:concurrency_timeout"
+
+    # --- SCRAPE BLOCKED ---
     if "blocked" in r:
-        return "scrape_blocked"
+        if "cloudflare" in r:
+            return "scrape:blocked_cloudflare"
+        return "scrape:blocked_waf"
+
+    # --- PROXY FAIL sub-tipos (extrair detalhe dos parênteses) ---
     if "proxy_fail" in r:
-        return "scrape_proxy_fail"
-    if "soft 404" in r:
-        return "scrape_soft_404"
+        if "proxy_timeout" in r or "timed out" in r:
+            return "proxy:timeout"
+        if "proxy_connection" in r or "refused" in r:
+            return "proxy:connection"
+        if "http_403" in r:
+            return "proxy:http_403"
+        if "http_5" in r:
+            return "proxy:http_5xx"
+        if "http_4" in r:
+            return "proxy:http_4xx"
+        if "ssl" in r:
+            return "proxy:ssl"
+        if "no_curl_cffi" in r:
+            return "proxy:no_client"
+        if "empty_response" in r:
+            return "proxy:empty_response"
+        return "proxy:other"
+
+    # --- SCRAPE resultado ---
+    if "soft 404" in r or "soft_404" in r:
+        return "scrape:soft_404"
     if "cloudflare" in r:
-        return "scrape_cloudflare"
-    if "timeout" in r:
-        return "scrape_timeout"
+        return "scrape:cloudflare"
     if "scrape_error" in r:
-        return "scrape_error"
+        return "scrape:error"
     if "scrape_null" in r:
-        return "scrape_null_response"
-    return f"other({reason[:30]})"
+        return "scrape:null_response"
+    if "scrape_exception" in r:
+        return "scrape:exception"
+    if "timeout" in r:
+        return "scrape:timeout"
+
+    return f"other:{reason[:30]}"
+
+
+def _build_failure_diagnosis(
+    fail_reasons: Dict[str, int],
+    total_processed: int,
+) -> dict:
+    """
+    Agrupa fail_reasons em categorias acionáveis para diagnóstico rápido.
+    
+    Categorias:
+      - site_offline: DNS, refused, server_error → site genuinamente fora do ar (nada a fazer)
+      - proxy_infra: timeout, connection, ssl via proxy → problema de infraestrutura proxy
+      - blocked: WAF, Cloudflare, HTTP 403 → precisamos melhorar evasão
+      - content_issue: soft_404, short_content, no_html → site sem conteúdo útil
+      - our_infra: concurrency_timeout → nosso servidor precisa de mais recursos
+      - other: demais erros
+    """
+    categories: Dict[str, Dict[str, int]] = {
+        "site_offline": {},
+        "proxy_infra": {},
+        "blocked": {},
+        "content_issue": {},
+        "our_infra": {},
+        "other": {},
+    }
+
+    mapping = {
+        "probe:dns": "site_offline",
+        "probe:refused": "site_offline",
+        "probe:server_error": "site_offline",
+        "probe:redirect_loop": "site_offline",
+        "probe:timeout": "proxy_infra",
+        "probe:ssl": "proxy_infra",
+        "probe:unknown": "proxy_infra",
+        "probe:other": "proxy_infra",
+        "probe:http_error": "proxy_infra",
+        "probe:blocked": "blocked",
+        "proxy:timeout": "proxy_infra",
+        "proxy:connection": "proxy_infra",
+        "proxy:ssl": "proxy_infra",
+        "proxy:empty_response": "proxy_infra",
+        "proxy:no_client": "proxy_infra",
+        "proxy:other": "proxy_infra",
+        "proxy:http_403": "blocked",
+        "proxy:http_4xx": "blocked",
+        "proxy:http_5xx": "site_offline",
+        "scrape:blocked_waf": "blocked",
+        "scrape:blocked_cloudflare": "blocked",
+        "scrape:cloudflare": "blocked",
+        "scrape:soft_404": "content_issue",
+        "scrape:error": "other",
+        "scrape:null_response": "other",
+        "scrape:exception": "other",
+        "scrape:timeout": "proxy_infra",
+        "analyzer:no_html": "content_issue",
+        "analyzer:bad_status": "content_issue",
+        "analyzer:short_content": "content_issue",
+        "analyzer:soft_404": "content_issue",
+        "analyzer:cloudflare": "blocked",
+        "infra:concurrency_timeout": "our_infra",
+    }
+
+    for reason, count in fail_reasons.items():
+        cat = mapping.get(reason, "other")
+        categories[cat][reason] = count
+
+    total_failures = sum(fail_reasons.values())
+    summary = {}
+    for cat, reasons in categories.items():
+        cat_total = sum(reasons.values())
+        if cat_total > 0:
+            summary[cat] = {
+                "count": cat_total,
+                "pct_of_failures": round(cat_total / total_failures * 100, 1) if total_failures else 0,
+                "pct_of_total": round(cat_total / total_processed * 100, 1) if total_processed else 0,
+                "breakdown": dict(sorted(reasons.items(), key=lambda x: -x[1])),
+            }
+
+    labels = {
+        "site_offline": "Site genuinamente fora do ar (DNS, refused, 5xx) → nada a fazer",
+        "proxy_infra": "Falha de proxy (timeout, conexão, SSL) → melhorar proxies/timeouts",
+        "blocked": "Bloqueado por WAF/Cloudflare/403 → melhorar evasão/fingerprint",
+        "content_issue": "Site sem conteúdo útil (soft 404, vazio) → nada a fazer",
+        "our_infra": "Nosso servidor sobrecarregado (concurrency timeout) → escalar",
+        "other": "Erros diversos → investigar individualmente",
+    }
+
+    return {
+        "total_failures": total_failures,
+        "total_processed": total_processed,
+        "failure_rate_pct": round(total_failures / total_processed * 100, 1) if total_processed else 0,
+        "categories": summary,
+        "category_labels": labels,
+    }
 
 
 def _percentiles(sorted_values: List[float], pcts: List[int]) -> Dict[str, float]:
@@ -693,6 +848,8 @@ class BatchScrapeProcessor:
 
         infra = self._get_infrastructure_stats()
 
+        diagnosis = _build_failure_diagnosis(main_page_fail_reasons, processed)
+
         return {
             "batch_id": self.batch_id,
             "status": self.status,
@@ -718,6 +875,7 @@ class BatchScrapeProcessor:
             "error_breakdown": dict(sorted(all_error_cats.items(), key=lambda x: -x[1])),
             "pages_per_company_avg": avg_pages,
             "total_retries": total_retries,
+            "failure_diagnosis": diagnosis,
             "subpage_pipeline": {
                 "links_in_html_total": links_in_html,
                 "links_after_filter": links_after_filter,

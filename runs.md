@@ -1430,3 +1430,99 @@ run7
     }
   ]
 }
+
+---
+
+## Run 8 — Diagnóstico de empty_content (com main_page_fail_reasons)
+
+**Data**: 2026-02-19
+**Batch**: b32c242c
+**Config**: 2000 empresas, 10 instâncias, 400 workers/inst (4000 total)
+**Mudanças**: Implementação de `main_page_fail_reasons` para diagnosticar causas do `empty_content`:
+- `cffi_scrape_safe` agora registra `last_error` detalhado (proxy_timeout, http_4xx, ssl_error, etc.)
+- `_do_scrape` diferencia proxy failures reais de Soft 404 / Cloudflare
+- `_try_reuse_analyzer_html` e `_scrape_main_page` retornam motivo de falha
+- `ScrapeResult.main_page_fail_reason` propagado até o batch status
+
+### Resultados
+
+| Métrica | Valor |
+|---|---|
+| Duração | 13.6 min (814s) |
+| Throughput | **147.4/min** |
+| Success Rate | **50.8%** (1017/2000) |
+| **Success excl empty_content** | **97.0%** (1017/1048) |
+| Errors | 983 (empty_content: 952, timeout: 31) |
+| Subpage Success | **86.5%** (8698/10056) |
+| Pages/company | 9.6 |
+| Proxy Success | 44.4% (9791/22060) |
+| Circuit Breakers | 0 |
+
+### Main Page Fail Reasons (952 falhas)
+
+| Motivo | Count | % |
+|---|---|---|
+| **probe_unreachable** | 624 | **65.5%** |
+| scrape_proxy_fail | 249 | 26.2% |
+| scrape_error | 67 | 7.0% |
+| concurrency_timeout | 12 | 1.3% |
+
+### Análise
+
+1. **97% success excl empty_content** — lógica de scraping está sólida
+2. **probe_unreachable é o problema #1 (65.5%)** — 624 sites falharam no estágio de probe
+   - Precisa investigar: são sites genuinamente fora do ar ou o probe está falhando por proxy/timeout?
+3. **scrape_proxy_fail (26.2%)** — falhas de proxy na main page, precisa detalhar (timeout vs connection vs HTTP error)
+4. **scrape_error (7%)** — erros genéricos no scrape
+5. **Subpage success 86.5%** — bom, melhorou em relação ao run anterior
+6. **Proxy success 44.4%** — estável em relação ao run anterior
+
+### Próximos passos
+- Detalhar `probe_unreachable`: adicionar motivo específico da falha do probe
+- Detalhar `scrape_proxy_fail`: separar por tipo (proxy_timeout, proxy_connection, http_4xx, etc.)
+- Investigar se `probe_unreachable` são sites sem website ou falha de infra
+
+### JSON completo
+
+```json
+{
+  "batch_id": "b32c242c",
+  "status": "completed",
+  "total": 2000,
+  "processed": 2000,
+  "success_count": 1017,
+  "error_count": 983,
+  "success_rate_pct": 50.8,
+  "throughput_per_min": 147.4,
+  "elapsed_seconds": 814.0,
+  "error_breakdown": {"empty_content": 952, "timeout": 31},
+  "pages_per_company_avg": 9.6,
+  "subpage_pipeline": {
+    "main_page_failures": 952,
+    "main_page_fail_reasons": {
+      "probe_unreachable": 624,
+      "scrape_proxy_fail": 249,
+      "scrape_error": 67,
+      "concurrency_timeout": 12
+    },
+    "subpages_attempted": 10056,
+    "subpages_ok": 8698,
+    "subpage_success_rate_pct": 86.5
+  },
+  "infrastructure": {
+    "proxy_pool": {
+      "total_proxies": 2500,
+      "active_proxies": 2494,
+      "success_rate": "44.4%",
+      "per_proxy_analysis": {
+        "avg_pct": 44.1,
+        "std_dev_pct": 18.2,
+        "verdict": "MODERADA"
+      }
+    },
+    "circuit_breaker": {
+      "open_circuits": 0
+    }
+  }
+}
+```
