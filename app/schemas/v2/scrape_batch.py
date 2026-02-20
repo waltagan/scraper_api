@@ -93,6 +93,11 @@ class BatchStatusResponse(BaseModel):
     )
     pages_per_company_avg: float = Field(0, description="Media de paginas extraidas por empresa")
     total_retries: int = Field(0, description="Total de retries realizados")
+    subpage_pipeline: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Metricas do pipeline de subpages: links encontrados/filtrados/selecionados, "
+                    "subpages tentadas/sucesso/falha, breakdown de erros"
+    )
     infrastructure: Dict[str, Any] = Field(
         default_factory=dict,
         description="Stats de proxy_pool, concurrency, rate_limiter, circuit_breaker"
