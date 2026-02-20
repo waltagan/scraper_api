@@ -152,7 +152,7 @@ class ChunkValidator:
         
         return result
     
-    def enforce_limit(self, chunk_content: str, max_tokens: int) -> List[str]:
+    def enforce_limit(self, chunk_content: str, max_tokens: int, _depth: int = 0) -> List[str]:
         """
         Garante que conteúdo não exceda limite, dividindo se necessário.
         
@@ -161,40 +161,51 @@ class ChunkValidator:
         Args:
             chunk_content: Conteúdo do chunk
             max_tokens: Limite máximo de tokens
+            _depth: Controle interno de profundidade de recursao
         
         Returns:
             Lista de chunks divididos (pode ser lista com 1 elemento se já está OK)
         """
+        MAX_DEPTH = 5
         tokens = estimate_tokens(chunk_content, include_overhead=False)
         
         if tokens <= max_tokens:
-            # Já está dentro do limite
             return [chunk_content]
         
-        # Excede limite - precisa dividir
+        if _depth >= MAX_DEPTH:
+            logger.warning(
+                f"Recursão máxima ({MAX_DEPTH}) atingida com {tokens:,} tokens. "
+                f"Forçando split binário por caracteres."
+            )
+            mid = len(chunk_content) // 2
+            space_pos = chunk_content.rfind(' ', mid - 500, mid + 500)
+            if space_pos > 0:
+                mid = space_pos
+            left = chunk_content[:mid]
+            right = chunk_content[mid:]
+            result = []
+            for part in (left, right):
+                if part.strip():
+                    result.extend(self.enforce_limit(part, max_tokens, _depth + 1))
+            return result if result else [chunk_content]
+        
         logger.warning(
             f"Conteúdo excede limite ({tokens:,} > {max_tokens:,} tokens), dividindo..."
         )
         
-        # Usar SmartChunker para dividir
-        # Criar um chunk temporário para usar os métodos do chunker
         temp_chunker = SmartChunker(self.config)
-        
-        # Dividir usando método interno
         divided_chunks = temp_chunker._split_large_page(chunk_content, max_tokens)
         
-        # Validar que todos os chunks divididos estão dentro do limite
         final_chunks = []
         for i, sub_chunk in enumerate(divided_chunks):
             sub_tokens = estimate_tokens(sub_chunk, include_overhead=False)
             
             if sub_tokens > max_tokens:
-                # Ainda excede, dividir recursivamente
                 logger.warning(
                     f"Sub-chunk {i+1} ainda excede ({sub_tokens:,} > {max_tokens:,}), "
                     f"dividindo recursivamente..."
                 )
-                recursive_chunks = self.enforce_limit(sub_chunk, max_tokens)
+                recursive_chunks = self.enforce_limit(sub_chunk, max_tokens, _depth + 1)
                 final_chunks.extend(recursive_chunks)
             else:
                 final_chunks.append(sub_chunk)

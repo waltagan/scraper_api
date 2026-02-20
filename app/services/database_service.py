@@ -297,6 +297,100 @@ class DatabaseService:
             )
             return [dict(row) for row in rows]
     
+    # ========== BATCH SCRAPE ==========
+    
+    async def count_pending_scrape_companies(
+        self,
+        status_filter: Optional[List[str]] = None,
+    ) -> int:
+        """
+        Conta empresas pendentes de scrape.
+        Usa SET LOCAL statement_timeout para permitir query longa (300s)
+        sem afetar o command_timeout global do pool (60s).
+        """
+        if not status_filter:
+            status_filter = ['muito_alto', 'alto', 'medio']
+        
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            placeholders = ', '.join(f'${i+1}' for i in range(len(status_filter)))
+            async with conn.transaction():
+                await conn.execute("SET LOCAL statement_timeout = '300000'")
+                total = await conn.fetchval(
+                    f'SELECT COUNT(*) FROM "{SCHEMA}".website_discovery '
+                    f'WHERE discovery_status IN ({placeholders}) AND website_url IS NOT NULL',
+                    *status_filter
+                )
+            already_scraped = await conn.fetchval(
+                f'SELECT COUNT(DISTINCT cnpj_basico) FROM "{SCHEMA}".scraped_chunks'
+            )
+            return max(0, total - already_scraped)
+    
+    async def get_pending_scrape_companies(
+        self,
+        limit: int = 5000,
+        after_id: int = 0,
+        status_filter: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Busca empresas pendentes de scrape via cursor-based pagination.
+        Usa WHERE id > after_id (rapido via PK index) + NOT EXISTS.
+        Padrao identico ao processar_medio_llm.py.
+        """
+        if not status_filter:
+            status_filter = ['muito_alto', 'alto', 'medio']
+        
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            placeholders = ', '.join(f'${i+1}' for i in range(len(status_filter)))
+            n = len(status_filter)
+            query = f"""
+                SELECT wd.id as wd_id, wd.cnpj_basico, wd.website_url, 
+                       wd.discovery_status
+                FROM "{SCHEMA}".website_discovery wd
+                WHERE wd.discovery_status IN ({placeholders})
+                  AND wd.website_url IS NOT NULL
+                  AND wd.id > ${n + 1}
+                  AND NOT EXISTS (
+                    SELECT 1 FROM "{SCHEMA}".scraped_chunks sc
+                    WHERE sc.cnpj_basico = wd.cnpj_basico
+                  )
+                ORDER BY wd.id
+                LIMIT ${n + 2}
+                """
+            rows = await conn.fetch(query, *status_filter, after_id, limit)
+            return [dict(row) for row in rows]
+    
+    async def save_scrape_results_mega_batch(
+        self,
+        records: List[tuple],
+    ) -> int:
+        """
+        Insere chunks de multiplas empresas em uma unica transacao via copy_records_to_table.
+        
+        Cada record e uma tupla:
+        (cnpj_basico, discovery_id, website_url, chunk_index, total_chunks, 
+         chunk_content, token_count, page_source, error)
+        """
+        if not records:
+            return 0
+        
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.copy_records_to_table(
+                    'scraped_chunks',
+                    records=records,
+                    columns=[
+                        'cnpj_basico', 'discovery_id', 'website_url',
+                        'chunk_index', 'total_chunks', 'chunk_content',
+                        'token_count', 'page_source', 'error'
+                    ],
+                    schema_name=SCHEMA,
+                )
+                logger.info(f"✅ Mega batch: {len(records)} records inseridos")
+                return len(records)
+    
     # ========== COMPANY PROFILE ==========
     
     async def save_profile(

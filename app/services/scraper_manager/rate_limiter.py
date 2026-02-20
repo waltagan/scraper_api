@@ -70,7 +70,7 @@ class DomainRateLimiter:
         
         self._buckets: Dict[str, DomainBucket] = {}
         self._slow_domains: set = set()
-        self._lock = asyncio.Lock()
+        self._domain_locks: Dict[str, asyncio.Lock] = {}
         
         # Métricas
         self._total_requests = 0
@@ -107,24 +107,23 @@ class DomainRateLimiter:
             )
         return self._buckets[domain]
     
+    def _get_domain_lock(self, domain: str) -> asyncio.Lock:
+        """Retorna ou cria lock para um domínio."""
+        if domain not in self._domain_locks:
+            self._domain_locks[domain] = asyncio.Lock()
+        return self._domain_locks[domain]
+
     async def acquire(self, url: str, timeout: float = 30.0) -> bool:
         """
         Adquire permissão para fazer requisição a um domínio.
-        
-        Aguarda até que haja token disponível ou timeout.
-        
-        Args:
-            url: URL de destino
-            timeout: Tempo máximo de espera
-            
-        Returns:
-            True se adquiriu permissão, False se timeout
+        Usa lock per-domain para evitar contention global com muitos workers.
         """
         domain = self._extract_domain(url)
+        domain_lock = self._get_domain_lock(domain)
         start_time = time.monotonic()
         
         while True:
-            async with self._lock:
+            async with domain_lock:
                 bucket = self._get_bucket(domain)
                 bucket.refill()
                 
@@ -133,7 +132,6 @@ class DomainRateLimiter:
                     self._total_requests += 1
                     return True
             
-            # Verificar timeout
             elapsed = time.monotonic() - start_time
             if elapsed >= timeout:
                 self._throttled_requests += 1
@@ -142,7 +140,6 @@ class DomainRateLimiter:
                 )
                 return False
             
-            # Calcular tempo de espera
             wait_time = self._get_wait_time(bucket)
             remaining_timeout = timeout - elapsed
             actual_wait = min(wait_time, remaining_timeout, 0.5)

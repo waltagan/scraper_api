@@ -94,7 +94,7 @@ class URLProber:
     Otimizado para alta concorrência (500 empresas simultâneas).
     """
     
-    def __init__(self, timeout: float = 10.0, max_concurrent: int = 500):
+    def __init__(self, timeout: float = 7.0, max_concurrent: int = 500):
         self.timeout = timeout
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self._cache: dict = {}  # Cache de URLs já validadas
@@ -163,12 +163,12 @@ class URLProber:
                 resp_result, error_info = result
                 if resp_result:
                     response_time, status = resp_result
-                if status < 400:
-                    successful.append((url, response_time, status))
-                elif status >= 500:
-                    collected_errors.append((url, ProbeErrorType.SERVER_ERROR, f"Servidor retornou erro {status}"))
-                elif status == 403:
-                    collected_errors.append((url, ProbeErrorType.BLOCKED, f"Acesso bloqueado (403)"))
+                    if status < 400:
+                        successful.append((url, response_time, status))
+                    elif status >= 500:
+                        collected_errors.append((url, ProbeErrorType.SERVER_ERROR, f"Servidor retornou erro {status}"))
+                    elif status == 403:
+                        collected_errors.append((url, ProbeErrorType.BLOCKED, f"Acesso bloqueado (403)"))
                 if error_info:
                     collected_errors.append((url, error_info[0], error_info[1]))
         
@@ -260,44 +260,11 @@ class URLProber:
             return None, error_info
     
     async def _diagnose_connection_error(
-        self, 
+        self,
         url: str
     ) -> Tuple[ProbeErrorType, str]:
-        """
-        Faz diagnóstico detalhado de por que a conexão falhou.
-        """
-        parsed = urlparse(url)
-        hostname = parsed.netloc
-        port = 443 if parsed.scheme == 'https' else 80
-        
-        # 1. Testar DNS
-        try:
-            socket.gethostbyname(hostname)
-        except socket.gaierror:
-            return ProbeErrorType.DNS_ERROR, f"DNS não resolve '{hostname}' - domínio inexistente ou expirado"
-        except Exception as e:
-            return ProbeErrorType.DNS_ERROR, f"Erro de DNS: {e}"
-        
-        # 2. Testar conexão TCP
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(hostname, port),
-                timeout=5.0
-            )
-            writer.close()
-            await writer.wait_closed()
-        except asyncio.TimeoutError:
-            return ProbeErrorType.CONNECTION_TIMEOUT, f"Timeout ao conectar em {hostname}:{port} - servidor não responde"
-        except ConnectionRefusedError:
-            return ProbeErrorType.CONNECTION_REFUSED, f"Conexão recusada por {hostname}:{port} - servidor offline ou porta fechada"
-        except Exception as e:
-            error_str = str(e).lower()
-            if 'ssl' in error_str or 'certificate' in error_str:
-                return ProbeErrorType.SSL_ERROR, f"Erro de SSL: {e}"
-            return ProbeErrorType.UNKNOWN, f"Erro de conexão: {e}"
-        
-        # Se TCP funciona mas HTTP não, pode ser bloqueio
-        return ProbeErrorType.BLOCKED, f"Servidor alcançável mas não responde HTTP - possível bloqueio ou proteção"
+        """Diagnóstico simplificado (sem testes diretos de DNS/TCP via IP local)."""
+        return ProbeErrorType.UNKNOWN, f"Todas tentativas via proxy falharam para {url}"
     
     def _generate_variations(self, base_url: str) -> List[str]:
         """
@@ -358,129 +325,115 @@ class URLProber:
         return result
     
     async def _test_with_curl_cffi(self, url: str) -> Optional[Tuple[float, int]]:
-        """
-        Testa URL com curl_cffi.
-        
-        Otimizado para lidar com:
-        - Servidores que bloqueiam HEAD (403) -> fallback para GET
-        - Redirect loops no HEAD -> fallback para GET com limite de redirects
-        """
+        """Testa URL com curl_cffi via proxy."""
         try:
+            from app.services.scraper_manager.proxy_manager import proxy_pool
+            proxy = proxy_pool.get_next_proxy()
+
             headers = DEFAULT_HEADERS.copy()
-            
+
             async with AsyncSession(
                 impersonate="chrome120",
+                proxy=proxy,
                 timeout=self.timeout,
                 verify=False,
-                max_redirects=5  # Limitar redirects para evitar loops
+                max_redirects=5
             ) as session:
                 start = time.perf_counter()
                 try:
                     resp = await session.head(url, headers=headers, allow_redirects=True)
                     elapsed = (time.perf_counter() - start) * 1000
-                    
-                    # Se HEAD retornou 403, servidor pode bloquear HEAD
-                    # Fazer fallback para GET (mais lento, mas funciona)
+
                     if resp.status_code == 403:
-                        logger.debug(f"HEAD retornou 403 para {url}, tentando GET...")
                         start = time.perf_counter()
                         resp = await session.get(url, headers=headers, allow_redirects=True)
                         elapsed = (time.perf_counter() - start) * 1000
-                    
+
                     return elapsed, resp.status_code
-                    
+
                 except Exception as head_error:
-                    # Se HEAD falhou (ex: TooManyRedirects), tentar GET
                     error_str = str(head_error).lower()
                     if "redirect" in error_str or "47" in error_str:
-                        logger.debug(f"HEAD falhou com redirect loop para {url}, tentando GET...")
                         start = time.perf_counter()
                         resp = await session.get(url, headers=headers, allow_redirects=True)
                         elapsed = (time.perf_counter() - start) * 1000
                         return elapsed, resp.status_code
                     raise
-                    
+
         except Exception as e:
             logger.debug(f"curl_cffi falhou para {url}: {e}")
             return None
     
     async def _test_with_httpx(self, url: str) -> Optional[Tuple[float, int]]:
-        """
-        Testa URL com httpx.
-        
-        Otimizado para lidar com:
-        - Servidores que bloqueiam HEAD (403) -> fallback para GET
-        - Redirect loops no HEAD -> fallback para GET
-        """
+        """Testa URL com httpx via proxy."""
         try:
+            from app.services.scraper_manager.proxy_manager import proxy_pool
+            proxy = proxy_pool.get_next_proxy()
+
             headers = {k: v for k, v in DEFAULT_HEADERS.items()}
-            
+            proxy_url = f"http://{proxy}" if proxy and "://" not in proxy else proxy
+
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 verify=False,
                 follow_redirects=True,
-                max_redirects=5  # Limitar redirects
+                max_redirects=5,
+                proxy=proxy_url if proxy else None,
             ) as client:
                 start = time.perf_counter()
                 try:
                     resp = await client.head(url, headers=headers)
                     elapsed = (time.perf_counter() - start) * 1000
-                    
-                    # Fallback para GET se HEAD retornar 403
+
                     if resp.status_code == 403:
-                        logger.debug(f"httpx HEAD retornou 403 para {url}, tentando GET...")
                         start = time.perf_counter()
                         resp = await client.get(url, headers=headers)
                         elapsed = (time.perf_counter() - start) * 1000
-                    
+
                     return elapsed, resp.status_code
-                    
+
                 except httpx.TooManyRedirects:
-                    # Se HEAD falhou por redirect loop, tentar GET
-                    logger.debug(f"httpx HEAD falhou com redirect loop para {url}, tentando GET...")
                     start = time.perf_counter()
                     resp = await client.get(url, headers=headers)
                     elapsed = (time.perf_counter() - start) * 1000
                     return elapsed, resp.status_code
-                    
+
         except Exception as e:
             logger.debug(f"httpx falhou para {url}: {e}")
             return None
     
     async def _test_with_system_curl(self, url: str) -> Optional[Tuple[float, int]]:
-        """
-        Testa URL com system curl (último recurso).
-        
-        Otimizado para lidar com:
-        - Servidores que bloqueiam HEAD (403) -> fallback para GET
-        - Redirect loops no HEAD -> fallback para GET com --max-redirs
-        """
+        """Testa URL com system curl via proxy (último recurso)."""
         try:
-            # HEAD request com limite de redirects
+            from app.services.scraper_manager.proxy_manager import proxy_pool
+            proxy = proxy_pool.get_next_proxy()
+
+            proxy_args = ["--proxy", f"http://{proxy}"] if proxy else []
+
             cmd = [
-                "curl", "-I", "-L", "-k", "-s", 
+                "curl", "-I", "-L", "-k", "-s",
+                *proxy_args,
                 "--max-time", str(int(self.timeout)),
-                "--max-redirs", "5",  # Limitar redirects
+                "--max-redirs", "5",
                 "-o", "/dev/null", "-w", "%{http_code}",
                 "-A", "Mozilla/5.0",
                 url
             ]
-            
+
             start = time.perf_counter()
             res = await asyncio.to_thread(
                 subprocess.run, cmd,
                 capture_output=True, text=True, timeout=self.timeout + 2
             )
             elapsed = (time.perf_counter() - start) * 1000
-            
+
             if res.returncode == 0 and res.stdout.strip():
                 status_code = int(res.stdout.strip())
-                
-                # Se HEAD retornou 403, tentar GET
+
                 if status_code == 403:
-                    logger.debug(f"system curl HEAD retornou 403 para {url}, tentando GET...")
                     cmd_get = [
                         "curl", "-L", "-k", "-s",
+                        *proxy_args,
                         "--max-time", str(int(self.timeout)),
                         "--max-redirs", "5",
                         "-o", "/dev/null", "-w", "%{http_code}",
@@ -495,16 +448,15 @@ class URLProber:
                     elapsed = (time.perf_counter() - start) * 1000
                     if res.returncode == 0 and res.stdout.strip():
                         status_code = int(res.stdout.strip())
-                
+
                 return elapsed, status_code
-            
-            # Se HEAD falhou (ex: redirect loop - returncode 47), tentar GET
-            if res.returncode == 47:  # CURLE_TOO_MANY_REDIRECTS
-                logger.debug(f"system curl HEAD falhou com redirect loop para {url}, tentando GET...")
+
+            if res.returncode == 47:
                 cmd_get = [
                     "curl", "-L", "-k", "-s",
+                    *proxy_args,
                     "--max-time", str(int(self.timeout)),
-                    "--max-redirs", "10",  # GET pode ter mais redirects
+                    "--max-redirs", "10",
                     "-o", "/dev/null", "-w", "%{http_code}",
                     "-A", "Mozilla/5.0",
                     url
@@ -517,7 +469,7 @@ class URLProber:
                 elapsed = (time.perf_counter() - start) * 1000
                 if res.returncode == 0 and res.stdout.strip():
                     return elapsed, int(res.stdout.strip())
-            
+
             return None
         except Exception as e:
             logger.debug(f"system curl falhou para {url}: {e}")

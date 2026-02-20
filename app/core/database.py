@@ -1,6 +1,7 @@
 """
 Conexão assíncrona com PostgreSQL via asyncpg.
 """
+import os
 import asyncpg
 from typing import Optional
 import logging
@@ -47,15 +48,16 @@ async def get_pool() -> asyncpg.Pool:
                     logger.error(f"❌ Erro crítico ao configurar search_path no init_connection: {e}")
                     raise
             
+            pool_min = int(os.getenv("DATABASE_POOL_MIN_SIZE", "5"))
+            pool_max = int(os.getenv("DATABASE_POOL_MAX_SIZE", "50"))
             _pool = await asyncpg.create_pool(
                 settings.DATABASE_URL,
-                min_size=5,
-                max_size=20,
+                min_size=pool_min,
+                max_size=pool_max,
                 command_timeout=60,
-                # Configurar init para definir search_path em cada conexão
                 init=init_connection,
             )
-            logger.info(f"✅ Pool asyncpg criado (min=5, max=20, schema={DB_SCHEMA})")
+            logger.info(f"✅ Pool asyncpg criado (min={pool_min}, max={pool_max}, schema={DB_SCHEMA})")
         except Exception as e:
             logger.error(f"❌ Erro ao criar pool asyncpg: {e}")
             raise

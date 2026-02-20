@@ -1,8 +1,8 @@
 {
-  "requests_per_minute": 100,
-  "requests_per_minute_note": "WHAT: requisições/min por domínio. WHY: evitar bloquear sites. HOW: ↑ acelera mas aumenta risco; ↓ mais seguro e lento.",
-  "burst_size": 50,
-  "burst_size_note": "WHAT: rajada permitida por domínio. WHY: absorver picos iniciais. HOW: ↑ libera várias de uma vez; ↓ deixa o fluxo nivelado.",
-  "slow_domain_rpm": 10,
-  "slow_domain_rpm_note": "WHAT: RPM aplicado a domínios marcados lentos. WHY: reduzir pressão. HOW: ↑ mais tráfego mesmo lento; ↓ mais conservador."
+  "requests_per_minute": 300,
+  "requests_per_minute_note": "WHAT: requisições/min por domínio. CHANGED: 100→300 (cada empresa = 1 domínio, sem risco de conflito entre workers).",
+  "burst_size": 60,
+  "burst_size_note": "WHAT: rajada permitida por domínio. CHANGED: 50→60 (todas subpages de uma vez).",
+  "slow_domain_rpm": 60,
+  "slow_domain_rpm_note": "WHAT: RPM em domínios lentos. CHANGED: 10→60 (sem estrangular, o slow_domain_limit=10 no ConcurrencyManager já controla)."
 }

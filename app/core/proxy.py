@@ -20,23 +20,19 @@ class ProxyManager:
         self._BACKOFF_DELAYS = [0, 0, 0, 60, 60, 300]
         self._MAX_BACKOFF = 300
 
-    async def _refresh_proxies(self):
+    async def _refresh_proxies(self, force: bool = False):
         """Downloads and parses the proxy list from Webshare with backoff."""
-        # Prevent concurrent refresh attempts
         if self._refresh_lock:
             return
-        
-        # Check backoff
+
         now = time.time()
-        if self._consecutive_failures > 0:
+        if not force and self._consecutive_failures > 0:
             backoff_delay = self._BACKOFF_DELAYS[min(self._consecutive_failures, len(self._BACKOFF_DELAYS) - 1)]
             time_since_last = now - self._last_refresh_attempt
             if time_since_last < backoff_delay:
-                # Still in backoff period, don't attempt
                 return
-        
-        # If we have proxies and they're recent (less than 5 minutes old), skip refresh
-        if self.proxies and (now - self._last_successful_refresh) < 300:
+
+        if not force and self.proxies and (now - self._last_successful_refresh) < 300:
             return
         
         self._refresh_lock = True

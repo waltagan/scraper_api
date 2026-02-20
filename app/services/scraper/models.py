@@ -49,6 +49,7 @@ class SiteProfile:
     content_length: int = 0
     headers: dict = field(default_factory=dict)
     error_message: Optional[str] = None
+    raw_html: Optional[str] = None
 
 
 @dataclass

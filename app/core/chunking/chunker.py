@@ -239,28 +239,30 @@ class SmartChunker:
         """
         Divide conteúdo por caracteres como último recurso.
         
-        Usa estimativa de chars/token do config.
-        
-        Args:
-            content: Conteúdo para dividir
-            max_tokens: Limite máximo de tokens
-        
-        Returns:
-            Lista de chunks
+        Calcula a razao real chars/token do conteudo para evitar
+        chunks que ainda excedem o limite de tokens.
         """
-        # Estimar caracteres por token (conservador)
-        chars_per_token = self.config.tokenizer.fallback_chars_per_token
-        max_chars = int(max_tokens * chars_per_token * 0.9)  # 90% para margem
+        from app.core.token_utils import estimate_tokens
+        
+        total_tokens = estimate_tokens(content, include_overhead=False)
+        total_chars = len(content)
+        
+        if total_tokens > 0:
+            real_chars_per_token = total_chars / total_tokens
+        else:
+            real_chars_per_token = self.config.tokenizer.fallback_chars_per_token
+        
+        max_chars = int(max_tokens * real_chars_per_token * 0.85)
+        max_chars = max(max_chars, 100)
         
         chunks = []
         remaining = content
         
         while remaining:
-            if len(remaining) <= max_chars:
+            if self._count_tokens(remaining) <= max_tokens:
                 chunks.append(remaining)
                 break
             
-            # Tentar quebrar em espaço ou nova linha
             chunk = remaining[:max_chars]
             last_space = chunk.rfind(' ')
             last_newline = chunk.rfind('\n')

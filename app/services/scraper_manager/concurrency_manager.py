@@ -31,7 +31,7 @@ class ConcurrencyManager:
         self,
         global_limit: int = 1000,
         per_domain_limit: int = 15,
-        slow_domain_limit: int = 3
+        slow_domain_limit: int = 10
     ):
         """
         Args:

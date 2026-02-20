@@ -51,9 +51,9 @@ class SiteAnalyzer:
         "javascript required"
     ]
     
-    def __init__(self, timeout: float = 10.0, probe_attempts: int = 1):
+    def __init__(self, timeout: float = 7.0, probe_attempts: int = 1):
         self.timeout = timeout
-        self.probe_attempts = probe_attempts  # Reduzido de 3 para 1 para performance
+        self.probe_attempts = probe_attempts
     
     async def analyze(self, url: str, ctx_label: str = "") -> SiteProfile:
         """
@@ -78,6 +78,7 @@ class SiteAnalyzer:
             profile.status_code = status
             profile.headers = headers
             profile.content_length = len(html) if html else 0
+            profile.raw_html = html
             
             if not html or status >= 400:
                 profile.error_message = f"Status {status}" if status >= 400 else "Sem conteúdo"
@@ -120,47 +121,48 @@ class SiteAnalyzer:
     
     async def _probe_site(self, url: str) -> Tuple[str, dict, int, float]:
         """
-        Faz probe do site medindo tempo de resposta.
-        
-        Returns:
-            Tuple de (html, headers, status_code, response_time_ms)
+        Faz probe do site via proxy (NUNCA usa IP local).
         """
         if not HAS_CURL_CFFI:
             raise RuntimeError("curl_cffi não está instalado")
-        
+
+        from app.services.scraper_manager.proxy_manager import proxy_pool
+        proxy = await proxy_pool.get_healthy_proxy()
+
         headers_to_send = DEFAULT_HEADERS.copy()
         headers_to_send["Referer"] = "https://www.google.com/"
-        
-        times = []
+
         last_html = ""
         last_headers = {}
         last_status = 0
-        
-        async with AsyncSession(
-            impersonate="chrome120",
-            timeout=self.timeout,
-            verify=False
-        ) as session:
-            for attempt in range(self.probe_attempts):
-                try:
-                    start = time.perf_counter()
-                    resp = await session.get(url, headers=headers_to_send)
-                    elapsed = (time.perf_counter() - start) * 1000
-                    
-                    times.append(elapsed)
-                    last_html = resp.text
-                    last_headers = dict(resp.headers)
-                    last_status = resp.status_code
-                    
-                    if attempt < self.probe_attempts - 1:
-                        await asyncio.sleep(0.5)  # Pequeno delay entre probes
-                        
-                except Exception as e:
-                    logger.debug(f"Probe {attempt+1} falhou: {e}")
-                    times.append(self.timeout * 1000)  # Timeout em ms
-        
-        avg_time = sum(times) / len(times) if times else self.timeout * 1000
-        return last_html, last_headers, last_status, avg_time
+
+        try:
+            async with AsyncSession(
+                impersonate="chrome120",
+                proxy=proxy,
+                timeout=self.timeout,
+                verify=False
+            ) as session:
+                start = time.perf_counter()
+                resp = await session.get(url, headers=headers_to_send)
+                elapsed = (time.perf_counter() - start) * 1000
+
+                last_html = resp.text
+                last_headers = dict(resp.headers)
+                last_status = resp.status_code
+
+                if proxy:
+                    from app.services.scraper_manager.proxy_manager import record_proxy_success
+                    record_proxy_success(proxy)
+
+                return last_html, last_headers, last_status, elapsed
+
+        except Exception as e:
+            if proxy:
+                from app.services.scraper_manager.proxy_manager import record_proxy_failure
+                record_proxy_failure(proxy, str(e)[:80])
+            logger.debug(f"Probe falhou: {e}")
+            return "", {}, 0, self.timeout * 1000
     
     def _detect_site_type(self, html: str) -> SiteType:
         """Detecta se o site é SPA, estático ou híbrido."""
