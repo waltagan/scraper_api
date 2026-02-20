@@ -16,7 +16,7 @@ except ImportError:
     HAS_CURL_CFFI = False
     AsyncSession = None
 
-from .constants import DEFAULT_HEADERS, scraper_config
+from .constants import DEFAULT_HEADERS, scraper_config, build_headers, get_random_impersonate
 from .html_parser import parse_html
 
 logger = logging.getLogger(__name__)
@@ -154,15 +154,14 @@ async def cffi_scrape(
     if not HAS_CURL_CFFI:
         raise RuntimeError("curl_cffi não está instalado")
     
-    headers = DEFAULT_HEADERS.copy()
-    headers["Referer"] = "https://www.google.com/"
-    
     try:
         if session:
+            headers, _ = build_headers()
             resp = await session.get(url, headers=headers)
         else:
+            headers, impersonate = build_headers()
             async with AsyncSession(
-                impersonate="chrome120", 
+                impersonate=impersonate, 
                 proxy=proxy, 
                 timeout=scraper_config.session_timeout,
                 headers=headers,
@@ -197,11 +196,10 @@ async def cffi_scrape_safe(
         return "", set(), set()
     
     try:
-        headers = DEFAULT_HEADERS.copy()
-        headers["Referer"] = "https://www.google.com/"
+        headers, impersonate = build_headers()
         
         async with AsyncSession(
-            impersonate="chrome120", 
+            impersonate=impersonate, 
             proxy=proxy, 
             timeout=scraper_config.session_timeout,
             headers=headers,
@@ -211,7 +209,6 @@ async def cffi_scrape_safe(
             if resp.status_code != 200:
                 raise Exception(f"Status {resp.status_code}")
             
-            # Usar detecção de encoding para decodificar corretamente
             content_type = resp.headers.get('content-type', '')
             text = _decode_content(resp.content, content_type)
             

@@ -18,7 +18,7 @@ except ImportError:
 
 from .models import SiteProfile, SiteType, ProtectionType, ScrapingStrategy
 from .protection_detector import protection_detector
-from .constants import DEFAULT_HEADERS
+from .constants import DEFAULT_HEADERS, build_headers
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +129,7 @@ class SiteAnalyzer:
         from app.services.scraper_manager.proxy_manager import proxy_pool
         proxy = await proxy_pool.get_healthy_proxy()
 
-        headers_to_send = DEFAULT_HEADERS.copy()
-        headers_to_send["Referer"] = "https://www.google.com/"
+        headers_to_send, impersonate = build_headers()
 
         last_html = ""
         last_headers = {}
@@ -138,7 +137,7 @@ class SiteAnalyzer:
 
         try:
             async with AsyncSession(
-                impersonate="chrome120",
+                impersonate=impersonate,
                 proxy=proxy,
                 timeout=self.timeout,
                 verify=False
@@ -214,7 +213,7 @@ class SiteAnalyzer:
         
         try:
             async with AsyncSession(
-                impersonate="chrome120",
+                impersonate=build_headers()[1],
                 timeout=5.0,
                 verify=False
             ) as session:

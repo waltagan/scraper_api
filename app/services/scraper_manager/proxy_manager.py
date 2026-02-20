@@ -113,8 +113,9 @@ class ProxyPool:
                 t0 = time.perf_counter()
                 try:
                     from curl_cffi.requests import AsyncSession
+                    from app.services.scraper.constants import get_random_impersonate
                     async with AsyncSession(
-                        impersonate="chrome120",
+                        impersonate=get_random_impersonate(),
                         proxy=proxy,
                         timeout=timeout,
                         verify=False,

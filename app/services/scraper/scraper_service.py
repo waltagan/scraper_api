@@ -27,7 +27,10 @@ from .models import (
 )
 from enum import Enum
 
-from .constants import scraper_config, DEFAULT_HEADERS, FAST_TRACK_CONFIG, RETRY_TRACK_CONFIG
+from .constants import (
+    scraper_config, DEFAULT_HEADERS, FAST_TRACK_CONFIG, RETRY_TRACK_CONFIG,
+    build_headers, get_random_impersonate, smart_referer,
+)
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, parse_html
 from .link_selector import select_links_with_llm, filter_non_html_links, prioritize_links
 from .site_analyzer import site_analyzer
@@ -831,10 +834,13 @@ async def _scrape_batch_parallel(
 
                 async with concurrency_manager.acquire(url, timeout=45.0, request_id=request_id, substage="subpages"):
                     used_proxy = proxy_pool.get_next_proxy()
+                    ref = smart_referer(url)
+                    headers, impersonate = build_headers(referer=ref)
                     async with AsyncSession(
-                        impersonate="chrome120",
+                        impersonate=impersonate,
                         proxy=used_proxy,
                         timeout=effective_timeout,
+                        headers=headers,
                         verify=False
                     ) as session:
                         page = await _scrape_single_subpage(

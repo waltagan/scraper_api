@@ -4,16 +4,97 @@ Constantes e configurações do módulo de scraping.
 
 import asyncio
 import logging
+import random
+from urllib.parse import urlparse
 
 from app.services.concurrency_manager.config_loader import get_section as get_config
 from app.configs.config_loader import load_config
 
 logger = logging.getLogger(__name__)
 
-# Headers que imitam um navegador real para evitar bloqueios WAF (externalizados)
+# ---------------------------------------------------------------------------
+# Fingerprint Rotation — perfis de browser para anti-detecção
+# ---------------------------------------------------------------------------
+BROWSER_PROFILES = [
+    {
+        "impersonate": "chrome131",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    },
+    {
+        "impersonate": "chrome124",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    },
+    {
+        "impersonate": "chrome131",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    },
+    {
+        "impersonate": "safari17_0",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    },
+    {
+        "impersonate": "chrome124",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    },
+]
+
+ACCEPT_LANGUAGES = [
+    "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    "pt-BR,pt;q=0.9,en;q=0.8",
+    "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7",
+    "pt-BR,pt;q=0.9",
+]
+
+
+def get_random_profile() -> dict:
+    """Retorna impersonate + User-Agent aleatórios de um perfil coerente."""
+    return random.choice(BROWSER_PROFILES)
+
+
+def get_random_impersonate() -> str:
+    """Retorna apenas o valor impersonate aleatório."""
+    return random.choice(BROWSER_PROFILES)["impersonate"]
+
+
+def build_headers(referer: str | None = None) -> dict:
+    """
+    Constrói headers dinâmicos com User-Agent e Accept-Language variados.
+    O referer pode ser a URL da empresa (smart) ou Google (padrão).
+    """
+    profile = get_random_profile()
+    headers = {
+        "User-Agent": profile["user_agent"],
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": random.choice(ACCEPT_LANGUAGES),
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none" if not referer else "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+    }
+    if referer:
+        headers["Referer"] = referer
+    else:
+        headers["Referer"] = "https://www.google.com/"
+    return headers, profile["impersonate"]
+
+
+def smart_referer(subpage_url: str) -> str:
+    """Gera um referer realista: a raiz do domínio da subpage."""
+    try:
+        parsed = urlparse(subpage_url)
+        return f"{parsed.scheme}://{parsed.netloc}/"
+    except Exception:
+        return "https://www.google.com/"
+
+
+# Headers padrão (compat — usado por quem importa DEFAULT_HEADERS diretamente)
 _HEADERS_CFG = load_config("scraper/headers.json").get("default_headers", {})
 DEFAULT_HEADERS = _HEADERS_CFG or {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
     "Accept-Encoding": "gzip, deflate, br",
@@ -67,7 +148,7 @@ FAST_TRACK_CONFIG = _fast_track_from_json or {
     'batch_min_delay': 0.05,
     'batch_max_delay': 0.15,
     'intra_batch_delay': 0.02,
-    'subpage_max_retries': 4
+    'subpage_max_retries': 2
 }
 
 # Configuração padrão = Fast Track
@@ -257,7 +338,7 @@ class ScraperConfig:
 
     @property
     def subpage_max_retries(self) -> int:
-        return self._config.get('subpage_max_retries', 4)
+        return self._config.get('subpage_max_retries', 2)
     
     def update(self, **kwargs):
         """Atualiza configurações dinamicamente."""

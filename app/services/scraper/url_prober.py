@@ -25,7 +25,7 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
-from .constants import DEFAULT_HEADERS
+from .constants import DEFAULT_HEADERS, build_headers
 
 logger = logging.getLogger(__name__)
 
@@ -330,10 +330,10 @@ class URLProber:
             from app.services.scraper_manager.proxy_manager import proxy_pool
             proxy = proxy_pool.get_next_proxy()
 
-            headers = DEFAULT_HEADERS.copy()
+            headers, impersonate = build_headers()
 
             async with AsyncSession(
-                impersonate="chrome120",
+                impersonate=impersonate,
                 proxy=proxy,
                 timeout=self.timeout,
                 verify=False,

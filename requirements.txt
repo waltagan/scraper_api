@@ -7,7 +7,7 @@ pydantic
 python-dotenv
 tenacity
 json_repair
-curl_cffi
+curl_cffi>=0.8.0
 httpx
 beautifulsoup4
 hypercorn

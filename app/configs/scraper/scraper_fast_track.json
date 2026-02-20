@@ -39,6 +39,6 @@
   "batch_max_delay_note": "WHAT: delay máximo entre batches (s). CHANGED: 1.0→0.15.",
   "intra_batch_delay": 0.02,
   "intra_batch_delay_note": "WHAT: delay entre requisições no batch (s). CHANGED: 0.15→0.02 (quase zero, proxies distribuem por IPs).",
-  "subpage_max_retries": 4,
-  "subpage_max_retries_note": "WHAT: retries por subpage com proxy diferente. ADDED: com ~50% proxy success, 5 tentativas dá 1-0.5^5=96.9% success."
+  "subpage_max_retries": 2,
+  "subpage_max_retries_note": "WHAT: retries por subpage com proxy diferente. CHANGED: 4→2 (4 retries não melhorou success mas destruiu throughput 209→150/min)."
 }
