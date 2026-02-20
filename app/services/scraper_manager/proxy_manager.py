@@ -47,6 +47,7 @@ class ProxyPool:
         self._loaded = False
         self._total_requests = 0
         self._successful_requests = 0
+        self._failed_requests = 0
 
     async def preload(self) -> int:
         """
@@ -121,6 +122,7 @@ class ProxyPool:
         """Registra falha (apenas métricas, NUNCA remove da rotação)."""
         if not proxy:
             return
+        self._failed_requests += 1
         stats = self._stats.get(proxy)
         if stats:
             stats.failures += 1
@@ -131,26 +133,25 @@ class ProxyPool:
         if not self._proxies:
             return {"loaded": False, "total": 0}
 
-        total_failures = sum(s.failures for s in self._stats.values())
-        tracked = self._successful_requests + total_failures
+        total_outcomes = self._successful_requests + self._failed_requests
         return {
             "loaded": self._loaded,
             "total_proxies": len(self._proxies),
-            "requests_dispatched": self._total_requests,
-            "outcomes_tracked": tracked,
+            "proxy_allocations": self._total_requests,
+            "total_outcomes": total_outcomes,
             "successful": self._successful_requests,
-            "failed": total_failures,
+            "failed": self._failed_requests,
             "success_rate": (
-                f"{self._successful_requests / tracked:.1%}"
-                if tracked > 0 else "N/A"
+                f"{self._successful_requests / total_outcomes:.1%}"
+                if total_outcomes > 0 else "N/A"
             ),
-            "untracked": self._total_requests - tracked,
         }
 
     def reset_metrics(self):
         """Reseta métricas."""
         self._total_requests = 0
         self._successful_requests = 0
+        self._failed_requests = 0
         for s in self._stats.values():
             s.requests = 0
             s.successes = 0

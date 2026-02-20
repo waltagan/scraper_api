@@ -581,7 +581,7 @@ class BatchScrapeProcessor:
             all_times.extend(inst._processing_times_sorted)
             all_pages.extend(inst._pages_per_company)
             total_retries += inst._retries_total
-            peak_in_progress = max(peak_in_progress, inst._peak_in_progress)
+            peak_in_progress += inst._peak_in_progress
             for cat, count in inst._error_categories.items():
                 all_error_cats[cat] = all_error_cats.get(cat, 0) + count
 
