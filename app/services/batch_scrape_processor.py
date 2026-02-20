@@ -54,7 +54,7 @@ class BatchScrapeProcessor:
 
     def __init__(
         self,
-        worker_count: int = 600,
+        worker_count: int = 2000,
         flush_size: int = 1000,
         status_filter: Optional[List[str]] = None,
         limit: Optional[int] = None,
@@ -103,7 +103,7 @@ class BatchScrapeProcessor:
 
         loop = asyncio.get_running_loop()
         loop.set_default_executor(
-            concurrent.futures.ThreadPoolExecutor(max_workers=200)
+            concurrent.futures.ThreadPoolExecutor(max_workers=400)
         )
 
         from app.services.scraper.constants import FAST_TRACK_CONFIG, scraper_config
@@ -128,7 +128,7 @@ class BatchScrapeProcessor:
         )
 
         try:
-            ramp_batch = 100
+            ramp_batch = 500
             workers = []
             for i in range(self.worker_count):
                 workers.append(asyncio.create_task(self._worker(i)))
@@ -136,7 +136,7 @@ class BatchScrapeProcessor:
                     logger.info(
                         f"[Batch {self.batch_id}] Ramp-up: {i+1}/{self.worker_count} workers"
                     )
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.2)
 
             logger.info(
                 f"[Batch {self.batch_id}] Todos {self.worker_count} workers ativos"
