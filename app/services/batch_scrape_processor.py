@@ -8,6 +8,7 @@ Pipeline único (sem fast/retry track). Workers controlam concorrência.
 import asyncio
 import bisect
 import concurrent.futures
+import json
 import logging
 import time
 import traceback
@@ -16,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
 from app.services.scraper.scraper_service import scrape_all_subpages
+from app.services.scraper.models import ScrapeResult
 from app.core.chunking import process_content
 from app.services.database_service import get_db_service
 from app.services.scraper.constants import WORKERS_PER_INSTANCE, NUM_INSTANCES, FLUSH_SIZE
@@ -60,6 +62,53 @@ def _classify_error(error_msg: str) -> str:
         if any(kw in lower for kw in keywords):
             return category
     return "other"
+
+
+def _build_error_summary(scrape_result: ScrapeResult, fallback_error: str = "") -> str:
+    """Monta JSON estruturado com diagnóstico completo do erro de scraping."""
+    pages = scrape_result.pages or []
+    successful = [p for p in pages if p.success]
+    failed = [p for p in pages if not p.success]
+
+    fail_reason = scrape_result.main_page_fail_reason
+    bucket = _bucket_fail_reason(fail_reason) if fail_reason else None
+
+    summary = {
+        "error_category": bucket or _classify_error(fallback_error),
+        "main_page": {
+            "ok": scrape_result.main_page_ok,
+            "fail_reason": bucket,
+        },
+        "subpages": {
+            "attempted": scrape_result.subpages_attempted,
+            "ok": scrape_result.subpages_ok,
+            "errors": scrape_result.subpage_errors or {},
+        },
+        "pages_total": len(pages),
+        "pages_ok": len(successful),
+        "pages_failed": len(failed),
+        "links": {
+            "in_html": scrape_result.links_in_html,
+            "after_filter": scrape_result.links_after_filter,
+            "selected": scrape_result.links_selected,
+        },
+        "processing_time_ms": round(scrape_result.total_time_ms, 1),
+    }
+
+    if not scrape_result.main_page_ok:
+        summary["resumo"] = f"Main page falhou: {bucket or fail_reason or 'desconhecido'}"
+    elif len(successful) == 0:
+        summary["resumo"] = "Main page ok mas conteúdo insuficiente"
+    elif scrape_result.subpages_attempted > 0:
+        fail_rate = (scrape_result.subpages_attempted - scrape_result.subpages_ok)
+        summary["resumo"] = (
+            f"Main ok, {len(successful)} páginas ok, "
+            f"{fail_rate}/{scrape_result.subpages_attempted} subpages falharam"
+        )
+    else:
+        summary["resumo"] = fallback_error or "Erro desconhecido"
+
+    return json.dumps(summary, ensure_ascii=False)
 
 
 def _bucket_fail_reason(reason: str) -> str:
@@ -328,7 +377,8 @@ class BatchInstance:
                         continue
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
-                        website_url=url, error=error_msg[:500],
+                        website_url=url,
+                        error=_build_error_summary(result, error_msg),
                         total_pages_attempted=total_pages, retries_used=attempt,
                     )
 
@@ -342,7 +392,8 @@ class BatchInstance:
                 if len(aggregated.strip()) < 100:
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
-                        website_url=url, error=f"Conteudo insuficiente ({len(aggregated)} chars)",
+                        website_url=url,
+                        error=_build_error_summary(result, f"Conteudo insuficiente ({len(aggregated)} chars)"),
                         pages_scraped=len(successful_pages),
                         total_pages_attempted=total_pages, retries_used=attempt,
                     )
@@ -351,7 +402,8 @@ class BatchInstance:
                 if not chunks:
                     return CompanyResult(
                         cnpj_basico=cnpj, discovery_id=discovery_id,
-                        website_url=url, error="Nenhum chunk gerado",
+                        website_url=url,
+                        error=_build_error_summary(result, "Nenhum chunk gerado"),
                         pages_scraped=len(successful_pages),
                         total_pages_attempted=total_pages, retries_used=attempt,
                     )
@@ -371,17 +423,32 @@ class BatchInstance:
                 if attempt < max_retries and _is_transient(error_msg):
                     await asyncio.sleep(2 ** (attempt + 1))
                     continue
-                short_tb = traceback.format_exc()[-300:]
                 self._record_error(cnpj, url, error_msg)
+                exc_summary = json.dumps({
+                    "error_category": _classify_error(error_msg),
+                    "main_page": {"ok": False, "fail_reason": None},
+                    "subpages": {"attempted": 0, "ok": 0, "errors": {}},
+                    "pages_total": 0, "pages_ok": 0, "pages_failed": 0,
+                    "resumo": f"Exceção no pipeline: {error_msg[:200]}",
+                    "processing_time_ms": 0,
+                }, ensure_ascii=False)
                 return CompanyResult(
                     cnpj_basico=cnpj, discovery_id=discovery_id,
-                    website_url=url, error=f"{error_msg} | {short_tb}"[:500],
+                    website_url=url, error=exc_summary,
                     retries_used=attempt,
                 )
 
+        max_retry_summary = json.dumps({
+            "error_category": "max_retries",
+            "main_page": {"ok": False, "fail_reason": None},
+            "subpages": {"attempted": 0, "ok": 0, "errors": {}},
+            "pages_total": 0, "pages_ok": 0, "pages_failed": 0,
+            "resumo": "Esgotou tentativas de retry",
+            "processing_time_ms": 0,
+        }, ensure_ascii=False)
         return CompanyResult(
             cnpj_basico=cnpj, discovery_id=discovery_id,
-            website_url=url, error="Max retries", retries_used=max_retries,
+            website_url=url, error=max_retry_summary, retries_used=max_retries,
         )
 
     def _aggregate_scrape_meta(self, result) -> None:
