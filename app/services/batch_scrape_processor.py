@@ -135,15 +135,15 @@ class BatchInstance:
         )
 
         try:
-            for company in self.companies:
-                await self._queue.put(company)
-
             ramp_batch = 200
             workers = []
             for i in range(self.worker_count):
                 workers.append(asyncio.create_task(self._worker(i)))
                 if (i + 1) % ramp_batch == 0 and i + 1 < self.worker_count:
                     await asyncio.sleep(0.1)
+
+            for company in self.companies:
+                await self._queue.put(company)
 
             for _ in range(self.worker_count):
                 await self._queue.put(None)
