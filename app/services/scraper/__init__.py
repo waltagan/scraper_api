@@ -27,7 +27,8 @@ from .models import (
     ScrapingStrategy,
     SiteProfile,
     ScrapedPage,
-    ScrapedContent
+    ScrapedContent,
+    ScrapeResult
 )
 from .site_analyzer import site_analyzer, SiteAnalyzer
 from .protection_detector import protection_detector, ProtectionDetector
@@ -62,7 +63,7 @@ except ImportError as e:
     
     async def scrape_all_subpages(url: str, max_subpages: int = 100, ctx_label: str = "", request_id: str = ""):
         """Stub quando curl_cffi não está disponível."""
-        return []
+        return ScrapeResult()
 
 
 __all__ = [
@@ -100,6 +101,7 @@ __all__ = [
     'SiteProfile',
     'ScrapedPage',
     'ScrapedContent',
+    'ScrapeResult',
     
     # Analisadores
     'site_analyzer',

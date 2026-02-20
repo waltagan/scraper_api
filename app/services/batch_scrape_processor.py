@@ -124,6 +124,15 @@ class BatchInstance:
         self._retries_total: int = 0
         self._peak_in_progress: int = 0
 
+        self._links_in_html_total: int = 0
+        self._links_after_filter_total: int = 0
+        self._links_selected_total: int = 0
+        self._subpages_attempted_total: int = 0
+        self._subpages_ok_total: int = 0
+        self._subpage_error_cats: Dict[str, int] = {}
+        self._main_page_failures: int = 0
+        self._zero_links_companies: int = 0
+
     async def run(self):
         """Executa esta instância: carrega queue, roda workers, flush final."""
         self.status = "running"
@@ -215,11 +224,14 @@ class BatchInstance:
 
         for attempt in range(max_retries + 1):
             try:
-                pages = await scrape_all_subpages(
+                result = await scrape_all_subpages(
                     url=url, max_subpages=50,
                     ctx_label=f"[B{self.batch_id}I{self.instance_id}]",
                     request_id=cnpj,
                 )
+
+                self._aggregate_scrape_meta(result)
+                pages = result.pages
 
                 total_pages = len(pages) if pages else 0
                 successful_pages = [p for p in (pages or []) if p.success]
@@ -299,6 +311,20 @@ class BatchInstance:
             website_url=url, error="Maximo de retries atingido",
             retries_used=max_retries,
         )
+
+    def _aggregate_scrape_meta(self, result) -> None:
+        """Agrega metadados do ScrapeResult nos contadores da instância."""
+        self._links_in_html_total += result.links_in_html
+        self._links_after_filter_total += result.links_after_filter
+        self._links_selected_total += result.links_selected
+        self._subpages_attempted_total += result.subpages_attempted
+        self._subpages_ok_total += result.subpages_ok
+        if not result.main_page_ok:
+            self._main_page_failures += 1
+        if result.links_in_html == 0 and result.main_page_ok:
+            self._zero_links_companies += 1
+        for cat, count in result.subpage_errors.items():
+            self._subpage_error_cats[cat] = self._subpage_error_cats.get(cat, 0) + count
 
     async def _flush_buffer(self, force: bool = False):
         """Flush chamado em contextos onde o buffer ainda não foi extraído."""
@@ -585,6 +611,18 @@ class BatchScrapeProcessor:
             for cat, count in inst._error_categories.items():
                 all_error_cats[cat] = all_error_cats.get(cat, 0) + count
 
+        links_in_html = sum(i._links_in_html_total for i in self._instances)
+        links_after_filter = sum(i._links_after_filter_total for i in self._instances)
+        links_selected = sum(i._links_selected_total for i in self._instances)
+        subpages_attempted = sum(i._subpages_attempted_total for i in self._instances)
+        subpages_ok = sum(i._subpages_ok_total for i in self._instances)
+        main_page_failures = sum(i._main_page_failures for i in self._instances)
+        zero_links = sum(i._zero_links_companies for i in self._instances)
+        subpage_err_cats: Dict[str, int] = {}
+        for inst in self._instances:
+            for cat, count in inst._subpage_error_cats.items():
+                subpage_err_cats[cat] = subpage_err_cats.get(cat, 0) + count
+
         all_times.sort()
 
         pct_levels = [50, 60, 70, 80, 90, 95, 99]
@@ -624,6 +662,21 @@ class BatchScrapeProcessor:
             "error_breakdown": dict(sorted(all_error_cats.items(), key=lambda x: -x[1])),
             "pages_per_company_avg": avg_pages,
             "total_retries": total_retries,
+            "subpage_pipeline": {
+                "links_in_html_total": links_in_html,
+                "links_after_filter": links_after_filter,
+                "links_selected": links_selected,
+                "links_per_company_avg": round(links_in_html / processed, 1) if processed > 0 else 0,
+                "selected_per_company_avg": round(links_selected / processed, 1) if processed > 0 else 0,
+                "zero_links_companies": zero_links,
+                "zero_links_pct": round(zero_links / processed * 100, 1) if processed > 0 else 0,
+                "main_page_failures": main_page_failures,
+                "subpages_attempted": subpages_attempted,
+                "subpages_ok": subpages_ok,
+                "subpages_failed": subpages_attempted - subpages_ok,
+                "subpage_success_rate_pct": round(subpages_ok / subpages_attempted * 100, 1) if subpages_attempted > 0 else 0,
+                "subpage_error_breakdown": dict(sorted(subpage_err_cats.items(), key=lambda x: -x[1])),
+            },
             "infrastructure": infra,
             "last_errors": self.last_errors,
             "instances": instance_stats,

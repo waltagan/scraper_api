@@ -4,7 +4,7 @@ Modelos de dados para o módulo de scraping.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 
 class SiteType(Enum):
@@ -115,4 +115,18 @@ class ScrapedContent:
         success = (1 if self.main_page and self.main_page.success else 0)
         success += sum(1 for p in self.subpages if p.success)
         return success / total if total > 0 else 0.0
+
+
+@dataclass
+class ScrapeResult:
+    """Resultado de scrape_all_subpages com metadados do pipeline."""
+    pages: List[ScrapedPage] = field(default_factory=list)
+    links_in_html: int = 0
+    links_after_filter: int = 0
+    links_selected: int = 0
+    subpages_attempted: int = 0
+    subpages_ok: int = 0
+    subpage_errors: Dict[str, int] = field(default_factory=dict)
+    main_page_ok: bool = False
+    total_time_ms: float = 0.0
 

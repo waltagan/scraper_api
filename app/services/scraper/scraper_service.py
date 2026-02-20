@@ -23,7 +23,7 @@ except ImportError:
     AsyncSession = None
 
 from .models import (
-    SiteProfile, ScrapedContent, ScrapedPage, ScrapingStrategy, ProtectionType
+    SiteProfile, ScrapedContent, ScrapedPage, ScrapingStrategy, ProtectionType, ScrapeResult
 )
 from enum import Enum
 
@@ -227,37 +227,24 @@ async def scrape_all_subpages(
     max_subpages: int = 100,
     ctx_label: str = "",
     request_id: str = ""
-) -> List[ScrapedPage]:
+) -> ScrapeResult:
     """
     Faz scrape de todas as subpáginas de um site usando heurísticas (sem LLM).
 
-    Fluxo otimizado (v4):
-    1. Analyze direto (skip probe - o GET do analyzer segue redirects)
-    2. Se analyzer falhou, tenta probe de variações como fallback
-    3. Reutiliza HTML do analyzer como main page (zero GET extra)
-    4. Filtrar e priorizar links via heurísticas
-    5. Scrape subpages em batch
-    6. RESCUE se main page tem pouco conteúdo
-
-    Args:
-        url: URL base do site
-        max_subpages: Número máximo de subpáginas a processar
-        ctx_label: Label de contexto para logs
-        request_id: ID da requisição
-
     Returns:
-        Lista de ScrapedPage (incluindo main page e subpages)
+        ScrapeResult com pages e metadados do pipeline.
     """
     overall_start = time.perf_counter()
     phases = {}
+    meta = ScrapeResult()
 
-    # 1. ANALYZE DIRETO (skip probe - curl_cffi segue redirects automaticamente)
+    # 1. ANALYZE DIRETO
     t0 = time.perf_counter()
     site_profile = await site_analyzer.analyze(url, ctx_label=ctx_label)
     phases['analyze'] = (time.perf_counter() - t0) * 1000
 
     used_probe = False
-    # 2. SE ANALYZER FALHOU, FALLBACK PARA PROBE DE VARIAÇÕES
+    # 2. SE ANALYZER FALHOU, FALLBACK PARA PROBE
     if not site_profile.raw_html or (site_profile.status_code and site_profile.status_code >= 400):
         logger.info(
             f"{ctx_label}📡 Analyzer falhou (html={bool(site_profile.raw_html)}, "
@@ -276,7 +263,8 @@ async def scrape_all_subpages(
         except URLNotReachable as e:
             log_msg = e.get_log_message() if hasattr(e, 'get_log_message') else str(e)
             logger.error(f"{ctx_label} ❌ URL inacessível: {url} - {log_msg}")
-            return []
+            meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
+            return meta
         except Exception as e:
             logger.warning(f"{ctx_label} ⚠️ Probe fallback falhou: {e}")
 
@@ -302,9 +290,12 @@ async def scrape_all_subpages(
             f"{ctx_label} ❌ Falha main page {url} ({elapsed:.0f}ms) "
             f"phases={phases} - {error_diagnosis['log_message']}"
         )
-        return []
+        meta.total_time_ms = elapsed
+        return meta
 
-    # 5. SLOW MODE: TTFB real do site (response_time_ms do analyzer)
+    meta.main_page_ok = True
+
+    # 5. SLOW MODE
     site_response_ms = site_profile.response_time_ms or 0
     slow_mode = site_response_ms > scraper_config.slow_probe_threshold_ms
 
@@ -317,41 +308,34 @@ async def scrape_all_subpages(
         scraper_config.fast_per_request_timeout
     )
 
+    # 6. FILTRAR E PRIORIZAR LINKS
+    filtered_links = filter_non_html_links(set(main_page.links))
+    meta.links_in_html = len(main_page.links)
+    meta.links_after_filter = len(filtered_links)
+
+    if filtered_links:
+        target_subpages = prioritize_links(filtered_links, url)[:max_subpages]
+    else:
+        target_subpages = []
+
+    meta.links_selected = len(target_subpages)
+
     logger.info(
         f"{ctx_label}🏁 {url[:60]} | analyze={phases.get('analyze',0):.0f}ms "
         f"{'probe=' + str(int(phases.get('probe',0))) + 'ms ' if used_probe else ''}"
         f"reuse={'✅' if reused else '❌'} main={phases.get('main_page',0):.0f}ms "
         f"TTFB={site_response_ms:.0f}ms slow={'🐢' if slow_mode else '🚀'} "
-        f"links={len(main_page.links)} prot={site_profile.protection_type.value}"
+        f"links={meta.links_in_html}→{meta.links_after_filter}→{meta.links_selected} "
+        f"prot={site_profile.protection_type.value}"
     )
-    
-    # 6. FILTRAR E PRIORIZAR LINKS USANDO HEURÍSTICAS (SEM LLM)
-    link_selection_start = time.perf_counter()
-    
-    # Filtrar links não-HTML
-    filtered_links = filter_non_html_links(set(main_page.links))
-    logger.info(
-        f"{ctx_label}Filtrados {len(main_page.links) - len(filtered_links)} links não-HTML. "
-        f"Restam {len(filtered_links)} links válidos."
-    )
-    
-    # Priorizar links usando heurísticas (sem LLM)
-    if filtered_links:
-        target_subpages = prioritize_links(filtered_links, url)[:max_subpages]
-        logger.info(f"{ctx_label}Priorizados {len(target_subpages)} links usando heurísticas")
-    else:
-        target_subpages = []
-        logger.warning(f"{ctx_label}Nenhum link válido encontrado após filtragem")
-    
-    link_selection_time = (time.perf_counter() - link_selection_start) * 1000
-    
-    # 7. SCRAPE SUBPAGES EM BATCH (ASSÍNCRONO)
+
+    # 7. SCRAPE SUBPAGES EM BATCH
     subpages = []
     if target_subpages:
         effective_cap = scraper_config.slow_subpage_cap if slow_mode else max_subpages
         if effective_cap < 5:
             effective_cap = 10
-        
+
         subpages_start = time.perf_counter()
         subpages = await _scrape_subpages_batch(
             target_subpages,
@@ -366,15 +350,12 @@ async def scrape_all_subpages(
         logger.info(
             f"{ctx_label}Scrape de {len(subpages)} subpages concluído em {subpages_duration:.1f}ms"
         )
-    
-    # 8. SISTEMA RESCUE: Se main page tem pouco conteúdo mas tem links, tentar subpages
+
+    # 8. RESCUE
     rescue_subpages = []
     if main_page and len(main_page.content) < 500 and main_page.links and not subpages:
         logger.info(f"{ctx_label}🆘 RESCUE: Main page tem pouco conteúdo ({len(main_page.content)} chars), tentando subpages")
-        
-        # Priorizar links de alta relevância para RESCUE
-        rescue_links = prioritize_links(filtered_links, url)[:3]  # Máximo 3 para RESCUE
-        
+        rescue_links = prioritize_links(filtered_links, url)[:3]
         if rescue_links:
             rescue_subpages = await _scrape_subpages_batch(
                 rescue_links,
@@ -385,21 +366,40 @@ async def scrape_all_subpages(
                 ctx_label=f"{ctx_label}[RESCUE] ",
                 request_id=request_id
             )
-            logger.info(f"{ctx_label}🆘 RESCUE: {len([p for p in rescue_subpages if p.success])} subpages resgatadas")
-    
-    # 9. RETORNAR LISTA DE PÁGINAS (main + subpages)
-    all_pages = [main_page] + subpages + rescue_subpages
 
-    total_time_ms = (time.perf_counter() - overall_start) * 1000
-    ok = len([p for p in all_pages if p.success])
-    fail = len(all_pages) - ok
+    # 9. CONSOLIDAR RESULTADO COM METADADOS
+    all_pages = [main_page] + subpages + rescue_subpages
+    all_subpage_results = subpages + rescue_subpages
+
+    meta.pages = all_pages
+    meta.subpages_attempted = len(all_subpage_results)
+    meta.subpages_ok = sum(1 for p in all_subpage_results if p.success)
+    meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
+
+    error_breakdown: dict = {}
+    for p in all_subpage_results:
+        if not p.success and p.error:
+            err = p.error.lower()
+            if "timeout" in err and "slot" in err:
+                cat = "timeout_slot"
+            elif "circuit" in err:
+                cat = "circuit_open"
+            elif "rate limit" in err:
+                cat = "rate_limit"
+            else:
+                cat = "scrape_fail"
+            error_breakdown[cat] = error_breakdown.get(cat, 0) + 1
+    meta.subpage_errors = error_breakdown
+
+    ok = sum(1 for p in all_pages if p.success)
     logger.info(
         f"{ctx_label}✅ {url[:50]} | {ok}/{len(all_pages)} ok | "
-        f"total={total_time_ms:.0f}ms phases={phases} "
-        f"subpages_target={len(target_subpages) if target_subpages else 0}"
+        f"total={meta.total_time_ms:.0f}ms links={meta.links_in_html}→{meta.links_selected} "
+        f"subpages={meta.subpages_ok}/{meta.subpages_attempted} "
+        f"errors={meta.subpage_errors}"
     )
 
-    return all_pages
+    return meta
 
 
 async def scrape_batch_hybrid(urls: List[str], max_subpages: int = 100) -> List[Tuple[str, List[str], List[str]]]:

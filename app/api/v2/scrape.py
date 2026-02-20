@@ -28,12 +28,13 @@ async def _process_scrape_background(request: ScrapeRequest):
         logger.info(f"🔍 [BACKGROUND] Scrape: cnpj={request.cnpj_basico}, url={request.website_url}")
         
         # 1. Fazer scraping de todas as subpáginas
-        pages = await scrape_all_subpages(
+        result = await scrape_all_subpages(
             url=request.website_url,
             max_subpages=100,
             ctx_label="",
             request_id=""
         )
+        pages = result.pages
         
         if not pages:
             logger.warning(f"⚠️ [BACKGROUND] Nenhuma página scraped para cnpj={request.cnpj_basico}")
