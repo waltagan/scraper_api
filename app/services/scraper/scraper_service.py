@@ -735,12 +735,9 @@ async def _scrape_subpages_batch(
 ) -> List[ScrapedPage]:
     """
     Faz scrape das subpáginas usando BATCH SCRAPING.
-    
-    Processa em mini-batches paralelos com delays entre batches
-    para simular navegação humana.
+    Cada subpage usa proxy individual (sem shared_session) para evitar
+    que uma proxy ruim derrube todas as subpages da empresa.
     """
-    subpages_start = time.perf_counter()
-
     if subpage_cap:
         target_subpages = target_subpages[:subpage_cap]
 
@@ -753,62 +750,51 @@ async def _scrape_subpages_batch(
     )
 
     results = []
-
     batch_size = scraper_config.batch_size
     batches = [target_subpages[i:i + batch_size] for i in range(0, len(target_subpages), batch_size)]
-
     total_processed = 0
 
-    shared_proxy = proxy_pool.get_next_proxy()
-    shared_session = None
-    try:
-        if HAS_CURL_CFFI and AsyncSession:
-            shared_session = AsyncSession(
-                impersonate="chrome120",
-                proxy=shared_proxy,
-                timeout=effective_timeout,
-                verify=False
+    for batch_idx, batch in enumerate(batches):
+        batch_start = time.perf_counter()
+
+        batch_results = await _scrape_batch_parallel(
+            batch,
+            main_strategy,
+            effective_timeout,
+            total_processed,
+            len(target_subpages),
+            ctx_label,
+            request_id,
+        )
+        results.extend(batch_results)
+        total_processed += len(batch)
+
+        batch_duration = time.perf_counter() - batch_start
+        ok = sum(1 for r in batch_results if r.success)
+        logger.info(
+            f"{ctx_label}📦 batch {batch_idx+1}/{len(batches)}: "
+            f"{ok}/{len(batch)} ok em {batch_duration:.1f}s"
+        )
+
+        if batch_idx < len(batches) - 1:
+            base_delay = random.uniform(
+                scraper_config.batch_min_delay,
+                scraper_config.batch_max_delay
             )
-
-        for batch_idx, batch in enumerate(batches):
-            batch_start = time.perf_counter()
-
-            batch_results = await _scrape_batch_parallel(
-                batch,
-                main_strategy,
-                effective_timeout,
-                total_processed,
-                len(target_subpages),
-                ctx_label,
-                request_id,
-                shared_session=shared_session,
-                shared_proxy=shared_proxy,
-            )
-            results.extend(batch_results)
-            total_processed += len(batch)
-
-            batch_duration = time.perf_counter() - batch_start
-            ok = len([r for r in batch_results if r.success])
-            logger.info(
-                f"{ctx_label}📦 batch {batch_idx+1}/{len(batches)}: "
-                f"{ok}/{len(batch)} ok em {batch_duration:.1f}s"
-            )
-
-            if batch_idx < len(batches) - 1:
-                base_delay = random.uniform(
-                    scraper_config.batch_min_delay,
-                    scraper_config.batch_max_delay
-                )
-                jitter = base_delay + random.gauss(0, base_delay * 0.3)
-                await asyncio.sleep(max(0.02, jitter))
-    finally:
-        if shared_session:
-            try:
-                await shared_session.close()
-            except Exception:
-                pass
+            jitter = base_delay + random.gauss(0, base_delay * 0.3)
+            await asyncio.sleep(max(0.02, jitter))
 
     return results
+
+
+def _is_site_rejection(error: str) -> bool:
+    """Retorna True se o erro indica rejeição real do site (não falha de proxy/rede)."""
+    if not error:
+        return False
+    err = error.lower()
+    return any(sig in err for sig in (
+        "403", "429", "cloudflare", "captcha", "waf", "forbidden", "blocked",
+    ))
 
 
 async def _scrape_batch_parallel(
@@ -819,12 +805,15 @@ async def _scrape_batch_parallel(
     total_urls: int,
     ctx_label: str = "",
     request_id: str = "",
-    shared_session=None,
-    shared_proxy: Optional[str] = None,
 ) -> List[ScrapedPage]:
-    """Processa um batch de URLs em paralelo (TODAS via proxy)."""
+    """
+    Processa um batch de URLs em paralelo.
+    Cada subpage usa proxy individual + até 2 retries com proxy diferente.
+    Circuit breaker só registra falhas reais do site (não falhas de proxy/rede).
+    """
+    max_retries = 2
 
-    async def scrape_with_delay(i: int, url: str) -> ScrapedPage:
+    async def scrape_with_retry(i: int, url: str) -> ScrapedPage:
         if i > 0:
             base = scraper_config.intra_batch_delay
             jitter = base * random.uniform(0.5, 2.0) + random.gauss(0, base * 0.2)
@@ -835,17 +824,12 @@ async def _scrape_batch_parallel(
 
         normalized_url = normalize_url(url)
 
-        try:
-            if not await domain_rate_limiter.acquire(url, timeout=10.0):
-                return ScrapedPage(url=normalized_url, content="", error="Rate limit timeout")
+        for attempt in range(1 + max_retries):
+            try:
+                if not await domain_rate_limiter.acquire(url, timeout=10.0):
+                    return ScrapedPage(url=normalized_url, content="", error="Rate limit timeout")
 
-            async with concurrency_manager.acquire(url, timeout=15.0, request_id=request_id, substage="subpages"):
-                if shared_session:
-                    used_proxy = shared_proxy
-                    page = await _scrape_single_subpage(
-                        normalized_url, shared_session, effective_timeout, ctx_label
-                    )
-                else:
+                async with concurrency_manager.acquire(url, timeout=30.0, request_id=request_id, substage="subpages"):
                     used_proxy = proxy_pool.get_next_proxy()
                     async with AsyncSession(
                         impersonate="chrome120",
@@ -857,24 +841,37 @@ async def _scrape_batch_parallel(
                             normalized_url, session, effective_timeout, ctx_label
                         )
 
-                if page.success:
-                    record_success(url)
-                    if used_proxy:
-                        record_proxy_success(used_proxy)
-                else:
-                    record_failure(url)
+                    if page.success:
+                        record_success(url)
+                        if used_proxy:
+                            record_proxy_success(used_proxy)
+                        return page
+
                     if used_proxy:
                         record_proxy_failure(used_proxy, page.error or "unknown")
-                return page
 
-        except TimeoutError:
-            record_failure(url)
-            return ScrapedPage(url=normalized_url, content="", error="Timeout acquiring slot")
-        except Exception as e:
-            record_failure(url)
-            return ScrapedPage(url=normalized_url, content="", error=str(e))
+                    if _is_site_rejection(page.error):
+                        record_failure(url)
+                        return page
 
-    tasks = [scrape_with_delay(i, url) for i, url in enumerate(urls)]
+                    if attempt < max_retries:
+                        await asyncio.sleep(0.1 * (attempt + 1))
+                        continue
+
+                    return page
+
+            except TimeoutError:
+                if attempt < max_retries:
+                    continue
+                return ScrapedPage(url=normalized_url, content="", error="Timeout acquiring slot")
+            except Exception as e:
+                if attempt < max_retries:
+                    continue
+                return ScrapedPage(url=normalized_url, content="", error=str(e))
+
+        return ScrapedPage(url=normalized_url, content="", error="Max retries exhausted")
+
+    tasks = [scrape_with_retry(i, url) for i, url in enumerate(urls)]
     results = await asyncio.gather(*tasks)
 
     return list(results)

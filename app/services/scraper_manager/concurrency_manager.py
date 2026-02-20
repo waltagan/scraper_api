@@ -29,7 +29,7 @@ class ConcurrencyManager:
     
     def __init__(
         self,
-        global_limit: int = 1000,
+        global_limit: int = 15000,
         per_domain_limit: int = 15,
         slow_domain_limit: int = 10
     ):

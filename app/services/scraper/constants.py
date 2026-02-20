@@ -44,7 +44,7 @@ else:
     )
 
 FAST_TRACK_CONFIG = _fast_track_from_json or {
-    'site_semaphore_limit': 5000,
+    'site_semaphore_limit': 15000,
     'circuit_breaker_threshold': 12,
     'page_timeout': 15000,
     'md_threshold': 0.3,

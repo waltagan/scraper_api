@@ -1,6 +1,6 @@
 {
-  "site_semaphore_limit": 5000,
-  "site_semaphore_limit_note": "WHAT: slots HTTP globais. CHANGED: 1000→5000 (400 workers × ~10 subpages = 4000 reqs simultâneas, 1000 era o gargalo).",
+  "site_semaphore_limit": 15000,
+  "site_semaphore_limit_note": "WHAT: slots HTTP globais. CHANGED: 5000→15000 (2000 empresas × ~12 subpages = 24000 potenciais, precisa folga para retry).",
   "circuit_breaker_threshold": 12,
   "circuit_breaker_threshold_note": "WHAT: falhas antes de bloquear domínio. WHY: proteger contra loops. CHANGED: 8→12 (792 circuits abriram com threshold=5, muitos domínios bloqueados prematuramente).",
   "page_timeout": 15000,
