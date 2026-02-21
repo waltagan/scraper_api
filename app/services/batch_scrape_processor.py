@@ -179,7 +179,7 @@ def _build_failure_diagnosis(fail_reasons: Dict[str, int], total_processed: int)
     mapping = {
         "probe:dns": "site_offline", "probe:refused": "site_offline",
         "probe:server_error": "site_offline", "probe:redirect_loop": "site_offline",
-        "probe:timeout": "proxy_infra", "probe:ssl": "proxy_infra",
+        "probe:timeout": "proxy_infra", "probe:ssl": "site_offline",
         "probe:other": "proxy_infra", "probe:blocked": "blocked",
         "proxy:timeout": "proxy_infra", "proxy:connection": "proxy_infra",
         "proxy:ssl": "proxy_infra", "proxy:empty_response": "proxy_infra",
@@ -187,6 +187,7 @@ def _build_failure_diagnosis(fail_reasons: Dict[str, int], total_processed: int)
         "proxy:http_5xx": "site_offline",
         "scrape:blocked_waf": "blocked", "scrape:blocked_cloudflare": "blocked",
         "scrape:cloudflare": "blocked", "scrape:soft_404": "content_issue",
+        "scrape:thin_content": "content_issue", "scrape:empty_content": "content_issue",
         "scrape:error": "other", "scrape:null_response": "other",
         "scrape:timeout": "proxy_infra",
     }
@@ -783,6 +784,11 @@ class BatchScrapeProcessor:
             stats["proxy_pool"] = pool_status
         except Exception:
             stats["proxy_pool"] = {"error": "unavailable"}
+        try:
+            from app.services.scraper.proxy_gate import get_gate_stats
+            stats["proxy_gate"] = get_gate_stats()
+        except Exception:
+            pass
         return stats
 
     async def cancel(self):
