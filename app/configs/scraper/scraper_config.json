@@ -8,5 +8,6 @@
   "workers_per_instance": 200,
   "num_instances": 3,
   "flush_size": 1000,
-  "min_content_length": 100
+  "min_content_length": 100,
+  "max_concurrent_proxy_requests": 1000
 }

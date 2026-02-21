@@ -16,6 +16,7 @@ except ImportError:
 
 from .constants import REQUEST_TIMEOUT, build_headers
 from .html_parser import parse_html
+from .proxy_gate import acquire_proxy_slot
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +91,12 @@ async def cffi_scrape(
         resp = await session.get(url, headers=headers)
     else:
         headers, impersonate = build_headers()
-        async with AsyncSession(
-            impersonate=impersonate, proxy=proxy,
-            timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
-        ) as s:
-            resp = await s.get(url)
+        async with acquire_proxy_slot():
+            async with AsyncSession(
+                impersonate=impersonate, proxy=proxy,
+                timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
+            ) as s:
+                resp = await s.get(url)
 
     if resp.status_code != 200:
         raise Exception(f"Status {resp.status_code}")
@@ -119,18 +121,19 @@ async def cffi_scrape_safe(
 
     try:
         headers, impersonate = build_headers()
-        async with AsyncSession(
-            impersonate=impersonate, proxy=proxy,
-            timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
-        ) as s:
-            resp = await s.get(url)
-            if resp.status_code != 200:
-                cffi_scrape_safe.last_error = f"http_{resp.status_code}"
-                return "", set(), set()
+        async with acquire_proxy_slot():
+            async with AsyncSession(
+                impersonate=impersonate, proxy=proxy,
+                timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
+            ) as s:
+                resp = await s.get(url)
+                if resp.status_code != 200:
+                    cffi_scrape_safe.last_error = f"http_{resp.status_code}"
+                    return "", set(), set()
 
-            content_type = resp.headers.get('content-type', '')
-            text = _decode_content(resp.content, content_type)
-            return parse_html(text, url)
+                content_type = resp.headers.get('content-type', '')
+                text = _decode_content(resp.content, content_type)
+                return parse_html(text, url)
 
     except Exception as e:
         err_msg = str(e).lower()

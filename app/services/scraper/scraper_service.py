@@ -29,6 +29,7 @@ from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, pa
 from .link_selector import extract_and_prioritize_links, filter_non_html_links, prioritize_links
 from .url_prober import url_prober, URLNotReachable
 from .http_client import cffi_scrape, cffi_scrape_safe
+from .proxy_gate import acquire_proxy_slot
 
 from app.services.scraper_manager.proxy_manager import (
     proxy_pool, record_proxy_failure, record_proxy_success,
@@ -204,14 +205,15 @@ async def _scrape_subpages_parallel(
             headers, impersonate = build_headers(referer=ref)
 
             try:
-                async with AsyncSession(
-                    impersonate=impersonate, proxy=proxy,
-                    timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
-                ) as session:
-                    text, docs, _ = await asyncio.wait_for(
-                        cffi_scrape(normalized, proxy=None, session=session),
-                        timeout=REQUEST_TIMEOUT,
-                    )
+                async with acquire_proxy_slot():
+                    async with AsyncSession(
+                        impersonate=impersonate, proxy=proxy,
+                        timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
+                    ) as session:
+                        text, docs, _ = await asyncio.wait_for(
+                            cffi_scrape(normalized, proxy=None, session=session),
+                            timeout=REQUEST_TIMEOUT,
+                        )
 
                 if not text or len(text) < 100 or is_soft_404(text) or is_cloudflare_challenge(text):
                     return ScrapedPage(url=normalized, content="", error="Empty or soft 404")

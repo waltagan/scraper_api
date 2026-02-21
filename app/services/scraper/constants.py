@@ -26,11 +26,13 @@ WORKERS_PER_INSTANCE: int = _cfg.get("workers_per_instance", 200)
 NUM_INSTANCES: int = _cfg.get("num_instances", 3)
 FLUSH_SIZE: int = _cfg.get("flush_size", 1000)
 MIN_CONTENT_LENGTH: int = _cfg.get("min_content_length", 100)
+MAX_CONCURRENT_PROXY_REQUESTS: int = _cfg.get("max_concurrent_proxy_requests", 1000)
 
 logger.info(
     f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s retries={MAX_RETRIES} "
     f"subpages={MAX_SUBPAGES} domain_conc={PER_DOMAIN_CONCURRENT} "
-    f"workers={WORKERS_PER_INSTANCE} instances={NUM_INSTANCES}"
+    f"workers={WORKERS_PER_INSTANCE} instances={NUM_INSTANCES} "
+    f"proxy_gate={MAX_CONCURRENT_PROXY_REQUESTS}"
 )
 
 # ---------------------------------------------------------------------------
