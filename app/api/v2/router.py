@@ -3,7 +3,7 @@ Router principal para API v2.
 Agrupa todos os endpoints v2 em um único router.
 """
 from fastapi import APIRouter
-from app.api.v2 import serper, encontrar_site, scrape, scrape_batch, montagem_perfil
+from app.api.v2 import serper, encontrar_site, scrape, scrape_batch, montagem_perfil, stress_test
 
 # Criar router principal
 router = APIRouter()
@@ -33,6 +33,7 @@ router.include_router(encontrar_site.router, tags=["v2-discovery"])
 router.include_router(scrape.router, tags=["v2-scrape"])
 router.include_router(scrape_batch.router, tags=["v2-scrape-batch"])
 router.include_router(montagem_perfil.router, tags=["v2-profile"])
+router.include_router(stress_test.router, tags=["v2-stress-test"])
 
 __all__ = ["router"]
 
