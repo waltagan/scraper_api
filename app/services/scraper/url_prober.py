@@ -1,6 +1,6 @@
 """
 Prober de URLs — encontra a melhor variação acessível (http/https, www/non-www).
-Request direto com curl_cffi + IP rotativo. Sem pool, sem gate.
+Usa session compartilhada do http_client (conexão reutilizada, IP rotativo).
 """
 
 import asyncio
@@ -12,14 +12,7 @@ from typing import List, Tuple, Optional
 from urllib.parse import urlparse
 from enum import Enum
 
-try:
-    from curl_cffi.requests import AsyncSession
-    HAS_CURL_CFFI = True
-except ImportError:
-    HAS_CURL_CFFI = False
-    AsyncSession = None
-
-from .constants import PROBE_TIMEOUT, MAX_RETRIES, build_headers, get_random_impersonate
+from .constants import PROBE_TIMEOUT, MAX_RETRIES, build_headers
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +63,7 @@ RETRYABLE_PROBE_ERRORS = frozenset({
 
 
 class URLProber:
-    """Testa variações de URL via proxy direto para encontrar a melhor."""
+    """Testa variações de URL via session compartilhada."""
 
     def __init__(self, timeout: float = PROBE_TIMEOUT, max_retries: int = MAX_RETRIES):
         self.timeout = timeout
@@ -160,43 +153,44 @@ class URLProber:
         return errors[0][1], errors[0][2]
 
     async def _test_url(self, url):
-        """Testa URL com session descartável + proxy direto."""
-        if not HAS_CURL_CFFI:
-            return None, (ProbeErrorType.UNKNOWN, "curl_cffi não disponível")
+        """Testa URL com session compartilhada + proxy direto."""
         try:
-            headers, impersonate = build_headers()
-            proxy = _PROXY_URL
+            from .http_client import get_shared_session
+        except ImportError:
+            return None, (ProbeErrorType.UNKNOWN, "http_client não disponível")
 
-            async with AsyncSession(
-                impersonate=impersonate, verify=False, max_clients=1,
-            ) as session:
-                start = time.perf_counter()
-                try:
-                    resp = await session.head(
+        try:
+            headers, _ = build_headers()
+            proxy = _PROXY_URL
+            session = get_shared_session()
+
+            start = time.perf_counter()
+            try:
+                resp = await session.head(
+                    url, headers=headers, proxy=proxy,
+                    allow_redirects=True, timeout=self.timeout, max_redirects=5,
+                )
+                elapsed = (time.perf_counter() - start) * 1000
+
+                if resp.status_code == 403:
+                    start = time.perf_counter()
+                    resp = await session.get(
                         url, headers=headers, proxy=proxy,
                         allow_redirects=True, timeout=self.timeout, max_redirects=5,
                     )
                     elapsed = (time.perf_counter() - start) * 1000
 
-                    if resp.status_code == 403:
-                        start = time.perf_counter()
-                        resp = await session.get(
-                            url, headers=headers, proxy=proxy,
-                            allow_redirects=True, timeout=self.timeout, max_redirects=5,
-                        )
-                        elapsed = (time.perf_counter() - start) * 1000
-
+                return (elapsed, resp.status_code), None
+            except Exception as head_error:
+                if "redirect" in str(head_error).lower() or "47" in str(head_error):
+                    start = time.perf_counter()
+                    resp = await session.get(
+                        url, headers=headers, proxy=proxy,
+                        allow_redirects=True, timeout=self.timeout, max_redirects=5,
+                    )
+                    elapsed = (time.perf_counter() - start) * 1000
                     return (elapsed, resp.status_code), None
-                except Exception as head_error:
-                    if "redirect" in str(head_error).lower() or "47" in str(head_error):
-                        start = time.perf_counter()
-                        resp = await session.get(
-                            url, headers=headers, proxy=proxy,
-                            allow_redirects=True, timeout=self.timeout, max_redirects=5,
-                        )
-                        elapsed = (time.perf_counter() - start) * 1000
-                        return (elapsed, resp.status_code), None
-                    raise
+                raise
 
         except Exception as e:
             et, em = _classify_probe_error(e, url)

@@ -6,17 +6,9 @@ Sem pool, sem gate, sem semáforo — worker é o único limite.
 
 import asyncio
 import logging
-import os
 import time
 from typing import Optional
 from dataclasses import dataclass
-
-try:
-    from curl_cffi.requests import AsyncSession
-    HAS_CURL_CFFI = True
-except ImportError:
-    HAS_CURL_CFFI = False
-    AsyncSession = None
 
 logger = logging.getLogger(__name__)
 
@@ -57,21 +49,17 @@ class ProxyPool:
         for _ in range(3):
             t0 = time.perf_counter()
             try:
-                if not HAS_CURL_CFFI:
-                    errors.append("no_curl_cffi")
-                    continue
-                async with AsyncSession(
-                    impersonate="chrome131", verify=False, max_clients=1,
-                ) as session:
-                    resp = await asyncio.wait_for(
-                        session.get(test_url, proxy=self._gateway_url, timeout=timeout),
-                        timeout=timeout,
-                    )
-                    lat = (time.perf_counter() - t0) * 1000
-                    if resp.status_code == 200:
-                        latencies.append(lat)
-                    else:
-                        errors.append(f"status_{resp.status_code}")
+                from app.services.scraper.http_client import get_shared_session
+                session = get_shared_session()
+                resp = await asyncio.wait_for(
+                    session.get(test_url, proxy=self._gateway_url, timeout=timeout),
+                    timeout=timeout,
+                )
+                lat = (time.perf_counter() - t0) * 1000
+                if resp.status_code == 200:
+                    latencies.append(lat)
+                else:
+                    errors.append(f"status_{resp.status_code}")
             except Exception as e:
                 errors.append(type(e).__name__)
 

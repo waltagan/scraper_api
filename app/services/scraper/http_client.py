@@ -1,15 +1,14 @@
 """
 Cliente HTTP para scraping usando curl_cffi.
-Request direto: cada chamada cria uma session descartável com IP rotativo.
-Sem session pool, sem proxy gate — o worker é o único limite.
+Session compartilhada com max_clients alto — igual ao stress test.
+Cada request recebe IP rotativo do proxy, mas reutiliza conexão TCP/TLS.
 """
 
 import logging
 import re
 import os
 import random
-import time
-from typing import Tuple, Set, Optional
+from typing import Tuple, Set, Optional, List
 
 try:
     from curl_cffi.requests import AsyncSession
@@ -18,7 +17,7 @@ except ImportError:
     HAS_CURL_CFFI = False
     AsyncSession = None
 
-from .constants import REQUEST_TIMEOUT, build_headers, get_random_impersonate
+from .constants import REQUEST_TIMEOUT, build_headers, BROWSER_PROFILES
 from .html_parser import parse_html
 
 logger = logging.getLogger(__name__)
@@ -31,6 +30,42 @@ _CHARSET_META_REGEX = re.compile(
 _CHARSET_CONTENT_TYPE_REGEX = re.compile(
     rb'<meta[^>]+content=["\'][^"\']*charset=([^"\'\s;]+)', re.IGNORECASE
 )
+
+# ---------------------------------------------------------------------------
+# Session compartilhada — mesma lógica do stress test que deu 83.8% sucesso
+# ---------------------------------------------------------------------------
+_MAX_CLIENTS = 3000
+_sessions: List = []
+_init_done = False
+
+
+def _ensure_sessions():
+    """Cria sessions compartilhadas (lazy, uma vez só). 5 fingerprints x 3000 conns."""
+    global _sessions, _init_done
+    if _init_done:
+        return
+    if not HAS_CURL_CFFI:
+        _init_done = True
+        return
+
+    profiles = ["chrome131", "chrome124", "safari17_0", "chrome120", "edge101"]
+    for p in profiles:
+        s = AsyncSession(impersonate=p, verify=False, max_clients=_MAX_CLIENTS)
+        _sessions.append(s)
+
+    logger.info(
+        f"[http_client] {len(_sessions)} sessions compartilhadas criadas "
+        f"(max_clients={_MAX_CLIENTS}/session, total={len(_sessions) * _MAX_CLIENTS} conns)"
+    )
+    _init_done = True
+
+
+def get_shared_session() -> "AsyncSession":
+    """Retorna session compartilhada aleatória (fingerprint rotation)."""
+    _ensure_sessions()
+    if not _sessions:
+        raise RuntimeError("curl_cffi não disponível ou sessions não inicializadas")
+    return random.choice(_sessions)
 
 
 def _get_proxy() -> str:
@@ -91,21 +126,19 @@ async def cffi_scrape(
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
-    """Scrape usando curl_cffi — session descartável, IP rotativo."""
+    """Scrape usando session compartilhada — IP rotativo, conexão reutilizada."""
     if not HAS_CURL_CFFI:
         raise RuntimeError("curl_cffi não está instalado")
 
-    headers, impersonate = build_headers()
+    headers, _ = build_headers()
     proxy_url = proxy or _get_proxy()
     req_timeout = timeout or REQUEST_TIMEOUT
+    session = get_shared_session()
 
-    async with AsyncSession(
-        impersonate=impersonate, verify=False, max_clients=1,
-    ) as session:
-        resp = await session.get(
-            url, headers=headers, proxy=proxy_url,
-            timeout=req_timeout, allow_redirects=True, max_redirects=5,
-        )
+    resp = await session.get(
+        url, headers=headers, proxy=proxy_url,
+        timeout=req_timeout, allow_redirects=True, max_redirects=5,
+    )
 
     if resp.status_code != 200:
         raise Exception(f"Status {resp.status_code}")
@@ -120,27 +153,22 @@ async def cffi_scrape_safe(
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
-    """
-    Versão safe — não propaga exceções.
-    Seta cffi_scrape_safe.last_error para diagnóstico.
-    """
+    """Versão safe — não propaga exceções."""
     cffi_scrape_safe.last_error = None
     if not HAS_CURL_CFFI:
         cffi_scrape_safe.last_error = "no_curl_cffi"
         return "", set(), set()
 
     try:
-        headers, impersonate = build_headers()
+        headers, _ = build_headers()
         proxy_url = proxy or _get_proxy()
         req_timeout = timeout or REQUEST_TIMEOUT
+        session = get_shared_session()
 
-        async with AsyncSession(
-            impersonate=impersonate, verify=False, max_clients=1,
-        ) as session:
-            resp = await session.get(
-                url, headers=headers, proxy=proxy_url,
-                timeout=req_timeout, allow_redirects=True, max_redirects=5,
-            )
+        resp = await session.get(
+            url, headers=headers, proxy=proxy_url,
+            timeout=req_timeout, allow_redirects=True, max_redirects=5,
+        )
 
         if resp.status_code != 200:
             cffi_scrape_safe.last_error = f"http_{resp.status_code}"
