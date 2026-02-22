@@ -144,18 +144,35 @@ async def _scrape_subpages(
         normalized = normalize_url(url)
         try:
             text, docs, _ = await cffi_scrape_safe(normalized)
+            transport_err = cffi_scrape_safe.last_error
 
-            if not text or len(text) < MIN_CONTENT_LENGTH:
-                return ScrapedPage(url=normalized, content="", error="empty_content")
-            if is_soft_404(text) or is_cloudflare_challenge(text):
-                return ScrapedPage(url=normalized, content="", error="blocked_or_404")
+            if not text and transport_err:
+                return ScrapedPage(url=normalized, content="", error=f"transport:{transport_err}")
+
+            if not text:
+                return ScrapedPage(url=normalized, content="", error="empty_response")
+
+            if is_cloudflare_challenge(text):
+                return ScrapedPage(url=normalized, content="", error="blocked:cloudflare")
+
+            if is_soft_404(text):
+                return ScrapedPage(url=normalized, content="", error="content:soft_404")
+
+            if len(text) < MIN_CONTENT_LENGTH:
+                return ScrapedPage(
+                    url=normalized, content="",
+                    error=f"content:thin_{len(text)}chars",
+                )
 
             return ScrapedPage(
                 url=normalized, content=text,
                 document_links=list(docs), status_code=200,
             )
         except Exception as e:
-            return ScrapedPage(url=normalized, content="", error=str(e))
+            return ScrapedPage(
+                url=normalized, content="",
+                error=f"exception:{type(e).__name__}:{str(e)[:60]}",
+            )
 
     tasks = [scrape_one(u) for u in urls]
     results = await asyncio.gather(*tasks)
@@ -179,10 +196,32 @@ def _classify_subpage_error(error: str) -> str:
     if not error:
         return "unknown"
     err = error.lower()
-    if "timeout" in err:
-        return "timeout"
-    if "cloudflare" in err:
-        return "cloudflare"
-    if "soft 404" in err or "empty" in err or "blocked" in err:
-        return "empty_content"
-    return "scrape_fail"
+
+    if err.startswith("transport:"):
+        detail = err[len("transport:"):]
+        if "timeout" in detail:
+            return "sub:timeout"
+        if "http_403" in detail:
+            return "sub:http_403"
+        if "http_4" in detail:
+            return "sub:http_4xx"
+        if "http_5" in detail:
+            return "sub:http_5xx"
+        if "connection" in detail:
+            return "sub:connection"
+        if "ssl" in detail:
+            return "sub:ssl"
+        return "sub:transport_other"
+
+    if "blocked:cloudflare" in err:
+        return "sub:cloudflare"
+    if "content:soft_404" in err:
+        return "sub:soft_404"
+    if "content:thin" in err:
+        return "sub:thin_content"
+    if "empty_response" in err:
+        return "sub:empty_response"
+    if err.startswith("exception:"):
+        return "sub:exception"
+
+    return "sub:other"
