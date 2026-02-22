@@ -1,7 +1,6 @@
 """
 Cliente HTTP para scraping usando curl_cffi.
 Responsável por baixar conteúdo de páginas (somente texto, sem imagens).
-Usa sticky sessions do pool — sem semáforo, IPs já alocados.
 """
 
 import logging
@@ -18,7 +17,8 @@ except ImportError:
 
 from .constants import REQUEST_TIMEOUT, build_headers
 from .html_parser import parse_html
-from .session_pool import get_session, record_result
+from .proxy_gate import acquire_proxy_slot, record_gateway_result
+from .session_pool import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -93,16 +93,17 @@ async def cffi_scrape(
         resp = await session.get(url, headers=headers)
     else:
         headers, _ = build_headers()
-        sticky = get_session()
-        t0 = time.perf_counter()
-        try:
-            resp = await sticky.session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-            lat = (time.perf_counter() - t0) * 1000
-            record_result(sticky, resp.status_code == 200, lat)
-        except Exception:
-            lat = (time.perf_counter() - t0) * 1000
-            record_result(sticky, False, lat)
-            raise
+        async with acquire_proxy_slot() as gw_proxy:
+            sess = await get_session(gw_proxy)
+            t0 = time.perf_counter()
+            try:
+                resp = await sess.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+                lat = (time.perf_counter() - t0) * 1000
+                record_gateway_result(gw_proxy, resp.status_code == 200, lat)
+            except Exception:
+                lat = (time.perf_counter() - t0) * 1000
+                record_gateway_result(gw_proxy, False, lat)
+                raise
 
     if resp.status_code != 200:
         raise Exception(f"Status {resp.status_code}")
@@ -127,26 +128,27 @@ async def cffi_scrape_safe(
 
     try:
         headers, _ = build_headers()
-        sticky = get_session()
-        t0 = time.perf_counter()
-        try:
-            resp = await sticky.session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-            lat = (time.perf_counter() - t0) * 1000
+        async with acquire_proxy_slot() as gw_proxy:
+            sess = await get_session(gw_proxy)
+            t0 = time.perf_counter()
+            try:
+                resp = await sess.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+                lat = (time.perf_counter() - t0) * 1000
 
-            if resp.status_code != 200:
-                record_result(sticky, False, lat)
-                cffi_scrape_safe.last_error = f"http_{resp.status_code}"
-                return "", set(), set()
+                if resp.status_code != 200:
+                    record_gateway_result(gw_proxy, False, lat)
+                    cffi_scrape_safe.last_error = f"http_{resp.status_code}"
+                    return "", set(), set()
 
-            record_result(sticky, True, lat)
-            content_type = resp.headers.get('content-type', '')
-            text = _decode_content(resp.content, content_type)
-            return parse_html(text, url)
+                record_gateway_result(gw_proxy, True, lat)
+                content_type = resp.headers.get('content-type', '')
+                text = _decode_content(resp.content, content_type)
+                return parse_html(text, url)
 
-        except Exception as e:
-            lat = (time.perf_counter() - t0) * 1000
-            record_result(sticky, False, lat)
-            raise
+            except Exception as e:
+                lat = (time.perf_counter() - t0) * 1000
+                record_gateway_result(gw_proxy, False, lat)
+                raise
 
     except Exception as e:
         err_msg = str(e).lower()

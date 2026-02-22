@@ -1,6 +1,6 @@
 """
 Prober de URLs — encontra a melhor variação acessível (http/https, www/non-www).
-Usa sticky sessions do pool — sem semáforo, IPs já alocados.
+Usa apenas curl_cffi via proxy gateway.
 """
 
 import asyncio
@@ -19,7 +19,8 @@ except ImportError:
     AsyncSession = None
 
 from .constants import PROBE_TIMEOUT, MAX_RETRIES, build_headers
-from .session_pool import get_session, record_result
+from .proxy_gate import acquire_proxy_slot, record_gateway_result
+from .session_pool import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ RETRYABLE_PROBE_ERRORS = frozenset({
 
 
 class URLProber:
-    """Testa variações de URL via sticky session para encontrar a melhor."""
+    """Testa variações de URL via proxy gateway para encontrar a melhor."""
 
     def __init__(self, timeout: float = PROBE_TIMEOUT, max_retries: int = MAX_RETRIES):
         self.timeout = timeout
@@ -76,6 +77,11 @@ class URLProber:
         self._cache: dict = {}
 
     async def probe(self, base_url: str) -> Tuple[str, float]:
+        """
+        Testa variações de URL com retry automático.
+        Returns: (melhor_url, tempo_resposta_ms)
+        Raises: URLNotReachable se todas tentativas falharem.
+        """
         if base_url in self._cache:
             cached = self._cache[base_url]
             return cached['url'], cached['time']
@@ -158,43 +164,45 @@ class URLProber:
         return errors[0][1], errors[0][2]
 
     async def _test_url(self, url):
-        """Testa URL via sticky session. Retorna ((time_ms, status), error_info)."""
+        """Testa URL via curl_cffi + proxy (session pool). Retorna ((time_ms, status), error_info) ou (None, error_info)."""
         if not HAS_CURL_CFFI:
             return None, (ProbeErrorType.UNKNOWN, "curl_cffi não disponível")
         try:
             headers, _ = build_headers()
-            sticky = get_session()
-            start = time.perf_counter()
-            try:
-                resp = await sticky.session.head(
-                    url, headers=headers, allow_redirects=True,
-                    timeout=self.timeout, max_redirects=5,
-                )
-                elapsed = (time.perf_counter() - start) * 1000
 
-                if resp.status_code == 403:
-                    start = time.perf_counter()
-                    resp = await sticky.session.get(
+            async with acquire_proxy_slot() as proxy:
+                session = await get_session(proxy)
+                start = time.perf_counter()
+                try:
+                    resp = await session.head(
                         url, headers=headers, allow_redirects=True,
                         timeout=self.timeout, max_redirects=5,
                     )
                     elapsed = (time.perf_counter() - start) * 1000
 
-                record_result(sticky, resp.status_code < 400, elapsed)
-                return (elapsed, resp.status_code), None
-            except Exception as head_error:
-                if "redirect" in str(head_error).lower() or "47" in str(head_error):
-                    start = time.perf_counter()
-                    resp = await sticky.session.get(
-                        url, headers=headers, allow_redirects=True,
-                        timeout=self.timeout, max_redirects=5,
-                    )
-                    elapsed = (time.perf_counter() - start) * 1000
-                    record_result(sticky, resp.status_code < 400, elapsed)
+                    if resp.status_code == 403:
+                        start = time.perf_counter()
+                        resp = await session.get(
+                            url, headers=headers, allow_redirects=True,
+                            timeout=self.timeout, max_redirects=5,
+                        )
+                        elapsed = (time.perf_counter() - start) * 1000
+
+                    record_gateway_result(proxy, resp.status_code < 400, elapsed)
                     return (elapsed, resp.status_code), None
-                elapsed = (time.perf_counter() - start) * 1000
-                record_result(sticky, False, elapsed)
-                raise
+                except Exception as head_error:
+                    if "redirect" in str(head_error).lower() or "47" in str(head_error):
+                        start = time.perf_counter()
+                        resp = await session.get(
+                            url, headers=headers, allow_redirects=True,
+                            timeout=self.timeout, max_redirects=5,
+                        )
+                        elapsed = (time.perf_counter() - start) * 1000
+                        record_gateway_result(proxy, resp.status_code < 400, elapsed)
+                        return (elapsed, resp.status_code), None
+                    elapsed = (time.perf_counter() - start) * 1000
+                    record_gateway_result(proxy, False, elapsed)
+                    raise
 
         except Exception as e:
             et, em = _classify_probe_error(e, url)

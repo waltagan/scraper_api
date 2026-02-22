@@ -794,8 +794,25 @@ class BatchScrapeProcessor:
             stats["proxy_pool"] = {"error": "unavailable"}
 
         try:
+            from app.services.scraper.proxy_gate import get_gate_stats
+            gate = get_gate_stats()
+            total_slots = gate.get("total_slots", 0)
+            total_active = gate.get("total_active", 0)
+            gate["utilization_pct"] = round(total_active / total_slots * 100, 1) if total_slots > 0 else 0
+            stats["proxy_gate"] = gate
+        except Exception:
+            pass
+
+        try:
             from app.services.scraper.session_pool import pool_stats
-            stats["session_pool"] = pool_stats()
+            sp = pool_stats()
+            total_req = sp.get("total_requests", 0)
+            sessions_created = sp.get("sessions_created", 0)
+            if sessions_created > 0 and total_req > 0:
+                sp["reuse_factor"] = round(total_req / sessions_created, 1)
+                overhead_saved_ms = (total_req - sessions_created) * 800
+                sp["estimated_overhead_saved_s"] = round(overhead_saved_ms / 1000, 1)
+            stats["session_pool"] = sp
         except Exception:
             pass
 
@@ -804,6 +821,7 @@ class BatchScrapeProcessor:
                 REQUEST_TIMEOUT, PROBE_TIMEOUT, MAX_RETRIES, RETRY_DELAY,
                 MAX_SUBPAGES, PER_DOMAIN_CONCURRENT, WORKERS_PER_INSTANCE,
                 NUM_INSTANCES, FLUSH_SIZE, MIN_CONTENT_LENGTH,
+                MAX_CONCURRENT_PROXY_REQUESTS,
             )
             stats["config"] = {
                 "request_timeout": REQUEST_TIMEOUT,
@@ -816,6 +834,7 @@ class BatchScrapeProcessor:
                 "num_instances": NUM_INSTANCES,
                 "flush_size": FLUSH_SIZE,
                 "min_content_length": MIN_CONTENT_LENGTH,
+                "max_concurrent_proxy_requests": MAX_CONCURRENT_PROXY_REQUESTS,
             }
         except Exception:
             pass
