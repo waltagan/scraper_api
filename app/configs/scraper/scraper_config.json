@@ -1,5 +1,5 @@
 {
-  "request_timeout": 15,
+  "request_timeout": 20,
   "max_subpages": 10,
   "per_domain_concurrent": 5,
   "flush_size": 500,
