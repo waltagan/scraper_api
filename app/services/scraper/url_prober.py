@@ -20,6 +20,7 @@ except ImportError:
 
 from .constants import PROBE_TIMEOUT, MAX_RETRIES, build_headers
 from .proxy_gate import acquire_proxy_slot, record_gateway_result
+from .session_pool import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -163,39 +164,45 @@ class URLProber:
         return errors[0][1], errors[0][2]
 
     async def _test_url(self, url):
-        """Testa URL via curl_cffi + proxy. Retorna ((time_ms, status), error_info) ou (None, error_info)."""
+        """Testa URL via curl_cffi + proxy (session pool). Retorna ((time_ms, status), error_info) ou (None, error_info)."""
         if not HAS_CURL_CFFI:
             return None, (ProbeErrorType.UNKNOWN, "curl_cffi não disponível")
         try:
-            headers, impersonate = build_headers()
+            headers, _ = build_headers()
 
             async with acquire_proxy_slot() as proxy:
-                async with AsyncSession(
-                    impersonate=impersonate, proxy=proxy,
-                    timeout=self.timeout, verify=False, max_redirects=5,
-                ) as session:
-                    start = time.perf_counter()
-                    try:
-                        resp = await session.head(url, headers=headers, allow_redirects=True)
+                session = await get_session(proxy)
+                start = time.perf_counter()
+                try:
+                    resp = await session.head(
+                        url, headers=headers, allow_redirects=True,
+                        timeout=self.timeout, max_redirects=5,
+                    )
+                    elapsed = (time.perf_counter() - start) * 1000
+
+                    if resp.status_code == 403:
+                        start = time.perf_counter()
+                        resp = await session.get(
+                            url, headers=headers, allow_redirects=True,
+                            timeout=self.timeout, max_redirects=5,
+                        )
                         elapsed = (time.perf_counter() - start) * 1000
 
-                        if resp.status_code == 403:
-                            start = time.perf_counter()
-                            resp = await session.get(url, headers=headers, allow_redirects=True)
-                            elapsed = (time.perf_counter() - start) * 1000
-
+                    record_gateway_result(proxy, resp.status_code < 400, elapsed)
+                    return (elapsed, resp.status_code), None
+                except Exception as head_error:
+                    if "redirect" in str(head_error).lower() or "47" in str(head_error):
+                        start = time.perf_counter()
+                        resp = await session.get(
+                            url, headers=headers, allow_redirects=True,
+                            timeout=self.timeout, max_redirects=5,
+                        )
+                        elapsed = (time.perf_counter() - start) * 1000
                         record_gateway_result(proxy, resp.status_code < 400, elapsed)
                         return (elapsed, resp.status_code), None
-                    except Exception as head_error:
-                        if "redirect" in str(head_error).lower() or "47" in str(head_error):
-                            start = time.perf_counter()
-                            resp = await session.get(url, headers=headers, allow_redirects=True)
-                            elapsed = (time.perf_counter() - start) * 1000
-                            record_gateway_result(proxy, resp.status_code < 400, elapsed)
-                            return (elapsed, resp.status_code), None
-                        elapsed = (time.perf_counter() - start) * 1000
-                        record_gateway_result(proxy, False, elapsed)
-                        raise
+                    elapsed = (time.perf_counter() - start) * 1000
+                    record_gateway_result(proxy, False, elapsed)
+                    raise
 
         except Exception as e:
             et, em = _classify_probe_error(e, url)

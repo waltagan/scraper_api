@@ -1,6 +1,6 @@
 """
 Proxy Manager — Gateway mode only (711Proxy residential).
-Multi-gateway: distribui requests entre US, AS, INA via proxy_gate.
+Multi-gateway: distribui requests entre GLOBAL e US via proxy_gate.
 O proxy_gate.py controla semáforos e seleção; este módulo mantém métricas.
 """
 
@@ -54,20 +54,18 @@ class ProxyPool:
         for _ in range(3):
             t0 = time.perf_counter()
             try:
-                from curl_cffi.requests import AsyncSession
-                from app.services.scraper.constants import get_random_impersonate
                 from app.services.scraper.proxy_gate import acquire_proxy_slot
+                from app.services.scraper.session_pool import get_session
                 async with acquire_proxy_slot() as proxy:
-                    async with AsyncSession(
-                        impersonate=get_random_impersonate(),
-                        proxy=proxy, timeout=timeout, verify=False,
-                    ) as session:
-                        resp = await asyncio.wait_for(session.get(test_url), timeout=timeout)
-                        lat = (time.perf_counter() - t0) * 1000
-                        if resp.status_code == 200:
-                            latencies.append(lat)
-                        else:
-                            errors.append(f"status_{resp.status_code}")
+                    session = await get_session(proxy)
+                    resp = await asyncio.wait_for(
+                        session.get(test_url, timeout=timeout), timeout=timeout,
+                    )
+                    lat = (time.perf_counter() - t0) * 1000
+                    if resp.status_code == 200:
+                        latencies.append(lat)
+                    else:
+                        errors.append(f"status_{resp.status_code}")
             except Exception as e:
                 errors.append(type(e).__name__)
 
@@ -110,6 +108,12 @@ class ProxyPool:
         except Exception:
             gate = {}
 
+        try:
+            from app.services.scraper.session_pool import pool_stats
+            sess = pool_stats()
+        except Exception:
+            sess = {}
+
         return {
             "loaded": self._loaded,
             "mode": "multi_gateway",
@@ -120,6 +124,7 @@ class ProxyPool:
             "failures": self._stats.failures,
             "success_rate": f"{self._stats.successes / total:.1%}" if total > 0 else "N/A",
             "gate": gate,
+            "session_pool": sess,
         }
 
     def reset_metrics(self):

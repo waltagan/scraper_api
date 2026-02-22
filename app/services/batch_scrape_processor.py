@@ -761,12 +761,19 @@ class BatchScrapeProcessor:
                 "links_in_html_total": links_in_html,
                 "links_after_filter": links_after_filter,
                 "links_selected": links_selected,
+                "avg_links_per_company": round(links_in_html / processed, 1) if processed > 0 else 0,
+                "avg_selected_per_company": round(links_selected / processed, 1) if processed > 0 else 0,
+                "link_filter_rate_pct": round((1 - links_selected / links_in_html) * 100, 1) if links_in_html > 0 else 0,
+                "zero_links_companies": zero_links,
+                "zero_links_pct": round(zero_links / processed * 100, 1) if processed > 0 else 0,
                 "main_page_failures": main_page_failures,
+                "main_page_success_rate_pct": round((processed - main_page_failures) / processed * 100, 1) if processed > 0 else 0,
                 "main_page_fail_reasons": dict(sorted(main_page_fail_reasons.items(), key=lambda x: -x[1])),
                 "subpages_attempted": subpages_attempted,
                 "subpages_ok": subpages_ok,
                 "subpages_failed": subpages_attempted - subpages_ok,
                 "subpage_success_rate_pct": round(subpages_ok / subpages_attempted * 100, 1) if subpages_attempted > 0 else 0,
+                "avg_subpages_per_company": round(subpages_attempted / processed, 1) if processed > 0 else 0,
                 "subpage_error_breakdown": dict(sorted(subpage_err_cats.items(), key=lambda x: -x[1])),
             },
             "infrastructure": infra,
@@ -776,6 +783,7 @@ class BatchScrapeProcessor:
 
     def _get_infrastructure_stats(self) -> dict:
         stats: Dict[str, Any] = {}
+
         try:
             from app.services.scraper_manager.proxy_manager import proxy_pool
             pool_status = proxy_pool.get_status()
@@ -784,11 +792,53 @@ class BatchScrapeProcessor:
             stats["proxy_pool"] = pool_status
         except Exception:
             stats["proxy_pool"] = {"error": "unavailable"}
+
         try:
             from app.services.scraper.proxy_gate import get_gate_stats
-            stats["proxy_gate"] = get_gate_stats()
+            gate = get_gate_stats()
+            total_slots = gate.get("total_slots", 0)
+            total_active = gate.get("total_active", 0)
+            gate["utilization_pct"] = round(total_active / total_slots * 100, 1) if total_slots > 0 else 0
+            stats["proxy_gate"] = gate
         except Exception:
             pass
+
+        try:
+            from app.services.scraper.session_pool import pool_stats
+            sp = pool_stats()
+            total_req = sp.get("total_requests", 0)
+            sessions_created = sp.get("sessions_created", 0)
+            if sessions_created > 0 and total_req > 0:
+                sp["reuse_factor"] = round(total_req / sessions_created, 1)
+                overhead_saved_ms = (total_req - sessions_created) * 800
+                sp["estimated_overhead_saved_s"] = round(overhead_saved_ms / 1000, 1)
+            stats["session_pool"] = sp
+        except Exception:
+            pass
+
+        try:
+            from app.services.scraper.constants import (
+                REQUEST_TIMEOUT, PROBE_TIMEOUT, MAX_RETRIES, RETRY_DELAY,
+                MAX_SUBPAGES, PER_DOMAIN_CONCURRENT, WORKERS_PER_INSTANCE,
+                NUM_INSTANCES, FLUSH_SIZE, MIN_CONTENT_LENGTH,
+                MAX_CONCURRENT_PROXY_REQUESTS,
+            )
+            stats["config"] = {
+                "request_timeout": REQUEST_TIMEOUT,
+                "probe_timeout": PROBE_TIMEOUT,
+                "max_retries": MAX_RETRIES,
+                "retry_delay": RETRY_DELAY,
+                "max_subpages": MAX_SUBPAGES,
+                "per_domain_concurrent": PER_DOMAIN_CONCURRENT,
+                "workers_per_instance": WORKERS_PER_INSTANCE,
+                "num_instances": NUM_INSTANCES,
+                "flush_size": FLUSH_SIZE,
+                "min_content_length": MIN_CONTENT_LENGTH,
+                "max_concurrent_proxy_requests": MAX_CONCURRENT_PROXY_REQUESTS,
+            }
+        except Exception:
+            pass
+
         return stats
 
     async def cancel(self):

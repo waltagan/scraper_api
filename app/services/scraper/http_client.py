@@ -18,6 +18,7 @@ except ImportError:
 from .constants import REQUEST_TIMEOUT, build_headers
 from .html_parser import parse_html
 from .proxy_gate import acquire_proxy_slot, record_gateway_result
+from .session_pool import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -91,15 +92,12 @@ async def cffi_scrape(
         headers, _ = build_headers()
         resp = await session.get(url, headers=headers)
     else:
-        headers, impersonate = build_headers()
+        headers, _ = build_headers()
         async with acquire_proxy_slot() as gw_proxy:
+            sess = await get_session(gw_proxy)
             t0 = time.perf_counter()
             try:
-                async with AsyncSession(
-                    impersonate=impersonate, proxy=proxy or gw_proxy,
-                    timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
-                ) as s:
-                    resp = await s.get(url)
+                resp = await sess.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
                 lat = (time.perf_counter() - t0) * 1000
                 record_gateway_result(gw_proxy, resp.status_code == 200, lat)
             except Exception:
@@ -129,26 +127,23 @@ async def cffi_scrape_safe(
         return "", set(), set()
 
     try:
-        headers, impersonate = build_headers()
+        headers, _ = build_headers()
         async with acquire_proxy_slot() as gw_proxy:
+            sess = await get_session(gw_proxy)
             t0 = time.perf_counter()
             try:
-                async with AsyncSession(
-                    impersonate=impersonate, proxy=proxy or gw_proxy,
-                    timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
-                ) as s:
-                    resp = await s.get(url)
-                    lat = (time.perf_counter() - t0) * 1000
+                resp = await sess.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+                lat = (time.perf_counter() - t0) * 1000
 
-                    if resp.status_code != 200:
-                        record_gateway_result(gw_proxy, False, lat)
-                        cffi_scrape_safe.last_error = f"http_{resp.status_code}"
-                        return "", set(), set()
+                if resp.status_code != 200:
+                    record_gateway_result(gw_proxy, False, lat)
+                    cffi_scrape_safe.last_error = f"http_{resp.status_code}"
+                    return "", set(), set()
 
-                    record_gateway_result(gw_proxy, True, lat)
-                    content_type = resp.headers.get('content-type', '')
-                    text = _decode_content(resp.content, content_type)
-                    return parse_html(text, url)
+                record_gateway_result(gw_proxy, True, lat)
+                content_type = resp.headers.get('content-type', '')
+                text = _decode_content(resp.content, content_type)
+                return parse_html(text, url)
 
             except Exception as e:
                 lat = (time.perf_counter() - t0) * 1000

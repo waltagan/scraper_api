@@ -1,9 +1,10 @@
 """
-Multi-gateway proxy gate — distribui carga entre 4 gateways 711Proxy.
+Multi-gateway proxy gate — distribui carga entre gateways 711Proxy.
 
-Gateways ativos: GLOBAL, US, AS, HK (EU e INA descartados — connection reset).
+Gateways ativos: GLOBAL, US (próximos da infra Railway/US).
+AS e HK removidos — roteamento triangular (US→Ásia→BR) causa ~33% success vs ~57%.
+EU e INA descartados — connection reset persistente.
 Cada gateway tem semáforo independente; seleção por least-loaded.
-acquire_proxy_slot() yields proxy_url e coleta métricas por gateway.
 """
 
 import asyncio
@@ -18,7 +19,7 @@ from .constants import MAX_CONCURRENT_PROXY_REQUESTS
 
 logger = logging.getLogger(__name__)
 
-GATEWAY_REGIONS = ["global", "us", "as", "hk"]
+GATEWAY_REGIONS = ["global", "us"]
 
 _REGION_LABELS = {
     "global": "GLOBAL", "us": "US", "as": "AS", "hk": "HK",
@@ -208,9 +209,13 @@ def get_gate_stats() -> dict:
     total_active = 0
     total_pending = 0
     total_slots = 0
+    total_success = 0
+    total_fail = 0
+    total_acquired = 0
 
     for gw in _gateways:
         total_req = gw.total_success + gw.total_fail
+        util_pct = round(gw.active / gw.max_slots * 100, 1) if gw.max_slots > 0 else 0
         gateways.append({
             "name": gw.name,
             "max_slots": gw.max_slots,
@@ -218,19 +223,31 @@ def get_gate_stats() -> dict:
             "pending": gw.pending,
             "total_acquired": gw.total_acquired,
             "free": gw.max_slots - gw.active,
+            "utilization_pct": util_pct,
             "success": gw.total_success,
             "fail": gw.total_fail,
+            "total_requests": total_req,
             "success_rate": f"{gw.success_rate():.1f}%",
             "latency_ms": gw.latency_percentiles(),
         })
         total_active += gw.active
         total_pending += gw.pending
         total_slots += gw.max_slots
+        total_success += gw.total_success
+        total_fail += gw.total_fail
+        total_acquired += gw.total_acquired
+
+    total_req_all = total_success + total_fail
+    overall_rate = round(total_success / total_req_all * 100, 1) if total_req_all > 0 else 0
 
     return {
         "num_gateways": len(_gateways),
         "total_slots": total_slots,
         "total_active": total_active,
         "total_pending": total_pending,
+        "total_acquired": total_acquired,
+        "total_success": total_success,
+        "total_fail": total_fail,
+        "overall_success_rate_pct": overall_rate,
         "gateways": gateways,
     }

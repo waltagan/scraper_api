@@ -13,13 +13,6 @@ from urllib.parse import urlparse
 from typing import List, Tuple, Optional
 from enum import Enum
 
-try:
-    from curl_cffi.requests import AsyncSession
-    HAS_CURL_CFFI = True
-except ImportError:
-    HAS_CURL_CFFI = False
-    AsyncSession = None
-
 from .models import ScrapedPage, ScrapeResult
 from .constants import (
     REQUEST_TIMEOUT, MAX_RETRIES, MAX_SUBPAGES,
@@ -30,6 +23,7 @@ from .link_selector import extract_and_prioritize_links, filter_non_html_links, 
 from .url_prober import url_prober, URLNotReachable
 from .http_client import cffi_scrape, cffi_scrape_safe
 from .proxy_gate import acquire_proxy_slot, record_gateway_result
+from .session_pool import get_session
 
 from app.services.scraper_manager.proxy_manager import (
     record_proxy_failure, record_proxy_success,
@@ -190,21 +184,16 @@ async def _scrape_subpages_parallel(
     async def scrape_one(url: str) -> ScrapedPage:
         async with domain_sem:
             normalized = normalize_url(url)
-            ref = smart_referer(url)
-            headers, impersonate = build_headers(referer=ref)
 
             try:
                 async with acquire_proxy_slot() as proxy:
+                    session = await get_session(proxy)
                     t0 = time.perf_counter()
                     try:
-                        async with AsyncSession(
-                            impersonate=impersonate, proxy=proxy,
-                            timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
-                        ) as session:
-                            text, docs, _ = await asyncio.wait_for(
-                                cffi_scrape(normalized, proxy=None, session=session),
-                                timeout=REQUEST_TIMEOUT,
-                            )
+                        text, docs, _ = await asyncio.wait_for(
+                            cffi_scrape(normalized, proxy=None, session=session),
+                            timeout=REQUEST_TIMEOUT,
+                        )
                         lat = (time.perf_counter() - t0) * 1000
                     except Exception:
                         lat = (time.perf_counter() - t0) * 1000
