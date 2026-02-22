@@ -52,17 +52,21 @@ async def _fetch_urls_from_db(limit: int) -> list:
     pool = await get_pool()
     rows = await pool.fetch(
         """
-        SELECT DISTINCT website_url FROM busca_fornecedor.website_discovery
+        SELECT website_url FROM busca_fornecedor.website_discovery
         WHERE discovery_status IN ('muito_alto','alto','medio')
         AND website_url IS NOT NULL AND website_url != ''
-        ORDER BY website_url
         LIMIT $1
         """,
         limit,
+        timeout=60,
     )
+    seen = set()
     urls = []
     for r in rows:
         url = r["website_url"]
+        if url in seen:
+            continue
+        seen.add(url)
         if not url.startswith("http"):
             url = f"https://{url}"
         urls.append(url)
