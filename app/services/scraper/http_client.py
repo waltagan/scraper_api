@@ -1,9 +1,10 @@
 """
 Cliente HTTP para scraping usando curl_cffi.
-Session compartilhada com max_clients alto — igual ao stress test.
-Cada request recebe IP rotativo do proxy, mas reutiliza conexão TCP/TLS.
+Session compartilhada + semáforo global de 2000 requests simultâneos.
+Stress test provou: proxy aguenta 2000 conns (83.8% sucesso), acima degrada.
 """
 
+import asyncio
 import logging
 import re
 import os
@@ -32,16 +33,21 @@ _CHARSET_CONTENT_TYPE_REGEX = re.compile(
 )
 
 # ---------------------------------------------------------------------------
-# Session compartilhada — mesma lógica do stress test que deu 83.8% sucesso
+# Session compartilhada + semáforo global
+# Proxy aguenta ~2000 conexões simultâneas (validado por stress test).
+# Semáforo garante que nunca ultrapassamos esse limite, independente de
+# quantos workers existam (2000 workers x 20 requests = 40k sem semáforo).
 # ---------------------------------------------------------------------------
 _MAX_CLIENTS = 3000
+_MAX_CONCURRENT_REQUESTS = 2000
 _sessions: List = []
+_semaphore: Optional[asyncio.Semaphore] = None
 _init_done = False
 
 
 def _ensure_sessions():
-    """Cria sessions compartilhadas (lazy, uma vez só). 5 fingerprints x 3000 conns."""
-    global _sessions, _init_done
+    """Cria sessions compartilhadas e semáforo global (lazy, uma vez só)."""
+    global _sessions, _semaphore, _init_done
     if _init_done:
         return
     if not HAS_CURL_CFFI:
@@ -53,9 +59,11 @@ def _ensure_sessions():
         s = AsyncSession(impersonate=p, verify=False, max_clients=_MAX_CLIENTS)
         _sessions.append(s)
 
+    _semaphore = asyncio.Semaphore(_MAX_CONCURRENT_REQUESTS)
+
     logger.info(
-        f"[http_client] {len(_sessions)} sessions compartilhadas criadas "
-        f"(max_clients={_MAX_CLIENTS}/session, total={len(_sessions) * _MAX_CLIENTS} conns)"
+        f"[http_client] {len(_sessions)} sessions | "
+        f"semaphore={_MAX_CONCURRENT_REQUESTS} max concurrent requests"
     )
     _init_done = True
 
@@ -66,6 +74,14 @@ def get_shared_session() -> "AsyncSession":
     if not _sessions:
         raise RuntimeError("curl_cffi não disponível ou sessions não inicializadas")
     return random.choice(_sessions)
+
+
+def get_semaphore() -> asyncio.Semaphore:
+    """Retorna semáforo global de requests."""
+    _ensure_sessions()
+    if _semaphore is None:
+        return asyncio.Semaphore(_MAX_CONCURRENT_REQUESTS)
+    return _semaphore
 
 
 def _get_proxy() -> str:
@@ -126,19 +142,21 @@ async def cffi_scrape(
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
-    """Scrape usando session compartilhada — IP rotativo, conexão reutilizada."""
+    """Scrape com semáforo global — máximo 2000 requests simultâneos ao proxy."""
     if not HAS_CURL_CFFI:
         raise RuntimeError("curl_cffi não está instalado")
 
     headers, _ = build_headers()
     proxy_url = proxy or _get_proxy()
     req_timeout = timeout or REQUEST_TIMEOUT
-    session = get_shared_session()
+    sem = get_semaphore()
 
-    resp = await session.get(
-        url, headers=headers, proxy=proxy_url,
-        timeout=req_timeout, allow_redirects=True, max_redirects=5,
-    )
+    async with sem:
+        session = get_shared_session()
+        resp = await session.get(
+            url, headers=headers, proxy=proxy_url,
+            timeout=req_timeout, allow_redirects=True, max_redirects=5,
+        )
 
     if resp.status_code != 200:
         raise Exception(f"Status {resp.status_code}")
@@ -153,7 +171,7 @@ async def cffi_scrape_safe(
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
-    """Versão safe — não propaga exceções."""
+    """Versão safe com semáforo global — não propaga exceções."""
     cffi_scrape_safe.last_error = None
     if not HAS_CURL_CFFI:
         cffi_scrape_safe.last_error = "no_curl_cffi"
@@ -163,12 +181,14 @@ async def cffi_scrape_safe(
         headers, _ = build_headers()
         proxy_url = proxy or _get_proxy()
         req_timeout = timeout or REQUEST_TIMEOUT
-        session = get_shared_session()
+        sem = get_semaphore()
 
-        resp = await session.get(
-            url, headers=headers, proxy=proxy_url,
-            timeout=req_timeout, allow_redirects=True, max_redirects=5,
-        )
+        async with sem:
+            session = get_shared_session()
+            resp = await session.get(
+                url, headers=headers, proxy=proxy_url,
+                timeout=req_timeout, allow_redirects=True, max_redirects=5,
+            )
 
         if resp.status_code != 200:
             cffi_scrape_safe.last_error = f"http_{resp.status_code}"

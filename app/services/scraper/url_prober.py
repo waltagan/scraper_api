@@ -153,44 +153,46 @@ class URLProber:
         return errors[0][1], errors[0][2]
 
     async def _test_url(self, url):
-        """Testa URL com session compartilhada + proxy direto."""
+        """Testa URL com session compartilhada + semáforo global."""
         try:
-            from .http_client import get_shared_session
+            from .http_client import get_shared_session, get_semaphore
         except ImportError:
             return None, (ProbeErrorType.UNKNOWN, "http_client não disponível")
 
         try:
             headers, _ = build_headers()
             proxy = _PROXY_URL
-            session = get_shared_session()
+            sem = get_semaphore()
 
-            start = time.perf_counter()
-            try:
-                resp = await session.head(
-                    url, headers=headers, proxy=proxy,
-                    allow_redirects=True, timeout=self.timeout, max_redirects=5,
-                )
-                elapsed = (time.perf_counter() - start) * 1000
-
-                if resp.status_code == 403:
-                    start = time.perf_counter()
-                    resp = await session.get(
+            async with sem:
+                session = get_shared_session()
+                start = time.perf_counter()
+                try:
+                    resp = await session.head(
                         url, headers=headers, proxy=proxy,
                         allow_redirects=True, timeout=self.timeout, max_redirects=5,
                     )
                     elapsed = (time.perf_counter() - start) * 1000
 
-                return (elapsed, resp.status_code), None
-            except Exception as head_error:
-                if "redirect" in str(head_error).lower() or "47" in str(head_error):
-                    start = time.perf_counter()
-                    resp = await session.get(
-                        url, headers=headers, proxy=proxy,
-                        allow_redirects=True, timeout=self.timeout, max_redirects=5,
-                    )
-                    elapsed = (time.perf_counter() - start) * 1000
+                    if resp.status_code == 403:
+                        start = time.perf_counter()
+                        resp = await session.get(
+                            url, headers=headers, proxy=proxy,
+                            allow_redirects=True, timeout=self.timeout, max_redirects=5,
+                        )
+                        elapsed = (time.perf_counter() - start) * 1000
+
                     return (elapsed, resp.status_code), None
-                raise
+                except Exception as head_error:
+                    if "redirect" in str(head_error).lower() or "47" in str(head_error):
+                        start = time.perf_counter()
+                        resp = await session.get(
+                            url, headers=headers, proxy=proxy,
+                            allow_redirects=True, timeout=self.timeout, max_redirects=5,
+                        )
+                        elapsed = (time.perf_counter() - start) * 1000
+                        return (elapsed, resp.status_code), None
+                    raise
 
         except Exception as e:
             et, em = _classify_probe_error(e, url)
