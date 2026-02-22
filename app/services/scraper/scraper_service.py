@@ -1,8 +1,8 @@
 """
 Servico principal de scraping — pipeline direto.
 
-Pipeline: GET unico (probe+main) → heuristic links → scrape subpages (paralelo).
-Cada request usa IP rotativo descartavel. Semaforo global (2000) e o unico limite.
+Pipeline: GET unico (probe+main) → heuristic links → scrape subpages (throttled).
+Subpages usam stagger delay + semaforo por dominio + circuit breaker.
 """
 
 import asyncio
@@ -11,7 +11,11 @@ import logging
 from typing import List, Optional
 
 from .models import ScrapedPage, ScrapeResult
-from .constants import REQUEST_TIMEOUT, MAX_SUBPAGES, MIN_CONTENT_LENGTH
+from .constants import (
+    REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES, MIN_CONTENT_LENGTH,
+    PER_DOMAIN_CONCURRENT, STAGGER_DELAY, CIRCUIT_BREAKER_THRESHOLD,
+    smart_referer,
+)
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
 from .link_selector import filter_non_html_links, prioritize_links
 from .url_prober import fast_probe_and_scrape, URLNotReachable
@@ -75,11 +79,15 @@ async def scrape_all_subpages(
     meta.links_after_filter = len(filtered)
     meta.links_selected = len(target_subpages)
 
-    # 3. SCRAPE SUBPAGES EM PARALELO (semaforo global ja controla)
+    # 3. SCRAPE SUBPAGES (stagger + domain_sem + circuit breaker)
+    base_referer = smart_referer(url)
     t_sub = time.perf_counter()
     subpages: List[ScrapedPage] = []
+    skipped = 0
     if target_subpages:
-        subpages = await _scrape_subpages(target_subpages, ctx_label)
+        subpages, skipped = await _scrape_subpages(
+            target_subpages, base_referer, ctx_label,
+        )
     meta.subpages_time_ms = (time.perf_counter() - t_sub) * 1000
 
     # 4. CONSOLIDAR
@@ -87,6 +95,7 @@ async def scrape_all_subpages(
     meta.pages = all_pages
     meta.subpages_attempted = len(subpages)
     meta.subpages_ok = sum(1 for p in subpages if p.success)
+    meta.subpages_skipped = skipped
     meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
 
     error_breakdown: dict = {}
@@ -102,7 +111,7 @@ async def scrape_all_subpages(
         f"probe+main={meta.main_scrape_time_ms:.0f}ms "
         f"sub={meta.subpages_time_ms:.0f}ms total={meta.total_time_ms:.0f}ms "
         f"links={meta.links_in_html}->{meta.links_selected} "
-        f"subpages={meta.subpages_ok}/{meta.subpages_attempted}"
+        f"subpages={meta.subpages_ok}/{meta.subpages_attempted} skip={skipped}"
     )
     return meta
 
@@ -136,37 +145,63 @@ def _validate_main_page(
 
 
 async def _scrape_subpages(
-    urls: List[str], ctx_label: str = ""
-) -> List[ScrapedPage]:
-    """Scrape subpaginas em paralelo. Semaforo global (2000) ja controla concorrencia."""
+    urls: List[str],
+    referer: str = "",
+    ctx_label: str = "",
+) -> tuple:
+    """
+    Scrape subpaginas com stagger + semaforo por dominio + circuit breaker.
+    Retorna (list[ScrapedPage], skipped_count).
+    """
+    domain_sem = asyncio.Semaphore(PER_DOMAIN_CONCURRENT)
+    fail_streak = 0
+    abort = False
 
     async def scrape_one(url: str) -> ScrapedPage:
         normalized = normalize_url(url)
         try:
-            text, docs, _ = await cffi_scrape_safe(normalized)
+            text, docs, _ = await cffi_scrape_safe(
+                normalized, timeout=SUBPAGE_TIMEOUT, referer=referer,
+            )
             transport_err = cffi_scrape_safe.last_error
+            elapsed = cffi_scrape_safe.elapsed_ms
 
             if not text and transport_err:
-                return ScrapedPage(url=normalized, content="", error=f"transport:{transport_err}")
+                return ScrapedPage(
+                    url=normalized, content="",
+                    error=f"transport:{transport_err}",
+                    response_time_ms=elapsed,
+                )
 
             if not text:
-                return ScrapedPage(url=normalized, content="", error="empty_response")
+                return ScrapedPage(
+                    url=normalized, content="", error="empty_response",
+                    response_time_ms=elapsed,
+                )
 
             if is_cloudflare_challenge(text):
-                return ScrapedPage(url=normalized, content="", error="blocked:cloudflare")
+                return ScrapedPage(
+                    url=normalized, content="", error="blocked:cloudflare",
+                    response_time_ms=elapsed,
+                )
 
             if is_soft_404(text):
-                return ScrapedPage(url=normalized, content="", error="content:soft_404")
+                return ScrapedPage(
+                    url=normalized, content="", error="content:soft_404",
+                    response_time_ms=elapsed,
+                )
 
             if len(text) < MIN_CONTENT_LENGTH:
                 return ScrapedPage(
                     url=normalized, content="",
                     error=f"content:thin_{len(text)}chars",
+                    response_time_ms=elapsed,
                 )
 
             return ScrapedPage(
                 url=normalized, content=text,
                 document_links=list(docs), status_code=200,
+                response_time_ms=elapsed,
             )
         except Exception as e:
             return ScrapedPage(
@@ -174,9 +209,35 @@ async def _scrape_subpages(
                 error=f"exception:{type(e).__name__}:{str(e)[:60]}",
             )
 
-    tasks = [scrape_one(u) for u in urls]
-    results = await asyncio.gather(*tasks)
-    return list(results)
+    async def guarded_scrape(url: str, idx: int) -> Optional[ScrapedPage]:
+        nonlocal fail_streak, abort
+
+        if abort:
+            return None
+
+        await asyncio.sleep(idx * STAGGER_DELAY)
+
+        if abort:
+            return None
+
+        async with domain_sem:
+            if abort:
+                return None
+            result = await scrape_one(url)
+            if not result.success:
+                fail_streak += 1
+                if fail_streak >= CIRCUIT_BREAKER_THRESHOLD:
+                    abort = True
+            else:
+                fail_streak = 0
+            return result
+
+    tasks = [guarded_scrape(u, i) for i, u in enumerate(urls)]
+    raw = await asyncio.gather(*tasks)
+
+    pages = [r for r in raw if r is not None]
+    skipped = sum(1 for r in raw if r is None)
+    return pages, skipped
 
 
 def _get_fail_reason(page: Optional[ScrapedPage]) -> str:
@@ -196,6 +257,9 @@ def _classify_subpage_error(error: str) -> str:
     if not error:
         return "unknown"
     err = error.lower()
+
+    if "skipped" in err or "circuit_breaker" in err:
+        return "sub:skipped"
 
     if err.startswith("transport:"):
         detail = err[len("transport:"):]

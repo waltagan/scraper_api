@@ -31,6 +31,7 @@ class ScrapeResult:
     links_selected: int = 0
     subpages_attempted: int = 0
     subpages_ok: int = 0
+    subpages_skipped: int = 0
     subpage_errors: Dict[str, int] = field(default_factory=dict)
     main_page_ok: bool = False
     total_time_ms: float = 0.0

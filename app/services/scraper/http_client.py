@@ -9,6 +9,7 @@ import logging
 import re
 import os
 import random
+import time as _time
 from typing import Tuple, Set, Optional, List
 
 try:
@@ -164,25 +165,29 @@ async def cffi_scrape_safe(
     url: str,
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
+    referer: Optional[str] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
     """Versão safe com semáforo global — não propaga exceções."""
     cffi_scrape_safe.last_error = None
+    cffi_scrape_safe.elapsed_ms = 0.0
     if not HAS_CURL_CFFI:
         cffi_scrape_safe.last_error = "no_curl_cffi"
         return "", set(), set()
 
     try:
-        headers, _ = build_headers()
+        headers, _ = build_headers(referer=referer)
         proxy_url = proxy or _get_proxy()
         req_timeout = timeout or REQUEST_TIMEOUT
         sem = get_semaphore()
 
+        t0 = _time.perf_counter()
         async with sem:
             session = get_shared_session()
             resp = await session.get(
                 url, headers=headers, proxy=proxy_url,
                 timeout=req_timeout, allow_redirects=True, max_redirects=5,
             )
+        cffi_scrape_safe.elapsed_ms = (_time.perf_counter() - t0) * 1000
 
         if resp.status_code != 200:
             cffi_scrape_safe.last_error = f"http_{resp.status_code}"
@@ -206,3 +211,4 @@ async def cffi_scrape_safe(
 
 
 cffi_scrape_safe.last_error = None
+cffi_scrape_safe.elapsed_ms = 0.0

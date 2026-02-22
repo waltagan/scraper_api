@@ -18,7 +18,7 @@ from app.services.scraper.scraper_service import scrape_all_subpages
 from app.services.scraper.models import ScrapeResult
 from app.core.chunking import process_content
 from app.services.database_service import get_db_service
-from app.services.scraper.constants import FLUSH_SIZE
+from app.services.scraper.constants import FLUSH_SIZE, MAX_SUBPAGES
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +248,7 @@ class BatchScrapeProcessor:
         self._links_selected_total: int = 0
         self._subpages_attempted_total: int = 0
         self._subpages_ok_total: int = 0
+        self._subpages_skipped_total: int = 0
         self._subpage_error_cats: Dict[str, int] = {}
         self._main_page_failures: int = 0
         self._main_page_fail_reasons: Dict[str, int] = {}
@@ -395,7 +396,7 @@ class BatchScrapeProcessor:
 
     async def _do_scrape(self, cnpj: str, url: str, discovery_id: Optional[int]) -> CompanyResult:
         result = await scrape_all_subpages(
-            url=url, max_subpages=5,
+            url=url, max_subpages=MAX_SUBPAGES,
             ctx_label=f"[B{self.batch_id}]", request_id=cnpj,
         )
         self._aggregate_scrape_meta(result)
@@ -453,6 +454,7 @@ class BatchScrapeProcessor:
         self._links_selected_total += result.links_selected
         self._subpages_attempted_total += result.subpages_attempted
         self._subpages_ok_total += result.subpages_ok
+        self._subpages_skipped_total += result.subpages_skipped
 
         if not result.main_page_ok:
             self._main_page_failures += 1
@@ -590,7 +592,9 @@ class BatchScrapeProcessor:
                 "attempted": self._subpages_attempted_total,
                 "ok": self._subpages_ok_total,
                 "fail": self._subpages_attempted_total - self._subpages_ok_total,
+                "skipped_circuit_breaker": self._subpages_skipped_total,
                 "success_rate_pct": round(self._subpages_ok_total / self._subpages_attempted_total * 100, 1) if self._subpages_attempted_total > 0 else 0,
+                "success_rate_real_pct": round(self._subpages_ok_total / max(1, self._subpages_attempted_total + self._subpages_skipped_total) * 100, 1),
                 "fail_reasons": dict(sorted(self._subpage_error_cats.items(), key=lambda x: -x[1])) if self._subpage_error_cats else {},
                 "time_ms": _percentiles(sub_times_sorted, [50, 75, 90, 95, 99]) if sub_times_sorted else {},
             },
@@ -645,6 +649,7 @@ class BatchScrapeProcessor:
                 "subpages_attempted": subpages_attempted,
                 "subpages_ok": subpages_ok,
                 "subpages_failed": subpages_attempted - subpages_ok,
+                "subpages_skipped": self._subpages_skipped_total,
                 "subpage_success_rate_pct": round(subpages_ok / subpages_attempted * 100, 1) if subpages_attempted > 0 else 0,
                 "avg_subpages_per_company": round(subpages_attempted / processed, 1) if processed > 0 else 0,
                 "subpage_error_breakdown": dict(sorted(self._subpage_error_cats.items(), key=lambda x: -x[1])),

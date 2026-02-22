@@ -15,16 +15,20 @@ logger = logging.getLogger(__name__)
 _cfg = load_config("scraper/scraper_config.json") or {}
 
 REQUEST_TIMEOUT: int = _cfg.get("request_timeout", 15)
-MAX_SUBPAGES: int = _cfg.get("max_subpages", 5)
-PER_DOMAIN_CONCURRENT: int = _cfg.get("per_domain_concurrent", 5)
+SUBPAGE_TIMEOUT: int = _cfg.get("subpage_timeout", 12)
+MAX_SUBPAGES: int = _cfg.get("max_subpages", 10)
+PER_DOMAIN_CONCURRENT: int = _cfg.get("per_domain_concurrent", 3)
+STAGGER_DELAY: float = _cfg.get("stagger_delay", 0.3)
+CIRCUIT_BREAKER_THRESHOLD: int = _cfg.get("circuit_breaker_threshold", 2)
 FLUSH_SIZE: int = _cfg.get("flush_size", 500)
 MIN_CONTENT_LENGTH: int = _cfg.get("min_content_length", 100)
 MAX_CONCURRENT_REQUESTS: int = _cfg.get("max_concurrent_requests", 2000)
 
 logger.info(
-    f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s "
-    f"subpages={MAX_SUBPAGES} flush={FLUSH_SIZE} "
-    f"max_concurrent={MAX_CONCURRENT_REQUESTS}"
+    f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s sub_timeout={SUBPAGE_TIMEOUT}s "
+    f"subpages={MAX_SUBPAGES} domain_conc={PER_DOMAIN_CONCURRENT} "
+    f"stagger={STAGGER_DELAY}s cb_threshold={CIRCUIT_BREAKER_THRESHOLD} "
+    f"flush={FLUSH_SIZE} max_concurrent={MAX_CONCURRENT_REQUESTS}"
 )
 
 # ---------------------------------------------------------------------------
