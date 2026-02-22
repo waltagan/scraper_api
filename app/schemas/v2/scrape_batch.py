@@ -15,6 +15,10 @@ class BatchScrapeRequest(BaseModel):
         default=['muito_alto', 'alto', 'medio'],
         description="Lista de discovery_status para filtrar"
     )
+    proxy_mode: str = Field(
+        default="gateway",
+        description="Modo de proxy: gateway (rotativo 711Proxy), byport (portas dedicadas), combined (ambos)"
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -23,7 +27,8 @@ class BatchScrapeRequest(BaseModel):
                 "worker_count": 2000,
                 "flush_size": 1000,
                 "instances": 10,
-                "status_filter": ["muito_alto", "alto", "medio"]
+                "status_filter": ["muito_alto", "alto", "medio"],
+                "proxy_mode": "gateway"
             }
         }
     )

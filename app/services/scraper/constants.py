@@ -27,6 +27,9 @@ NUM_INSTANCES: int = _cfg.get("num_instances", 3)
 FLUSH_SIZE: int = _cfg.get("flush_size", 1000)
 MIN_CONTENT_LENGTH: int = _cfg.get("min_content_length", 100)
 MAX_CONCURRENT_PROXY_REQUESTS: int = _cfg.get("max_concurrent_proxy_requests", 1000)
+BYPORT_MAX_CONCURRENT: int = _cfg.get("byport_max_concurrent", 2000)
+COMBINED_MAX_CONCURRENT: int = _cfg.get("combined_max_concurrent", 2800)
+BYPORT_PER_PORT_OPTIMAL: int = _cfg.get("byport_per_port_optimal", 400)
 
 logger.info(
     f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s retries={MAX_RETRIES} "

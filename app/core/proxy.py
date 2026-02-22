@@ -14,6 +14,12 @@ class ProxyManager:
         self.list_url = settings.WEBSHARE_PROXY_LIST_URL
         self.gateway_url = settings.PROXY_GATEWAY_URL
         self.is_gateway_mode = bool(self.gateway_url)
+
+        self.byport_urls: List[str] = []
+        raw = settings.PROXY_BYPORT_URLS.strip()
+        if raw:
+            self.byport_urls = [u.strip() for u in raw.split(",") if u.strip()]
+
         self._last_refresh_attempt: float = 0.0
         self._last_successful_refresh: float = 0.0
         self._consecutive_failures: int = 0
@@ -24,7 +30,9 @@ class ProxyManager:
 
         if self.is_gateway_mode:
             self.proxies = [self.gateway_url]
-            logger.info(f"[ProxyManager] 🌐 Gateway mode: {self.gateway_url[:40]}...")
+            logger.info(f"[ProxyManager] Gateway mode: {self.gateway_url[:40]}...")
+        if self.byport_urls:
+            logger.info(f"[ProxyManager] ByPort disponivel: {len(self.byport_urls)} portas")
 
     async def _refresh_proxies(self, force: bool = False):
         """Downloads and parses the proxy list from Webshare with backoff.

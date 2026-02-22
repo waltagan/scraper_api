@@ -526,6 +526,7 @@ class BatchScrapeProcessor:
         status_filter: Optional[List[str]] = None,
         limit: Optional[int] = None,
         instances: int = NUM_INSTANCES,
+        proxy_mode: str = "gateway",
     ):
         self.batch_id = str(uuid.uuid4())[:8]
         self.worker_count = worker_count
@@ -533,6 +534,7 @@ class BatchScrapeProcessor:
         self.status_filter = status_filter or ['muito_alto', 'alto', 'medio']
         self.limit = limit
         self.num_instances = instances
+        self.proxy_mode = proxy_mode
 
         self._task: Optional[asyncio.Task] = None
         self._instances: List[BatchInstance] = []
@@ -593,6 +595,7 @@ class BatchScrapeProcessor:
         loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=400))
 
         from app.services.scraper_manager.proxy_manager import proxy_pool
+        from app.services.scraper.proxy_gate import configure_gate
 
         proxy_count = await proxy_pool.preload()
         if proxy_count == 0:
@@ -600,13 +603,22 @@ class BatchScrapeProcessor:
             self.status = "error"
             return
 
-        self._proxy_health = await proxy_pool.health_check()
-        if not self._proxy_health.get("healthy", False):
-            logger.error(f"[Batch {self.batch_id}] Gateway proxy falhou! Abortando.")
+        try:
+            proxy_pool.set_mode(self.proxy_mode)
+        except ValueError as e:
+            logger.error(f"[Batch {self.batch_id}] Modo proxy invalido: {e}")
             self.status = "error"
             return
 
-        logger.info(f"[Batch {self.batch_id}] Gateway OK. Carregando empresas...")
+        configure_gate(self.proxy_mode)
+
+        self._proxy_health = await proxy_pool.health_check()
+        if not self._proxy_health.get("healthy", False):
+            logger.error(f"[Batch {self.batch_id}] Proxy health check falhou! Abortando.")
+            self.status = "error"
+            return
+
+        logger.info(f"[Batch {self.batch_id}] Proxy OK (mode={self.proxy_mode}). Carregando empresas...")
         all_companies = await self._load_all_companies()
 
         if not all_companies:
@@ -620,7 +632,8 @@ class BatchScrapeProcessor:
 
         logger.info(
             f"[Batch {self.batch_id}] {self.total} empresas, "
-            f"{self.num_instances} instâncias x {workers_per_instance} workers"
+            f"{self.num_instances} instâncias x {workers_per_instance} workers "
+            f"(proxy: {self.proxy_mode})"
         )
 
         try:

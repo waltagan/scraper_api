@@ -1,20 +1,25 @@
 """
-Proxy Manager — Gateway mode only (711Proxy residential).
-Single rotating endpoint, sem health check individual ou weighted selection.
+Proxy Manager — Suporte a 3 modos: gateway, byport, combined.
+
+- gateway: Endpoint rotativo 711Proxy (us.rotgb) — ideal para rotating IPs.
+- byport:  Portas dedicadas com IPs sticky — alta concorrência por porta.
+- combined: Usa ambos para máximo throughput.
 """
 
 import asyncio
+import itertools
 import logging
 import time
-from typing import Optional, Dict
-from dataclasses import dataclass
+from typing import Optional, Dict, List
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+VALID_MODES = ("gateway", "byport", "combined")
 
 
 @dataclass
 class ProxyStats:
-    """Métricas de uso do proxy gateway."""
     requests: int = 0
     successes: int = 0
     failures: int = 0
@@ -22,43 +27,106 @@ class ProxyStats:
 
 class ProxyPool:
     """
-    Pool simplificado — gateway mode only.
-    O provider (711Proxy) faz rotação automática de IPs.
+    Pool multi-modo com round-robin para byport.
+    O mode é configurado por batch — padrão é gateway.
     """
 
     def __init__(self):
         self._gateway_url: str = ""
+        self._byport_urls: List[str] = []
+        self._mode: str = "gateway"
         self._loaded = False
-        self._stats = ProxyStats()
         self._health_checked = False
 
+        self._stats_gateway = ProxyStats()
+        self._stats_byport = ProxyStats()
+        self._byport_cycle = itertools.cycle([])
+        self._combined_cycle = itertools.cycle([])
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
     async def preload(self) -> int:
-        """Carrega URL do proxy gateway."""
         from app.core.proxy import proxy_manager
 
-        if not proxy_manager.is_gateway_mode:
-            logger.warning("[ProxyPool] List mode não suportado. Configure PROXY_GATEWAY_URL.")
-            return 0
+        if proxy_manager.is_gateway_mode:
+            self._gateway_url = proxy_manager.gateway_url
 
-        self._gateway_url = proxy_manager.gateway_url
+        if proxy_manager.byport_urls:
+            self._byport_urls = list(proxy_manager.byport_urls)
+            self._byport_cycle = itertools.cycle(self._byport_urls)
+
         self._loaded = True
-        logger.info(f"[ProxyPool] Gateway mode ativo — endpoint: {self._gateway_url[:50]}...")
-        return 1
+        count = (1 if self._gateway_url else 0) + len(self._byport_urls)
+        logger.info(
+            f"[ProxyPool] Carregado: gateway={'sim' if self._gateway_url else 'nao'}, "
+            f"byport={len(self._byport_urls)} portas, total={count}"
+        )
+        return count
+
+    def set_mode(self, mode: str):
+        if mode not in VALID_MODES:
+            raise ValueError(f"Modo invalido: {mode}. Use: {VALID_MODES}")
+
+        if mode == "byport" and not self._byport_urls:
+            raise ValueError("Modo byport requer PROXY_BYPORT_URLS configurado")
+        if mode == "gateway" and not self._gateway_url:
+            raise ValueError("Modo gateway requer PROXY_GATEWAY_URL configurado")
+        if mode == "combined" and (not self._gateway_url or not self._byport_urls):
+            raise ValueError("Modo combined requer PROXY_GATEWAY_URL e PROXY_BYPORT_URLS")
+
+        old = self._mode
+        self._mode = mode
+
+        self._byport_cycle = itertools.cycle(self._byport_urls) if self._byport_urls else itertools.cycle([])
+        if mode == "combined":
+            all_urls = [self._gateway_url] + self._byport_urls
+            self._combined_cycle = itertools.cycle(all_urls)
+
+        logger.info(f"[ProxyPool] Modo alterado: {old} -> {mode}")
 
     async def health_check(self, test_url: str = "http://httpbin.org/ip", timeout: int = 8) -> dict:
-        """Health check rápido — 3 requests de teste."""
-        logger.info(f"[ProxyPool] Gateway health check: {self._gateway_url[:50]}...")
+        results = {}
+
+        if self._gateway_url and self._mode in ("gateway", "combined"):
+            results["gateway"] = await self._check_endpoint(
+                self._gateway_url, "gateway", test_url, timeout
+            )
+
+        if self._byport_urls and self._mode in ("byport", "combined"):
+            bp_results = []
+            for url in self._byport_urls[:5]:
+                r = await self._check_endpoint(url, "byport", test_url, timeout, attempts=1)
+                bp_results.append(r)
+            ok = sum(1 for r in bp_results if r.get("healthy"))
+            results["byport"] = {
+                "mode": "byport",
+                "ports_total": len(self._byport_urls),
+                "ports_tested": len(bp_results),
+                "ports_healthy": ok,
+                "healthy": ok > 0,
+            }
+
+        self._health_checked = True
+        overall = all(v.get("healthy", False) for v in results.values())
+        results["mode"] = self._mode
+        results["healthy"] = overall
+        return results
+
+    async def _check_endpoint(
+        self, proxy_url: str, label: str, test_url: str, timeout: int, attempts: int = 3
+    ) -> dict:
         latencies = []
         errors = []
-
-        for _ in range(3):
+        for _ in range(attempts):
             t0 = time.perf_counter()
             try:
                 from curl_cffi.requests import AsyncSession
                 from app.services.scraper.constants import get_random_impersonate
                 async with AsyncSession(
                     impersonate=get_random_impersonate(),
-                    proxy=self._gateway_url, timeout=timeout, verify=False,
+                    proxy=proxy_url, timeout=timeout, verify=False,
                 ) as session:
                     resp = await asyncio.wait_for(session.get(test_url), timeout=timeout)
                     lat = (time.perf_counter() - t0) * 1000
@@ -68,55 +136,77 @@ class ProxyPool:
                         errors.append(f"status_{resp.status_code}")
             except Exception as e:
                 errors.append(type(e).__name__)
-
-        self._health_checked = True
         healthy = len(latencies) > 0
-        avg_lat = sum(latencies) / len(latencies) if latencies else 0
-
-        stats = {
-            "mode": "gateway",
+        avg = sum(latencies) / len(latencies) if latencies else 0
+        logger.info(f"[ProxyPool] Health {label}: {'OK' if healthy else 'FALHA'} ({len(latencies)}/{attempts}, {avg:.0f}ms)")
+        return {
+            "mode": label,
             "healthy": healthy,
-            "pool_active": 1 if healthy else 0,
             "tests_ok": len(latencies),
             "tests_failed": len(errors),
-            "latency_ms": {"avg": round(avg_lat, 1)} if latencies else {},
-            "errors": errors or None,
+            "latency_ms": {"avg": round(avg, 1)} if latencies else {},
         }
 
-        emoji = "OK" if healthy else "FALHA"
-        logger.info(f"[ProxyPool] Gateway health check {emoji}: {len(latencies)}/3 OK, latência={avg_lat:.0f}ms")
-        return stats
-
     def get_next_proxy(self) -> Optional[str]:
-        """Retorna URL do gateway."""
-        self._stats.requests += 1
-        return self._gateway_url
+        if self._mode == "gateway":
+            self._stats_gateway.requests += 1
+            return self._gateway_url
+        elif self._mode == "byport":
+            self._stats_byport.requests += 1
+            return next(self._byport_cycle, None)
+        else:
+            url = next(self._combined_cycle, None)
+            if url == self._gateway_url:
+                self._stats_gateway.requests += 1
+            else:
+                self._stats_byport.requests += 1
+            return url
 
     def get_proxy_excluding(self, exclude=None) -> Optional[str]:
-        """Em gateway mode, sempre retorna o mesmo endpoint (auto-rotação)."""
         return self.get_next_proxy()
 
     def record_success(self, proxy: str = ""):
-        self._stats.successes += 1
+        if proxy == self._gateway_url:
+            self._stats_gateway.successes += 1
+        else:
+            self._stats_byport.successes += 1
 
     def record_failure(self, proxy: str = "", reason: str = ""):
-        self._stats.failures += 1
+        if proxy == self._gateway_url:
+            self._stats_gateway.failures += 1
+        else:
+            self._stats_byport.failures += 1
 
     def get_status(self) -> dict:
-        total = self._stats.successes + self._stats.failures
+        def _rate(s: ProxyStats) -> str:
+            t = s.successes + s.failures
+            return f"{s.successes / t:.1%}" if t > 0 else "N/A"
+
         return {
             "loaded": self._loaded,
-            "mode": "gateway",
-            "gateway_url": self._gateway_url[:50] + "..." if self._gateway_url else "",
+            "mode": self._mode,
             "health_checked": self._health_checked,
-            "total_requests": self._stats.requests,
-            "successes": self._stats.successes,
-            "failures": self._stats.failures,
-            "success_rate": f"{self._stats.successes / total:.1%}" if total > 0 else "N/A",
+            "gateway": {
+                "url": self._gateway_url[:50] + "..." if self._gateway_url else "",
+                "available": bool(self._gateway_url),
+                "requests": self._stats_gateway.requests,
+                "successes": self._stats_gateway.successes,
+                "failures": self._stats_gateway.failures,
+                "success_rate": _rate(self._stats_gateway),
+            },
+            "byport": {
+                "ports": len(self._byport_urls),
+                "available": bool(self._byport_urls),
+                "requests": self._stats_byport.requests,
+                "successes": self._stats_byport.successes,
+                "failures": self._stats_byport.failures,
+                "success_rate": _rate(self._stats_byport),
+            },
         }
 
     def reset_metrics(self):
-        self._stats = ProxyStats()
+        self._stats_gateway = ProxyStats()
+        self._stats_byport = ProxyStats()
 
 
 proxy_pool = ProxyPool()

@@ -59,6 +59,7 @@ class Settings:
 
     WEBSHARE_PROXY_LIST_URL: str = os.getenv("WEBSHARE_PROXY_LIST_URL", "")
     PROXY_GATEWAY_URL: str = os.getenv("PROXY_GATEWAY_URL", "")
+    PROXY_BYPORT_URLS: str = os.getenv("PROXY_BYPORT_URLS", "")
 
     # Database (PostgreSQL Railway)
     # IMPORTANTE: Configure DATABASE_URL como variável de ambiente no Railway

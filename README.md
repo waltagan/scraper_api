@@ -22,11 +22,35 @@ Todos os endpoints retornam imediatamente e processam em background.
 
 **Nota**: As variáveis `VLLM_*` funcionam com qualquer instância SGLang compatível com OpenAI API (/v1/*).
 
+### Proxy
+- `PROXY_GATEWAY_URL` - URL do gateway rotativo 711Proxy (ex: `http://user:pass@us.rotgb.711proxy.com:10000`)
+- `PROXY_BYPORT_URLS` - URLs das portas dedicadas 711Proxy, separadas por vírgula (ex: `http://user:pass@128.14.145.62:25001,...`)
+
 ### Opcionais
 - `GOOGLE_API_KEY` - API key do Google Gemini (fallback)
 - `OPENAI_API_KEY` - API key da OpenAI (fallback)
 - `API_ACCESS_TOKEN` - Token de autenticação
 - `PHOENIX_COLLECTOR_URL` - URL do Phoenix (observabilidade)
+
+## Proxy Modes
+
+O batch scrape suporta 3 modos de proxy (parâmetro `proxy_mode` na chamada):
+
+| Modo | Semáforo | Descrição |
+|------|----------|-----------|
+| `gateway` (padrão) | 800 | Gateway rotativo 711Proxy — IPs rotativos por request |
+| `byport` | 2000 | Portas dedicadas com IPs sticky — round-robin entre portas |
+| `combined` | 2800 | Usa gateway + byport simultaneamente para máximo throughput |
+
+## Patterns & Technology
+
+- **Framework**: FastAPI + asyncio
+- **HTTP Client**: curl_cffi (TLS fingerprint rotation)
+- **Proxy**: 711Proxy (gateway rotating + byport sticky)
+- **Concurrency Control**: asyncio.Semaphore (proxy_gate) — dinâmico por modo
+- **Database**: PostgreSQL (Railway)
+- **LLM**: SGLang via Vast.ai (Qwen)
+- **Observability**: Phoenix tracing
 
 ## Deploy
 
