@@ -50,10 +50,13 @@ async def scrape_all_subpages(
     meta = ScrapeResult()
 
     # 1. PROBE URL
+    t_probe = time.perf_counter()
     try:
         best_url, probe_time = await url_prober.probe(url)
         url = best_url
+        meta.probe_ok = True
     except URLNotReachable as e:
+        meta.probe_time_ms = (time.perf_counter() - t_probe) * 1000
         log_msg = e.get_log_message()
         logger.error(f"{ctx_label} URL inacessível: {url} - {log_msg}")
         error_type = getattr(e, 'error_type', None)
@@ -61,10 +64,14 @@ async def scrape_all_subpages(
         meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
         return meta
     except Exception as e:
+        meta.probe_ok = True
         logger.warning(f"{ctx_label} Erro no probe, usando URL original: {e}")
+    meta.probe_time_ms = (time.perf_counter() - t_probe) * 1000
 
     # 2. SCRAPE MAIN PAGE
+    t_main = time.perf_counter()
     main_page = await _scrape_page_with_retry(url, ctx_label)
+    meta.main_scrape_time_ms = (time.perf_counter() - t_main) * 1000
 
     if not main_page or not main_page.success:
         fail_reason = _get_fail_reason(main_page)
@@ -85,12 +92,14 @@ async def scrape_all_subpages(
     meta.links_selected = len(target_subpages)
 
     # 4. SCRAPE SUBPAGES EM PARALELO
+    t_sub = time.perf_counter()
     subpages = []
     if target_subpages:
         domain_sem = asyncio.Semaphore(PER_DOMAIN_CONCURRENT)
         subpages = await _scrape_subpages_parallel(
             target_subpages, domain_sem, ctx_label
         )
+    meta.subpages_time_ms = (time.perf_counter() - t_sub) * 1000
 
     # 5. CONSOLIDAR
     all_pages = [main_page] + subpages
@@ -109,7 +118,9 @@ async def scrape_all_subpages(
     ok = sum(1 for p in all_pages if p.success)
     logger.info(
         f"{ctx_label} {url[:50]} | {ok}/{len(all_pages)} ok | "
-        f"{meta.total_time_ms:.0f}ms links={meta.links_in_html}->{meta.links_selected} "
+        f"probe={meta.probe_time_ms:.0f}ms main={meta.main_scrape_time_ms:.0f}ms "
+        f"sub={meta.subpages_time_ms:.0f}ms total={meta.total_time_ms:.0f}ms "
+        f"links={meta.links_in_html}->{meta.links_selected} "
         f"subpages={meta.subpages_ok}/{meta.subpages_attempted}"
     )
     return meta

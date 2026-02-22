@@ -278,6 +278,14 @@ class BatchInstance:
         self._main_page_fail_reasons: Dict[str, int] = {}
         self._zero_links_companies: int = 0
 
+        self._probe_times: List[float] = []
+        self._probe_ok: int = 0
+        self._probe_fail: int = 0
+        self._main_scrape_times: List[float] = []
+        self._main_scrape_ok: int = 0
+        self._main_scrape_fail: int = 0
+        self._subpages_times: List[float] = []
+
     async def run(self):
         self.status = "running"
         self._start_time = time.time()
@@ -467,6 +475,23 @@ class BatchInstance:
             self._zero_links_companies += 1
         for cat, count in result.subpage_errors.items():
             self._subpage_error_cats[cat] = self._subpage_error_cats.get(cat, 0) + count
+
+        if result.probe_time_ms > 0:
+            self._probe_times.append(result.probe_time_ms)
+        if result.probe_ok:
+            self._probe_ok += 1
+        else:
+            self._probe_fail += 1
+
+        if result.probe_ok and result.main_scrape_time_ms > 0:
+            self._main_scrape_times.append(result.main_scrape_time_ms)
+        if result.main_page_ok:
+            self._main_scrape_ok += 1
+        elif result.probe_ok:
+            self._main_scrape_fail += 1
+
+        if result.main_page_ok and result.subpages_time_ms > 0:
+            self._subpages_times.append(result.subpages_time_ms)
 
     async def _flush_buffer(self, force: bool = False):
         if force:
@@ -736,6 +761,56 @@ class BatchScrapeProcessor:
         infra = self._get_infrastructure_stats()
         diagnosis = _build_failure_diagnosis(main_page_fail_reasons, processed)
 
+        probe_times_all: List[float] = []
+        main_times_all: List[float] = []
+        sub_times_all: List[float] = []
+        probe_ok_total = 0
+        probe_fail_total = 0
+        main_ok_total = 0
+        main_fail_total = 0
+        for inst in self._instances:
+            probe_times_all.extend(inst._probe_times)
+            main_times_all.extend(inst._main_scrape_times)
+            sub_times_all.extend(inst._subpages_times)
+            probe_ok_total += inst._probe_ok
+            probe_fail_total += inst._probe_fail
+            main_ok_total += inst._main_scrape_ok
+            main_fail_total += inst._main_scrape_fail
+
+        probe_times_all.sort()
+        main_times_all.sort()
+        sub_times_all.sort()
+
+        probe_entered = probe_ok_total + probe_fail_total
+        main_entered = probe_ok_total
+        sub_entered = main_ok_total
+
+        stage_funnel = {
+            "probe": {
+                "entered": probe_entered,
+                "ok": probe_ok_total,
+                "fail": probe_fail_total,
+                "success_rate_pct": round(probe_ok_total / probe_entered * 100, 1) if probe_entered > 0 else 0,
+                "time_ms": _percentiles(probe_times_all, [50, 75, 90, 95, 99]) if probe_times_all else {},
+            },
+            "main_page": {
+                "entered": main_entered,
+                "ok": main_ok_total,
+                "fail": main_fail_total,
+                "success_rate_pct": round(main_ok_total / main_entered * 100, 1) if main_entered > 0 else 0,
+                "time_ms": _percentiles(main_times_all, [50, 75, 90, 95, 99]) if main_times_all else {},
+            },
+            "subpages": {
+                "entered": sub_entered,
+                "attempted": subpages_attempted,
+                "ok": subpages_ok,
+                "fail": subpages_attempted - subpages_ok,
+                "success_rate_pct": round(subpages_ok / subpages_attempted * 100, 1) if subpages_attempted > 0 else 0,
+                "time_ms": _percentiles(sub_times_all, [50, 75, 90, 95, 99]) if sub_times_all else {},
+            },
+            "overall_funnel_pct": round(self.success_count / processed * 100, 1) if processed > 0 else 0,
+        }
+
         return {
             "batch_id": self.batch_id,
             "status": self.status,
@@ -757,6 +832,7 @@ class BatchScrapeProcessor:
             "pages_per_company_avg": avg_pages,
             "total_retries": total_retries,
             "failure_diagnosis": diagnosis,
+            "stage_funnel": stage_funnel,
             "subpage_pipeline": {
                 "links_in_html_total": links_in_html,
                 "links_after_filter": links_after_filter,

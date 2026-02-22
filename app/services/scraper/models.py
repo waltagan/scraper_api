@@ -35,3 +35,8 @@ class ScrapeResult:
     main_page_ok: bool = False
     total_time_ms: float = 0.0
     main_page_fail_reason: str = ""
+
+    probe_time_ms: float = 0.0
+    probe_ok: bool = False
+    main_scrape_time_ms: float = 0.0
+    subpages_time_ms: float = 0.0
