@@ -281,9 +281,11 @@ class BatchInstance:
         self._probe_times: List[float] = []
         self._probe_ok: int = 0
         self._probe_fail: int = 0
+        self._probe_fail_reasons: Dict[str, int] = {}
         self._main_scrape_times: List[float] = []
         self._main_scrape_ok: int = 0
         self._main_scrape_fail: int = 0
+        self._main_scrape_fail_reasons: Dict[str, int] = {}
         self._subpages_times: List[float] = []
 
     async def run(self):
@@ -482,6 +484,9 @@ class BatchInstance:
             self._probe_ok += 1
         else:
             self._probe_fail += 1
+            reason = result.main_page_fail_reason or "unknown"
+            bucket = _bucket_fail_reason(reason)
+            self._probe_fail_reasons[bucket] = self._probe_fail_reasons.get(bucket, 0) + 1
 
         if result.probe_ok and result.main_scrape_time_ms > 0:
             self._main_scrape_times.append(result.main_scrape_time_ms)
@@ -489,6 +494,9 @@ class BatchInstance:
             self._main_scrape_ok += 1
         elif result.probe_ok:
             self._main_scrape_fail += 1
+            reason = result.main_page_fail_reason or "unknown"
+            bucket = _bucket_fail_reason(reason)
+            self._main_scrape_fail_reasons[bucket] = self._main_scrape_fail_reasons.get(bucket, 0) + 1
 
         if result.main_page_ok and result.subpages_time_ms > 0:
             self._subpages_times.append(result.subpages_time_ms)
@@ -768,6 +776,8 @@ class BatchScrapeProcessor:
         probe_fail_total = 0
         main_ok_total = 0
         main_fail_total = 0
+        probe_fail_reasons_all: Dict[str, int] = {}
+        main_fail_reasons_all: Dict[str, int] = {}
         for inst in self._instances:
             probe_times_all.extend(inst._probe_times)
             main_times_all.extend(inst._main_scrape_times)
@@ -776,6 +786,10 @@ class BatchScrapeProcessor:
             probe_fail_total += inst._probe_fail
             main_ok_total += inst._main_scrape_ok
             main_fail_total += inst._main_scrape_fail
+            for r, c in inst._probe_fail_reasons.items():
+                probe_fail_reasons_all[r] = probe_fail_reasons_all.get(r, 0) + c
+            for r, c in inst._main_scrape_fail_reasons.items():
+                main_fail_reasons_all[r] = main_fail_reasons_all.get(r, 0) + c
 
         probe_times_all.sort()
         main_times_all.sort()
@@ -791,6 +805,7 @@ class BatchScrapeProcessor:
                 "ok": probe_ok_total,
                 "fail": probe_fail_total,
                 "success_rate_pct": round(probe_ok_total / probe_entered * 100, 1) if probe_entered > 0 else 0,
+                "fail_reasons": dict(sorted(probe_fail_reasons_all.items(), key=lambda x: -x[1])) if probe_fail_reasons_all else {},
                 "time_ms": _percentiles(probe_times_all, [50, 75, 90, 95, 99]) if probe_times_all else {},
             },
             "main_page": {
@@ -798,6 +813,7 @@ class BatchScrapeProcessor:
                 "ok": main_ok_total,
                 "fail": main_fail_total,
                 "success_rate_pct": round(main_ok_total / main_entered * 100, 1) if main_entered > 0 else 0,
+                "fail_reasons": dict(sorted(main_fail_reasons_all.items(), key=lambda x: -x[1])) if main_fail_reasons_all else {},
                 "time_ms": _percentiles(main_times_all, [50, 75, 90, 95, 99]) if main_times_all else {},
             },
             "subpages": {
@@ -806,6 +822,7 @@ class BatchScrapeProcessor:
                 "ok": subpages_ok,
                 "fail": subpages_attempted - subpages_ok,
                 "success_rate_pct": round(subpages_ok / subpages_attempted * 100, 1) if subpages_attempted > 0 else 0,
+                "fail_reasons": dict(sorted(subpage_err_cats.items(), key=lambda x: -x[1])) if subpage_err_cats else {},
                 "time_ms": _percentiles(sub_times_all, [50, 75, 90, 95, 99]) if sub_times_all else {},
             },
             "overall_funnel_pct": round(self.success_count / processed * 100, 1) if processed > 0 else 0,
