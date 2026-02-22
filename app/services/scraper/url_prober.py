@@ -167,11 +167,9 @@ class URLProber:
         if not HAS_CURL_CFFI:
             return None, (ProbeErrorType.UNKNOWN, "curl_cffi não disponível")
         try:
-            from app.services.scraper_manager.proxy_manager import proxy_pool
-            proxy = proxy_pool.get_next_proxy()
             headers, impersonate = build_headers()
 
-            async with acquire_proxy_slot():
+            async with acquire_proxy_slot() as proxy:
                 async with AsyncSession(
                     impersonate=impersonate, proxy=proxy,
                     timeout=self.timeout, verify=False, max_redirects=5,

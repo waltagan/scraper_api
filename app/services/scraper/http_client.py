@@ -91,9 +91,9 @@ async def cffi_scrape(
         resp = await session.get(url, headers=headers)
     else:
         headers, impersonate = build_headers()
-        async with acquire_proxy_slot():
+        async with acquire_proxy_slot() as gw_proxy:
             async with AsyncSession(
-                impersonate=impersonate, proxy=proxy,
+                impersonate=impersonate, proxy=proxy or gw_proxy,
                 timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
             ) as s:
                 resp = await s.get(url)
@@ -121,9 +121,9 @@ async def cffi_scrape_safe(
 
     try:
         headers, impersonate = build_headers()
-        async with acquire_proxy_slot():
+        async with acquire_proxy_slot() as gw_proxy:
             async with AsyncSession(
-                impersonate=impersonate, proxy=proxy,
+                impersonate=impersonate, proxy=proxy or gw_proxy,
                 timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
             ) as s:
                 resp = await s.get(url)

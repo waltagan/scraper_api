@@ -9,8 +9,5 @@
   "num_instances": 5,
   "flush_size": 1000,
   "min_content_length": 100,
-  "max_concurrent_proxy_requests": 800,
-  "byport_max_concurrent": 2000,
-  "combined_max_concurrent": 2800,
-  "byport_per_port_optimal": 400
+  "max_concurrent_proxy_requests": 800
 }

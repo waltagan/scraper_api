@@ -1,94 +1,177 @@
 """
-Semáforo global que limita conexões simultâneas ao proxy.
+Multi-gateway proxy gate — distribui carga entre múltiplos gateways 711Proxy.
 
-Suporta reconfiguração dinâmica via configure_gate() para ajustar
-o limite conforme o modo de proxy ativo (gateway, byport, combined).
+Cada gateway regional (US, AS, INA) tem capacidade independente de ~800
+conexões simultâneas. Este módulo mantém um semáforo por gateway e
+distribui requests round-robin pelo gateway com mais vagas livres.
 
-IMPORTANTE: o tempo de espera na fila do semáforo NÃO conta no
-timeout da request — o timeout só começa após adquirir a vaga.
+acquire_proxy_slot() agora YIELDS a proxy_url do gateway selecionado,
+eliminando a necessidade de chamar proxy_pool.get_next_proxy() separado.
 """
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
-from typing import Optional
+from dataclasses import dataclass
+from typing import List, Optional
 
-from .constants import (
-    MAX_CONCURRENT_PROXY_REQUESTS,
-    BYPORT_MAX_CONCURRENT,
-    COMBINED_MAX_CONCURRENT,
-)
+from .constants import MAX_CONCURRENT_PROXY_REQUESTS
 
 logger = logging.getLogger(__name__)
 
-_semaphore: Optional[asyncio.Semaphore] = None
-_current_limit: int = 0
-_pending: int = 0
-_active: int = 0
-
-MODE_LIMITS = {
-    "gateway": MAX_CONCURRENT_PROXY_REQUESTS,
-    "byport": BYPORT_MAX_CONCURRENT,
-    "combined": COMBINED_MAX_CONCURRENT,
-}
+GATEWAY_REGIONS = ["us", "as", "ina"]
 
 
-def configure_gate(mode: str = "gateway", custom_limit: int = 0):
-    """Reconfigura o semáforo para o modo de proxy ativo."""
-    global _semaphore, _current_limit, _pending, _active
+@dataclass
+class GatewaySlot:
+    name: str
+    proxy_url: str
+    semaphore: Optional[asyncio.Semaphore] = None
+    max_slots: int = 0
+    active: int = 0
+    pending: int = 0
+    total_acquired: int = 0
+    total_errors: int = 0
 
-    limit = custom_limit if custom_limit > 0 else MODE_LIMITS.get(mode, MAX_CONCURRENT_PROXY_REQUESTS)
 
-    if limit == _current_limit and _semaphore is not None:
+_gateways: List[GatewaySlot] = []
+_initialized: bool = False
+
+
+def _parse_gateway_urls() -> List[str]:
+    """
+    Lê PROXY_GATEWAY_URL (single) ou PROXY_GATEWAY_URLS (multi, comma-separated).
+    Se multi não estiver configurado, gera URLs para as 3 regiões a partir da single.
+    """
+    multi = os.getenv("PROXY_GATEWAY_URLS", "")
+    if multi:
+        return [u.strip() for u in multi.split(",") if u.strip()]
+
+    single = os.getenv("PROXY_GATEWAY_URL", "")
+    if not single:
+        return []
+
+    if "us.rotgb" in single and len(GATEWAY_REGIONS) > 1:
+        urls = []
+        for region in GATEWAY_REGIONS:
+            url = single.replace("us.rotgb", f"{region}.rotgb")
+            urls.append(url)
+        return urls
+
+    return [single]
+
+
+def _init_gateways() -> None:
+    global _gateways, _initialized
+
+    if _initialized:
         return
 
-    _semaphore = asyncio.Semaphore(limit)
-    _current_limit = limit
-    _pending = 0
-    _active = 0
-    logger.info(f"[proxy_gate] Semáforo configurado: mode={mode}, max={limit}")
+    urls = _parse_gateway_urls()
+    if not urls:
+        logger.warning("[proxy_gate] Nenhum gateway configurado!")
+        _initialized = True
+        return
+
+    slots_per_gw = MAX_CONCURRENT_PROXY_REQUESTS
+
+    for url in urls:
+        region = "unknown"
+        for r in GATEWAY_REGIONS:
+            if f"{r}.rotgb" in url or f"{r}.rot" in url:
+                region = r.upper()
+                break
+
+        gw = GatewaySlot(
+            name=region,
+            proxy_url=url,
+            semaphore=asyncio.Semaphore(slots_per_gw),
+            max_slots=slots_per_gw,
+        )
+        _gateways.append(gw)
+
+    total = sum(g.max_slots for g in _gateways)
+    names = [f"{g.name}({g.max_slots})" for g in _gateways]
+    logger.info(
+        f"[proxy_gate] {len(_gateways)} gateways inicializados: {', '.join(names)} "
+        f"| total={total} slots"
+    )
+    _initialized = True
 
 
-def _get_semaphore() -> asyncio.Semaphore:
-    global _semaphore, _current_limit
-    if _semaphore is None:
-        _semaphore = asyncio.Semaphore(MAX_CONCURRENT_PROXY_REQUESTS)
-        _current_limit = MAX_CONCURRENT_PROXY_REQUESTS
-        logger.info(f"[proxy_gate] Semáforo inicializado (default): max={MAX_CONCURRENT_PROXY_REQUESTS}")
-    return _semaphore
+def _select_gateway() -> GatewaySlot:
+    """Seleciona gateway com mais vagas livres (least-loaded)."""
+    if not _gateways:
+        raise RuntimeError("Nenhum proxy gateway configurado")
+
+    if len(_gateways) == 1:
+        return _gateways[0]
+
+    best = None
+    best_free = -1
+    for gw in _gateways:
+        free = gw.max_slots - gw.active
+        if free > best_free:
+            best_free = free
+            best = gw
+
+    return best  # type: ignore[return-value]
 
 
 @asynccontextmanager
 async def acquire_proxy_slot():
     """
-    Context manager que garante vaga antes de fazer a request.
+    Adquire vaga no gateway com menor carga e yields a proxy_url.
 
     Uso:
-        async with acquire_proxy_slot():
-            resp = await session.get(url, ...)
+        async with acquire_proxy_slot() as proxy_url:
+            resp = await session.get(url, proxy=proxy_url)
     """
-    global _pending, _active
-    _pending += 1
+    _init_gateways()
+    gw = _select_gateway()
+    gw.pending += 1
 
     try:
-        sem = _get_semaphore()
-        await sem.acquire()
-        _pending -= 1
-        _active += 1
+        await gw.semaphore.acquire()
+        gw.pending -= 1
+        gw.active += 1
+        gw.total_acquired += 1
 
         try:
-            yield
+            yield gw.proxy_url
         finally:
-            _active -= 1
-            sem.release()
+            gw.active -= 1
+            gw.semaphore.release()
     except BaseException:
-        _pending -= 1
+        gw.pending -= 1
         raise
 
 
 def get_gate_stats() -> dict:
+    _init_gateways()
+    gateways = []
+    total_active = 0
+    total_pending = 0
+    total_slots = 0
+
+    for gw in _gateways:
+        gateways.append({
+            "name": gw.name,
+            "max_slots": gw.max_slots,
+            "active": gw.active,
+            "pending": gw.pending,
+            "total_acquired": gw.total_acquired,
+            "free": gw.max_slots - gw.active,
+        })
+        total_active += gw.active
+        total_pending += gw.pending
+        total_slots += gw.max_slots
+
     return {
-        "max_slots": _current_limit or MAX_CONCURRENT_PROXY_REQUESTS,
-        "active": _active,
-        "pending": _pending,
+        "num_gateways": len(_gateways),
+        "total_slots": total_slots,
+        "total_active": total_active,
+        "total_pending": total_pending,
+        "gateways": gateways,
     }

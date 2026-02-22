@@ -32,7 +32,7 @@ from .http_client import cffi_scrape, cffi_scrape_safe
 from .proxy_gate import acquire_proxy_slot
 
 from app.services.scraper_manager.proxy_manager import (
-    proxy_pool, record_proxy_failure, record_proxy_success,
+    record_proxy_failure, record_proxy_success,
 )
 
 logger = logging.getLogger(__name__)
@@ -133,27 +133,17 @@ async def scrape_all_subpages(
 async def _scrape_page_with_retry(
     url: str, ctx_label: str = ""
 ) -> Optional[ScrapedPage]:
-    """Scrape de uma página com retry usando proxy diferente."""
-    used_proxies: set = set()
+    """Scrape de uma página com retry. Proxy selecionado pelo gate (load balancing)."""
     last_page = None
 
     for attempt in range(1 + MAX_RETRIES):
-        proxy = (
-            proxy_pool.get_proxy_excluding(used_proxies)
-            if used_proxies else proxy_pool.get_next_proxy()
-        )
-        if proxy:
-            used_proxies.add(proxy)
-
-        page = await _do_scrape(url, proxy, ctx_label)
+        page = await _do_scrape(url, ctx_label)
 
         if page.success:
-            if proxy:
-                record_proxy_success(proxy)
+            record_proxy_success("gateway")
             return page
 
-        if proxy:
-            record_proxy_failure(proxy, page.error or "unknown")
+        record_proxy_failure("gateway", page.error or "unknown")
         last_page = page
 
         if _is_site_rejection(page.error):
@@ -165,10 +155,10 @@ async def _scrape_page_with_retry(
     return last_page
 
 
-async def _do_scrape(url: str, proxy: Optional[str], ctx_label: str = "") -> ScrapedPage:
-    """Executa scrape via cffi_scrape_safe."""
+async def _do_scrape(url: str, ctx_label: str = "") -> ScrapedPage:
+    """Executa scrape via cffi_scrape_safe. Proxy selecionado pelo proxy_gate."""
     try:
-        text, docs, links = await cffi_scrape_safe(url, proxy)
+        text, docs, links = await cffi_scrape_safe(url)
 
         if not text:
             transport_err = cffi_scrape_safe.last_error or "empty_response"
@@ -200,12 +190,11 @@ async def _scrape_subpages_parallel(
     async def scrape_one(url: str) -> ScrapedPage:
         async with domain_sem:
             normalized = normalize_url(url)
-            proxy = proxy_pool.get_next_proxy()
             ref = smart_referer(url)
             headers, impersonate = build_headers(referer=ref)
 
             try:
-                async with acquire_proxy_slot():
+                async with acquire_proxy_slot() as proxy:
                     async with AsyncSession(
                         impersonate=impersonate, proxy=proxy,
                         timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
@@ -218,14 +207,12 @@ async def _scrape_subpages_parallel(
                 if not text or len(text) < 100 or is_soft_404(text) or is_cloudflare_challenge(text):
                     return ScrapedPage(url=normalized, content="", error="Empty or soft 404")
 
-                if proxy:
-                    record_proxy_success(proxy)
+                record_proxy_success(proxy)
                 return ScrapedPage(url=normalized, content=text,
                                    document_links=list(docs), status_code=200)
 
             except Exception as e:
-                if proxy:
-                    record_proxy_failure(proxy, str(e)[:30])
+                record_proxy_failure("gateway", str(e)[:30])
                 return ScrapedPage(url=normalized, content="", error=str(e))
 
     tasks = [scrape_one(u) for u in urls]

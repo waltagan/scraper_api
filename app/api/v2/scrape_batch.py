@@ -39,7 +39,6 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
         status_filter=request.status_filter,
         limit=request.limit,
         instances=request.instances,
-        proxy_mode=request.proxy_mode,
     )
     set_active_batch(processor)
     await processor.initialize()
@@ -49,7 +48,7 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
     logger.info(
         f"Batch {processor.batch_id} iniciado: "
         f"{request.instances} instâncias × {workers_per} workers, "
-        f"flush={request.flush_size}, limit={request.limit}, proxy={request.proxy_mode}"
+        f"flush={request.flush_size}, limit={request.limit}"
     )
 
     return BatchScrapeResponse(
@@ -61,8 +60,7 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
         instances=request.instances,
         message=(
             f"Batch {processor.batch_id} iniciado: "
-            f"{request.instances} instâncias × {workers_per} workers/inst. "
-            f"(proxy: {request.proxy_mode})"
+            f"{request.instances} instâncias × {workers_per} workers/inst."
         ),
     )
 
