@@ -9,5 +9,5 @@
   "num_instances": 5,
   "flush_size": 1000,
   "min_content_length": 100,
-  "sticky_pool_size": 2000
+  "sticky_pool_size": 10000
 }
