@@ -29,7 +29,7 @@ from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, pa
 from .link_selector import extract_and_prioritize_links, filter_non_html_links, prioritize_links
 from .url_prober import url_prober, URLNotReachable
 from .http_client import cffi_scrape, cffi_scrape_safe
-from .proxy_gate import acquire_proxy_slot
+from .proxy_gate import acquire_proxy_slot, record_gateway_result
 
 from app.services.scraper_manager.proxy_manager import (
     record_proxy_failure, record_proxy_success,
@@ -195,18 +195,27 @@ async def _scrape_subpages_parallel(
 
             try:
                 async with acquire_proxy_slot() as proxy:
-                    async with AsyncSession(
-                        impersonate=impersonate, proxy=proxy,
-                        timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
-                    ) as session:
-                        text, docs, _ = await asyncio.wait_for(
-                            cffi_scrape(normalized, proxy=None, session=session),
-                            timeout=REQUEST_TIMEOUT,
-                        )
+                    t0 = time.perf_counter()
+                    try:
+                        async with AsyncSession(
+                            impersonate=impersonate, proxy=proxy,
+                            timeout=REQUEST_TIMEOUT, headers=headers, verify=False,
+                        ) as session:
+                            text, docs, _ = await asyncio.wait_for(
+                                cffi_scrape(normalized, proxy=None, session=session),
+                                timeout=REQUEST_TIMEOUT,
+                            )
+                        lat = (time.perf_counter() - t0) * 1000
+                    except Exception:
+                        lat = (time.perf_counter() - t0) * 1000
+                        record_gateway_result(proxy, False, lat)
+                        raise
 
                 if not text or len(text) < 100 or is_soft_404(text) or is_cloudflare_challenge(text):
+                    record_gateway_result(proxy, False, lat)
                     return ScrapedPage(url=normalized, content="", error="Empty or soft 404")
 
+                record_gateway_result(proxy, True, lat)
                 record_proxy_success(proxy)
                 return ScrapedPage(url=normalized, content=text,
                                    document_links=list(docs), status_code=200)

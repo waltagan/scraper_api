@@ -19,7 +19,7 @@ except ImportError:
     AsyncSession = None
 
 from .constants import PROBE_TIMEOUT, MAX_RETRIES, build_headers
-from .proxy_gate import acquire_proxy_slot
+from .proxy_gate import acquire_proxy_slot, record_gateway_result
 
 logger = logging.getLogger(__name__)
 
@@ -184,13 +184,17 @@ class URLProber:
                             resp = await session.get(url, headers=headers, allow_redirects=True)
                             elapsed = (time.perf_counter() - start) * 1000
 
+                        record_gateway_result(proxy, resp.status_code < 400, elapsed)
                         return (elapsed, resp.status_code), None
                     except Exception as head_error:
                         if "redirect" in str(head_error).lower() or "47" in str(head_error):
                             start = time.perf_counter()
                             resp = await session.get(url, headers=headers, allow_redirects=True)
                             elapsed = (time.perf_counter() - start) * 1000
+                            record_gateway_result(proxy, resp.status_code < 400, elapsed)
                             return (elapsed, resp.status_code), None
+                        elapsed = (time.perf_counter() - start) * 1000
+                        record_gateway_result(proxy, False, elapsed)
                         raise
 
         except Exception as e:

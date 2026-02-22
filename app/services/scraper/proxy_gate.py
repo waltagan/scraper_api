@@ -1,26 +1,29 @@
 """
-Multi-gateway proxy gate — distribui carga entre múltiplos gateways 711Proxy.
+Multi-gateway proxy gate — distribui carga entre 4 gateways 711Proxy.
 
-Cada gateway regional (US, AS, INA) tem capacidade independente de ~800
-conexões simultâneas. Este módulo mantém um semáforo por gateway e
-distribui requests round-robin pelo gateway com mais vagas livres.
-
-acquire_proxy_slot() agora YIELDS a proxy_url do gateway selecionado,
-eliminando a necessidade de chamar proxy_pool.get_next_proxy() separado.
+Gateways ativos: GLOBAL, US, AS, HK (EU e INA descartados — connection reset).
+Cada gateway tem semáforo independente; seleção por least-loaded.
+acquire_proxy_slot() yields proxy_url e coleta métricas por gateway.
 """
 
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from .constants import MAX_CONCURRENT_PROXY_REQUESTS
 
 logger = logging.getLogger(__name__)
 
-GATEWAY_REGIONS = ["us", "as", "ina"]
+GATEWAY_REGIONS = ["global", "us", "as", "hk"]
+
+_REGION_LABELS = {
+    "global": "GLOBAL", "us": "US", "as": "AS", "hk": "HK",
+    "eu": "EU", "ina": "INA",
+}
 
 
 @dataclass
@@ -32,7 +35,39 @@ class GatewaySlot:
     active: int = 0
     pending: int = 0
     total_acquired: int = 0
-    total_errors: int = 0
+    total_success: int = 0
+    total_fail: int = 0
+    latencies: List[float] = field(default_factory=list)
+    _latency_window: int = 500
+
+    def record_success(self, latency_ms: float):
+        self.total_success += 1
+        self._record_latency(latency_ms)
+
+    def record_failure(self, latency_ms: float):
+        self.total_fail += 1
+        self._record_latency(latency_ms)
+
+    def _record_latency(self, lat: float):
+        self.latencies.append(lat)
+        if len(self.latencies) > self._latency_window:
+            self.latencies = self.latencies[-self._latency_window:]
+
+    def success_rate(self) -> float:
+        total = self.total_success + self.total_fail
+        return (self.total_success / total * 100) if total > 0 else 0.0
+
+    def latency_percentiles(self) -> dict:
+        if not self.latencies:
+            return {}
+        s = sorted(self.latencies)
+        n = len(s)
+        return {
+            "p50": round(s[n // 2]),
+            "p90": round(s[int(n * 0.9)]),
+            "p99": round(s[min(int(n * 0.99), n - 1)]),
+            "avg": round(sum(s) / n),
+        }
 
 
 _gateways: List[GatewaySlot] = []
@@ -41,8 +76,8 @@ _initialized: bool = False
 
 def _parse_gateway_urls() -> List[str]:
     """
-    Lê PROXY_GATEWAY_URL (single) ou PROXY_GATEWAY_URLS (multi, comma-separated).
-    Se multi não estiver configurado, gera URLs para as 3 regiões a partir da single.
+    Lê PROXY_GATEWAY_URLS (multi, comma-separated) ou gera a partir de
+    PROXY_GATEWAY_URL (single) expandindo para as 4 regiões ativas.
     """
     multi = os.getenv("PROXY_GATEWAY_URLS", "")
     if multi:
@@ -52,14 +87,25 @@ def _parse_gateway_urls() -> List[str]:
     if not single:
         return []
 
-    if "us.rotgb" in single and len(GATEWAY_REGIONS) > 1:
-        urls = []
-        for region in GATEWAY_REGIONS:
-            url = single.replace("us.rotgb", f"{region}.rotgb")
-            urls.append(url)
-        return urls
+    if "rotgb" in single:
+        base = single
+        for known in ["global.rotgb", "us.rotgb", "as.rotgb", "hk.rotgb",
+                       "eu.rotgb", "ina.rotgb"]:
+            if known in base:
+                base = base.replace(known, "{REGION}.rotgb")
+                break
+
+        if "{REGION}" in base:
+            return [base.replace("{REGION}", r) for r in GATEWAY_REGIONS]
 
     return [single]
+
+
+def _detect_region(url: str) -> str:
+    for prefix, label in _REGION_LABELS.items():
+        if f"{prefix}.rotgb" in url or f"{prefix}.rot" in url:
+            return label
+    return "UNKNOWN"
 
 
 def _init_gateways() -> None:
@@ -77,14 +123,8 @@ def _init_gateways() -> None:
     slots_per_gw = MAX_CONCURRENT_PROXY_REQUESTS
 
     for url in urls:
-        region = "unknown"
-        for r in GATEWAY_REGIONS:
-            if f"{r}.rotgb" in url or f"{r}.rot" in url:
-                region = r.upper()
-                break
-
         gw = GatewaySlot(
-            name=region,
+            name=_detect_region(url),
             proxy_url=url,
             semaphore=asyncio.Semaphore(slots_per_gw),
             max_slots=slots_per_gw,
@@ -94,7 +134,7 @@ def _init_gateways() -> None:
     total = sum(g.max_slots for g in _gateways)
     names = [f"{g.name}({g.max_slots})" for g in _gateways]
     logger.info(
-        f"[proxy_gate] {len(_gateways)} gateways inicializados: {', '.join(names)} "
+        f"[proxy_gate] {len(_gateways)} gateways: {', '.join(names)} "
         f"| total={total} slots"
     )
     _initialized = True
@@ -131,9 +171,11 @@ async def acquire_proxy_slot():
     _init_gateways()
     gw = _select_gateway()
     gw.pending += 1
+    acquired = False
 
     try:
         await gw.semaphore.acquire()
+        acquired = True
         gw.pending -= 1
         gw.active += 1
         gw.total_acquired += 1
@@ -144,8 +186,20 @@ async def acquire_proxy_slot():
             gw.active -= 1
             gw.semaphore.release()
     except BaseException:
-        gw.pending -= 1
+        if not acquired:
+            gw.pending -= 1
         raise
+
+
+def record_gateway_result(proxy_url: str, success: bool, latency_ms: float):
+    """Registra resultado (success/fail + latência) no gateway correspondente."""
+    for gw in _gateways:
+        if gw.proxy_url == proxy_url:
+            if success:
+                gw.record_success(latency_ms)
+            else:
+                gw.record_failure(latency_ms)
+            return
 
 
 def get_gate_stats() -> dict:
@@ -156,6 +210,7 @@ def get_gate_stats() -> dict:
     total_slots = 0
 
     for gw in _gateways:
+        total_req = gw.total_success + gw.total_fail
         gateways.append({
             "name": gw.name,
             "max_slots": gw.max_slots,
@@ -163,6 +218,10 @@ def get_gate_stats() -> dict:
             "pending": gw.pending,
             "total_acquired": gw.total_acquired,
             "free": gw.max_slots - gw.active,
+            "success": gw.total_success,
+            "fail": gw.total_fail,
+            "success_rate": f"{gw.success_rate():.1f}%",
+            "latency_ms": gw.latency_percentiles(),
         })
         total_active += gw.active
         total_pending += gw.pending
