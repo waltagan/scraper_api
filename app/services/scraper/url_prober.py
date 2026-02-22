@@ -94,50 +94,26 @@ class URLProber:
         raise last_error  # type: ignore[misc]
 
     async def _probe_once(self, base_url: str) -> Tuple[str, float]:
+        """Testa base_url + variações SEQUENCIALMENTE. Para no 1º sucesso."""
         collected_errors: List[Tuple[str, ProbeErrorType, str]] = []
 
-        result, error_info = await self._test_url(base_url)
-        if result and result[1] < 400:
-            return base_url, result[0]
-        if error_info:
-            collected_errors.append((base_url, error_info[0], error_info[1]))
-
+        all_urls = [base_url]
         variations = self._generate_variations(base_url)
-        variations = [v for v in variations if v != base_url]
+        for v in variations:
+            if v != base_url and v not in all_urls:
+                all_urls.append(v)
 
-        if not variations:
-            error_type, error_msg = self._best_error(collected_errors, base_url)
-            raise URLNotReachable(error_msg, error_type=error_type, url=base_url)
+        for url in all_urls:
+            result, error_info = await self._test_url(url)
+            if result and result[1] < 400:
+                return url, result[0]
+            if error_info:
+                collected_errors.append((url, error_info[0], error_info[1]))
+                if error_info[0] == ProbeErrorType.DNS_ERROR:
+                    continue
 
-        tasks = [self._test_url(url) for url in variations]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        successful = []
-        for url, res in zip(variations, results):
-            if isinstance(res, Exception):
-                et, em = _classify_probe_error(res, url)
-                collected_errors.append((url, et, em))
-                continue
-            if res is not None:
-                resp_result, ei = res
-                if resp_result:
-                    rt, status = resp_result
-                    if status < 400:
-                        successful.append((url, rt, status))
-                    elif status >= 500:
-                        collected_errors.append((url, ProbeErrorType.SERVER_ERROR, f"Erro {status}"))
-                    elif status == 403:
-                        collected_errors.append((url, ProbeErrorType.BLOCKED, "Bloqueado (403)"))
-                if ei:
-                    collected_errors.append((url, ei[0], ei[1]))
-
-        if not successful:
-            error_type, error_msg = self._best_error(collected_errors, base_url)
-            raise URLNotReachable(error_msg, error_type=error_type, url=base_url)
-
-        successful.sort(key=lambda x: (x[2] >= 300, x[1]))
-        best_url, best_time, _ = successful[0]
-        return best_url, best_time
+        error_type, error_msg = self._best_error(collected_errors, base_url)
+        raise URLNotReachable(error_msg, error_type=error_type, url=base_url)
 
     def _best_error(self, errors, base_url):
         if not errors:

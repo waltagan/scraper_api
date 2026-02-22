@@ -185,10 +185,7 @@ async def _scrape_subpages_parallel(
         async with domain_sem:
             normalized = normalize_url(url)
             try:
-                text, docs, _ = await asyncio.wait_for(
-                    cffi_scrape(normalized),
-                    timeout=REQUEST_TIMEOUT,
-                )
+                text, docs, _ = await cffi_scrape(normalized)
 
                 if not text or len(text) < 100 or is_soft_404(text) or is_cloudflare_challenge(text):
                     return ScrapedPage(url=normalized, content="", error="Empty or soft 404")
