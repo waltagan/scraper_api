@@ -5,6 +5,7 @@ Calibrado com dados empíricos do benchmark 711Proxy (proxy_benchmark_findings.m
 
 import logging
 import random
+from typing import Optional
 from urllib.parse import urlparse
 
 from app.configs.config_loader import load_config
@@ -26,13 +27,11 @@ WORKERS_PER_INSTANCE: int = _cfg.get("workers_per_instance", 200)
 NUM_INSTANCES: int = _cfg.get("num_instances", 3)
 FLUSH_SIZE: int = _cfg.get("flush_size", 1000)
 MIN_CONTENT_LENGTH: int = _cfg.get("min_content_length", 100)
-MAX_CONCURRENT_PROXY_REQUESTS: int = _cfg.get("max_concurrent_proxy_requests", 1000)
 
 logger.info(
     f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s retries={MAX_RETRIES} "
     f"subpages={MAX_SUBPAGES} domain_conc={PER_DOMAIN_CONCURRENT} "
-    f"workers={WORKERS_PER_INSTANCE} instances={NUM_INSTANCES} "
-    f"proxy_gate={MAX_CONCURRENT_PROXY_REQUESTS}"
+    f"workers={WORKERS_PER_INSTANCE} instances={NUM_INSTANCES}"
 )
 
 # ---------------------------------------------------------------------------
@@ -77,7 +76,7 @@ def get_random_impersonate() -> str:
     return random.choice(BROWSER_PROFILES)["impersonate"]
 
 
-def build_headers(referer: str | None = None) -> tuple:
+def build_headers(referer: Optional[str] = None) -> tuple:
     """
     Constrói headers dinâmicos com User-Agent variados.
     Accept header NÃO inclui imagens — apenas text/html.

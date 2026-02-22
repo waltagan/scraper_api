@@ -1,16 +1,14 @@
 """
-Serviço principal de scraping — pipeline simplificado.
+Serviço principal de scraping — pipeline direto.
 
 Pipeline: probe → scrape main → heuristic links → scrape subpages (paralelo).
-Sem strategy selector, sem slow mode, sem circuit breaker.
+Cada request usa IP rotativo descartável. Worker é o único limite.
 """
 
 import asyncio
 import time
 import logging
-import random
-from urllib.parse import urlparse
-from typing import List, Tuple, Optional
+from typing import List, Optional
 from enum import Enum
 
 from .models import ScrapedPage, ScrapeResult
@@ -19,15 +17,9 @@ from .constants import (
     PER_DOMAIN_CONCURRENT, build_headers, smart_referer,
 )
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, parse_html
-from .link_selector import extract_and_prioritize_links, filter_non_html_links, prioritize_links
+from .link_selector import filter_non_html_links, prioritize_links
 from .url_prober import url_prober, URLNotReachable
 from .http_client import cffi_scrape, cffi_scrape_safe
-from .proxy_gate import acquire_proxy_slot, record_gateway_result
-from .session_pool import get_session
-
-from app.services.scraper_manager.proxy_manager import (
-    record_proxy_failure, record_proxy_success,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +45,6 @@ async def scrape_all_subpages(
 ) -> ScrapeResult:
     """
     Pipeline principal: probe → scrape main → heuristic links → scrape subpages.
-    Retorna ScrapeResult com pages e metadados.
     """
     overall_start = time.perf_counter()
     meta = ScrapeResult()
@@ -127,17 +118,15 @@ async def scrape_all_subpages(
 async def _scrape_page_with_retry(
     url: str, ctx_label: str = ""
 ) -> Optional[ScrapedPage]:
-    """Scrape de uma página com retry. Proxy selecionado pelo gate (load balancing)."""
+    """Scrape com retry. Cada tentativa usa IP rotativo diferente."""
     last_page = None
 
     for attempt in range(1 + MAX_RETRIES):
         page = await _do_scrape(url, ctx_label)
 
         if page.success:
-            record_proxy_success("gateway")
             return page
 
-        record_proxy_failure("gateway", page.error or "unknown")
         last_page = page
 
         if _is_site_rejection(page.error):
@@ -150,7 +139,7 @@ async def _scrape_page_with_retry(
 
 
 async def _do_scrape(url: str, ctx_label: str = "") -> ScrapedPage:
-    """Executa scrape via cffi_scrape_safe. Proxy selecionado pelo proxy_gate."""
+    """Executa scrape via cffi_scrape_safe — IP rotativo descartável."""
     try:
         text, docs, links = await cffi_scrape_safe(url)
 
@@ -179,38 +168,24 @@ async def _scrape_subpages_parallel(
     domain_sem: asyncio.Semaphore,
     ctx_label: str = "",
 ) -> List[ScrapedPage]:
-    """Scrape subpáginas em paralelo, limitado por domain semaphore."""
+    """Scrape subpáginas em paralelo — cada uma com IP rotativo próprio."""
 
     async def scrape_one(url: str) -> ScrapedPage:
         async with domain_sem:
             normalized = normalize_url(url)
-
             try:
-                async with acquire_proxy_slot() as proxy:
-                    session = await get_session(proxy)
-                    t0 = time.perf_counter()
-                    try:
-                        text, docs, _ = await asyncio.wait_for(
-                            cffi_scrape(normalized, proxy=None, session=session),
-                            timeout=REQUEST_TIMEOUT,
-                        )
-                        lat = (time.perf_counter() - t0) * 1000
-                    except Exception:
-                        lat = (time.perf_counter() - t0) * 1000
-                        record_gateway_result(proxy, False, lat)
-                        raise
+                text, docs, _ = await asyncio.wait_for(
+                    cffi_scrape(normalized),
+                    timeout=REQUEST_TIMEOUT,
+                )
 
                 if not text or len(text) < 100 or is_soft_404(text) or is_cloudflare_challenge(text):
-                    record_gateway_result(proxy, False, lat)
                     return ScrapedPage(url=normalized, content="", error="Empty or soft 404")
 
-                record_gateway_result(proxy, True, lat)
-                record_proxy_success(proxy)
                 return ScrapedPage(url=normalized, content=text,
                                    document_links=list(docs), status_code=200)
 
             except Exception as e:
-                record_proxy_failure("gateway", str(e)[:30])
                 return ScrapedPage(url=normalized, content="", error=str(e))
 
     tasks = [scrape_one(u) for u in urls]

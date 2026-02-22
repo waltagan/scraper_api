@@ -1,13 +1,12 @@
 {
-  "request_timeout": 40,
-  "probe_timeout": 40,
+  "request_timeout": 30,
+  "probe_timeout": 12,
   "max_retries": 1,
   "retry_delay": 0,
   "max_subpages": 15,
-  "per_domain_concurrent": 5,
-  "workers_per_instance": 100,
+  "per_domain_concurrent": 8,
+  "workers_per_instance": 200,
   "num_instances": 5,
   "flush_size": 1000,
-  "min_content_length": 100,
-  "max_concurrent_proxy_requests": 2000
+  "min_content_length": 100
 }

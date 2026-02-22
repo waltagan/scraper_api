@@ -1,9 +1,10 @@
 """
 Prober de URLs — encontra a melhor variação acessível (http/https, www/non-www).
-Usa apenas curl_cffi via proxy gateway.
+Request direto com curl_cffi + IP rotativo. Sem pool, sem gate.
 """
 
 import asyncio
+import os
 import time
 import logging
 import socket
@@ -18,11 +19,11 @@ except ImportError:
     HAS_CURL_CFFI = False
     AsyncSession = None
 
-from .constants import PROBE_TIMEOUT, MAX_RETRIES, build_headers
-from .proxy_gate import acquire_proxy_slot, record_gateway_result
-from .session_pool import get_session
+from .constants import PROBE_TIMEOUT, MAX_RETRIES, build_headers, get_random_impersonate
 
 logger = logging.getLogger(__name__)
+
+_PROXY_URL = os.getenv("PROXY_GATEWAY_URL", "")
 
 
 class ProbeErrorType(Enum):
@@ -69,7 +70,7 @@ RETRYABLE_PROBE_ERRORS = frozenset({
 
 
 class URLProber:
-    """Testa variações de URL via proxy gateway para encontrar a melhor."""
+    """Testa variações de URL via proxy direto para encontrar a melhor."""
 
     def __init__(self, timeout: float = PROBE_TIMEOUT, max_retries: int = MAX_RETRIES):
         self.timeout = timeout
@@ -77,11 +78,6 @@ class URLProber:
         self._cache: dict = {}
 
     async def probe(self, base_url: str) -> Tuple[str, float]:
-        """
-        Testa variações de URL com retry automático.
-        Returns: (melhor_url, tempo_resposta_ms)
-        Raises: URLNotReachable se todas tentativas falharem.
-        """
         if base_url in self._cache:
             cached = self._cache[base_url]
             return cached['url'], cached['time']
@@ -164,44 +160,42 @@ class URLProber:
         return errors[0][1], errors[0][2]
 
     async def _test_url(self, url):
-        """Testa URL via curl_cffi + proxy (session pool). Retorna ((time_ms, status), error_info) ou (None, error_info)."""
+        """Testa URL com session descartável + proxy direto."""
         if not HAS_CURL_CFFI:
             return None, (ProbeErrorType.UNKNOWN, "curl_cffi não disponível")
         try:
-            headers, _ = build_headers()
+            headers, impersonate = build_headers()
+            proxy = _PROXY_URL
 
-            async with acquire_proxy_slot() as proxy:
-                session = await get_session(proxy)
+            async with AsyncSession(
+                impersonate=impersonate, verify=False, max_clients=1,
+            ) as session:
                 start = time.perf_counter()
                 try:
                     resp = await session.head(
-                        url, headers=headers, allow_redirects=True,
-                        timeout=self.timeout, max_redirects=5,
+                        url, headers=headers, proxy=proxy,
+                        allow_redirects=True, timeout=self.timeout, max_redirects=5,
                     )
                     elapsed = (time.perf_counter() - start) * 1000
 
                     if resp.status_code == 403:
                         start = time.perf_counter()
                         resp = await session.get(
-                            url, headers=headers, allow_redirects=True,
-                            timeout=self.timeout, max_redirects=5,
+                            url, headers=headers, proxy=proxy,
+                            allow_redirects=True, timeout=self.timeout, max_redirects=5,
                         )
                         elapsed = (time.perf_counter() - start) * 1000
 
-                    record_gateway_result(proxy, resp.status_code < 400, elapsed)
                     return (elapsed, resp.status_code), None
                 except Exception as head_error:
                     if "redirect" in str(head_error).lower() or "47" in str(head_error):
                         start = time.perf_counter()
                         resp = await session.get(
-                            url, headers=headers, allow_redirects=True,
-                            timeout=self.timeout, max_redirects=5,
+                            url, headers=headers, proxy=proxy,
+                            allow_redirects=True, timeout=self.timeout, max_redirects=5,
                         )
                         elapsed = (time.perf_counter() - start) * 1000
-                        record_gateway_result(proxy, resp.status_code < 400, elapsed)
                         return (elapsed, resp.status_code), None
-                    elapsed = (time.perf_counter() - start) * 1000
-                    record_gateway_result(proxy, False, elapsed)
                     raise
 
         except Exception as e:

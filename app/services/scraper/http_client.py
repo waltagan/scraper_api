@@ -1,10 +1,13 @@
 """
 Cliente HTTP para scraping usando curl_cffi.
-Responsável por baixar conteúdo de páginas (somente texto, sem imagens).
+Request direto: cada chamada cria uma session descartável com IP rotativo.
+Sem session pool, sem proxy gate — o worker é o único limite.
 """
 
 import logging
 import re
+import os
+import random
 import time
 from typing import Tuple, Set, Optional
 
@@ -15,12 +18,12 @@ except ImportError:
     HAS_CURL_CFFI = False
     AsyncSession = None
 
-from .constants import REQUEST_TIMEOUT, build_headers
+from .constants import REQUEST_TIMEOUT, build_headers, get_random_impersonate
 from .html_parser import parse_html
-from .proxy_gate import acquire_proxy_slot, record_gateway_result
-from .session_pool import get_session
 
 logger = logging.getLogger(__name__)
+
+_PROXY_URL = os.getenv("PROXY_GATEWAY_URL", "")
 
 _CHARSET_META_REGEX = re.compile(
     rb'<meta[^>]+charset=["\']?([^"\'\s>]+)', re.IGNORECASE
@@ -28,6 +31,10 @@ _CHARSET_META_REGEX = re.compile(
 _CHARSET_CONTENT_TYPE_REGEX = re.compile(
     rb'<meta[^>]+content=["\'][^"\']*charset=([^"\'\s;]+)', re.IGNORECASE
 )
+
+
+def _get_proxy() -> str:
+    return _PROXY_URL
 
 
 def _detect_encoding(content: bytes, content_type: Optional[str] = None) -> str:
@@ -82,28 +89,23 @@ def _decode_content(content: bytes, content_type: Optional[str] = None) -> str:
 async def cffi_scrape(
     url: str,
     proxy: Optional[str] = None,
-    session: Optional[AsyncSession] = None,
+    timeout: Optional[int] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
-    """Scrape usando curl_cffi. Retorna (texto, docs, links_internos)."""
+    """Scrape usando curl_cffi — session descartável, IP rotativo."""
     if not HAS_CURL_CFFI:
         raise RuntimeError("curl_cffi não está instalado")
 
-    if session:
-        headers, _ = build_headers()
-        resp = await session.get(url, headers=headers)
-    else:
-        headers, _ = build_headers()
-        async with acquire_proxy_slot() as gw_proxy:
-            sess = await get_session(gw_proxy)
-            t0 = time.perf_counter()
-            try:
-                resp = await sess.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-                lat = (time.perf_counter() - t0) * 1000
-                record_gateway_result(gw_proxy, resp.status_code == 200, lat)
-            except Exception:
-                lat = (time.perf_counter() - t0) * 1000
-                record_gateway_result(gw_proxy, False, lat)
-                raise
+    headers, impersonate = build_headers()
+    proxy_url = proxy or _get_proxy()
+    req_timeout = timeout or REQUEST_TIMEOUT
+
+    async with AsyncSession(
+        impersonate=impersonate, verify=False, max_clients=1,
+    ) as session:
+        resp = await session.get(
+            url, headers=headers, proxy=proxy_url,
+            timeout=req_timeout, allow_redirects=True, max_redirects=5,
+        )
 
     if resp.status_code != 200:
         raise Exception(f"Status {resp.status_code}")
@@ -116,9 +118,10 @@ async def cffi_scrape(
 async def cffi_scrape_safe(
     url: str,
     proxy: Optional[str] = None,
+    timeout: Optional[int] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
     """
-    Versão safe do cffi_scrape — não propaga exceções.
+    Versão safe — não propaga exceções.
     Seta cffi_scrape_safe.last_error para diagnóstico.
     """
     cffi_scrape_safe.last_error = None
@@ -127,28 +130,25 @@ async def cffi_scrape_safe(
         return "", set(), set()
 
     try:
-        headers, _ = build_headers()
-        async with acquire_proxy_slot() as gw_proxy:
-            sess = await get_session(gw_proxy)
-            t0 = time.perf_counter()
-            try:
-                resp = await sess.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-                lat = (time.perf_counter() - t0) * 1000
+        headers, impersonate = build_headers()
+        proxy_url = proxy or _get_proxy()
+        req_timeout = timeout or REQUEST_TIMEOUT
 
-                if resp.status_code != 200:
-                    record_gateway_result(gw_proxy, False, lat)
-                    cffi_scrape_safe.last_error = f"http_{resp.status_code}"
-                    return "", set(), set()
+        async with AsyncSession(
+            impersonate=impersonate, verify=False, max_clients=1,
+        ) as session:
+            resp = await session.get(
+                url, headers=headers, proxy=proxy_url,
+                timeout=req_timeout, allow_redirects=True, max_redirects=5,
+            )
 
-                record_gateway_result(gw_proxy, True, lat)
-                content_type = resp.headers.get('content-type', '')
-                text = _decode_content(resp.content, content_type)
-                return parse_html(text, url)
+        if resp.status_code != 200:
+            cffi_scrape_safe.last_error = f"http_{resp.status_code}"
+            return "", set(), set()
 
-            except Exception as e:
-                lat = (time.perf_counter() - t0) * 1000
-                record_gateway_result(gw_proxy, False, lat)
-                raise
+        content_type = resp.headers.get('content-type', '')
+        text = _decode_content(resp.content, content_type)
+        return parse_html(text, url)
 
     except Exception as e:
         err_msg = str(e).lower()
