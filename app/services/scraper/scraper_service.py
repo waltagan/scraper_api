@@ -2,28 +2,25 @@
 Serviço principal de scraping — pipeline simplificado.
 
 Pipeline: probe → scrape main → heuristic links → scrape subpages (paralelo).
-Sem strategy selector, sem slow mode, sem circuit breaker.
+Usa sticky sessions (IPs pré-alocados) — sem semáforo, acesso direto ao pool.
 """
 
 import asyncio
 import time
 import logging
-import random
-from urllib.parse import urlparse
-from typing import List, Tuple, Optional
+from typing import List, Optional
 from enum import Enum
 
 from .models import ScrapedPage, ScrapeResult
 from .constants import (
     REQUEST_TIMEOUT, MAX_RETRIES, MAX_SUBPAGES,
-    PER_DOMAIN_CONCURRENT, build_headers, smart_referer,
+    PER_DOMAIN_CONCURRENT, build_headers,
 )
-from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, parse_html
-from .link_selector import extract_and_prioritize_links, filter_non_html_links, prioritize_links
+from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
+from .link_selector import filter_non_html_links, prioritize_links
 from .url_prober import url_prober, URLNotReachable
 from .http_client import cffi_scrape, cffi_scrape_safe
-from .proxy_gate import acquire_proxy_slot, record_gateway_result
-from .session_pool import get_session
+from .session_pool import get_session, record_result
 
 from app.services.scraper_manager.proxy_manager import (
     record_proxy_failure, record_proxy_success,
@@ -58,7 +55,6 @@ async def scrape_all_subpages(
     overall_start = time.perf_counter()
     meta = ScrapeResult()
 
-    # 1. PROBE URL
     try:
         best_url, probe_time = await url_prober.probe(url)
         url = best_url
@@ -72,7 +68,6 @@ async def scrape_all_subpages(
     except Exception as e:
         logger.warning(f"{ctx_label} Erro no probe, usando URL original: {e}")
 
-    # 2. SCRAPE MAIN PAGE
     main_page = await _scrape_page_with_retry(url, ctx_label)
 
     if not main_page or not main_page.success:
@@ -84,7 +79,6 @@ async def scrape_all_subpages(
 
     meta.main_page_ok = True
 
-    # 3. EXTRAIR E PRIORIZAR LINKS
     all_links = set(main_page.links)
     filtered = filter_non_html_links(all_links)
     target_subpages = prioritize_links(filtered, url)[:max_subpages]
@@ -93,7 +87,6 @@ async def scrape_all_subpages(
     meta.links_after_filter = len(filtered)
     meta.links_selected = len(target_subpages)
 
-    # 4. SCRAPE SUBPAGES EM PARALELO
     subpages = []
     if target_subpages:
         domain_sem = asyncio.Semaphore(PER_DOMAIN_CONCURRENT)
@@ -101,7 +94,6 @@ async def scrape_all_subpages(
             target_subpages, domain_sem, ctx_label
         )
 
-    # 5. CONSOLIDAR
     all_pages = [main_page] + subpages
     meta.pages = all_pages
     meta.subpages_attempted = len(subpages)
@@ -127,17 +119,17 @@ async def scrape_all_subpages(
 async def _scrape_page_with_retry(
     url: str, ctx_label: str = ""
 ) -> Optional[ScrapedPage]:
-    """Scrape de uma página com retry. Proxy selecionado pelo gate (load balancing)."""
+    """Scrape com retry. Cada tentativa usa sticky session diferente (round-robin)."""
     last_page = None
 
     for attempt in range(1 + MAX_RETRIES):
         page = await _do_scrape(url, ctx_label)
 
         if page.success:
-            record_proxy_success("gateway")
+            record_proxy_success("sticky")
             return page
 
-        record_proxy_failure("gateway", page.error or "unknown")
+        record_proxy_failure("sticky", page.error or "unknown")
         last_page = page
 
         if _is_site_rejection(page.error):
@@ -150,7 +142,7 @@ async def _scrape_page_with_retry(
 
 
 async def _do_scrape(url: str, ctx_label: str = "") -> ScrapedPage:
-    """Executa scrape via cffi_scrape_safe. Proxy selecionado pelo proxy_gate."""
+    """Executa scrape via cffi_scrape_safe. Sticky session selecionada pelo pool."""
     try:
         text, docs, links = await cffi_scrape_safe(url)
 
@@ -186,31 +178,30 @@ async def _scrape_subpages_parallel(
             normalized = normalize_url(url)
 
             try:
-                async with acquire_proxy_slot() as proxy:
-                    session = await get_session(proxy)
-                    t0 = time.perf_counter()
-                    try:
-                        text, docs, _ = await asyncio.wait_for(
-                            cffi_scrape(normalized, proxy=None, session=session),
-                            timeout=REQUEST_TIMEOUT,
-                        )
-                        lat = (time.perf_counter() - t0) * 1000
-                    except Exception:
-                        lat = (time.perf_counter() - t0) * 1000
-                        record_gateway_result(proxy, False, lat)
-                        raise
+                sticky = get_session()
+                t0 = time.perf_counter()
+                try:
+                    text, docs, _ = await asyncio.wait_for(
+                        cffi_scrape(normalized, proxy=None, session=sticky.session),
+                        timeout=REQUEST_TIMEOUT,
+                    )
+                    lat = (time.perf_counter() - t0) * 1000
+                except Exception:
+                    lat = (time.perf_counter() - t0) * 1000
+                    record_result(sticky, False, lat)
+                    raise
 
                 if not text or len(text) < 100 or is_soft_404(text) or is_cloudflare_challenge(text):
-                    record_gateway_result(proxy, False, lat)
+                    record_result(sticky, False, lat)
                     return ScrapedPage(url=normalized, content="", error="Empty or soft 404")
 
-                record_gateway_result(proxy, True, lat)
-                record_proxy_success(proxy)
+                record_result(sticky, True, lat)
+                record_proxy_success("sticky")
                 return ScrapedPage(url=normalized, content=text,
                                    document_links=list(docs), status_code=200)
 
             except Exception as e:
-                record_proxy_failure("gateway", str(e)[:30])
+                record_proxy_failure("sticky", str(e)[:30])
                 return ScrapedPage(url=normalized, content="", error=str(e))
 
     tasks = [scrape_one(u) for u in urls]
