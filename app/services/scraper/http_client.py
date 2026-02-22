@@ -18,7 +18,7 @@ except ImportError:
     HAS_CURL_CFFI = False
     AsyncSession = None
 
-from .constants import REQUEST_TIMEOUT, build_headers, BROWSER_PROFILES
+from .constants import REQUEST_TIMEOUT, MAX_CONCURRENT_REQUESTS, build_headers, BROWSER_PROFILES
 from .html_parser import parse_html
 
 logger = logging.getLogger(__name__)
@@ -32,14 +32,8 @@ _CHARSET_CONTENT_TYPE_REGEX = re.compile(
     rb'<meta[^>]+content=["\'][^"\']*charset=([^"\'\s;]+)', re.IGNORECASE
 )
 
-# ---------------------------------------------------------------------------
-# Session compartilhada + semáforo global
-# Proxy aguenta ~2000 conexões simultâneas (validado por stress test).
-# Semáforo garante que nunca ultrapassamos esse limite, independente de
-# quantos workers existam (2000 workers x 20 requests = 40k sem semáforo).
-# ---------------------------------------------------------------------------
 _MAX_CLIENTS = 3000
-_MAX_CONCURRENT_REQUESTS = 2000
+_MAX_CONCURRENT_REQUESTS = MAX_CONCURRENT_REQUESTS
 _sessions: List = []
 _semaphore: Optional[asyncio.Semaphore] = None
 _init_done = False

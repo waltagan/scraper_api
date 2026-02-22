@@ -1,6 +1,6 @@
 """
-Constantes e configurações do módulo de scraping.
-Calibrado com dados empíricos do benchmark 711Proxy (proxy_benchmark_findings.md).
+Constantes e configuracoes do modulo de scraping.
+Pipeline simplificado: GET unico (probe+main) -> subpages (max 5).
 """
 
 import logging
@@ -12,30 +12,23 @@ from app.configs.config_loader import load_config
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Configuração carregada do JSON (com fallback hardcoded)
-# ---------------------------------------------------------------------------
 _cfg = load_config("scraper/scraper_config.json") or {}
 
-REQUEST_TIMEOUT: int = _cfg.get("request_timeout", 12)
-PROBE_TIMEOUT: int = _cfg.get("probe_timeout", 12)
-MAX_RETRIES: int = _cfg.get("max_retries", 1)
-RETRY_DELAY: float = _cfg.get("retry_delay", 0)
+REQUEST_TIMEOUT: int = _cfg.get("request_timeout", 15)
 MAX_SUBPAGES: int = _cfg.get("max_subpages", 5)
 PER_DOMAIN_CONCURRENT: int = _cfg.get("per_domain_concurrent", 5)
-WORKERS_PER_INSTANCE: int = _cfg.get("workers_per_instance", 200)
-NUM_INSTANCES: int = _cfg.get("num_instances", 3)
-FLUSH_SIZE: int = _cfg.get("flush_size", 1000)
+FLUSH_SIZE: int = _cfg.get("flush_size", 500)
 MIN_CONTENT_LENGTH: int = _cfg.get("min_content_length", 100)
+MAX_CONCURRENT_REQUESTS: int = _cfg.get("max_concurrent_requests", 2000)
 
 logger.info(
-    f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s retries={MAX_RETRIES} "
-    f"subpages={MAX_SUBPAGES} domain_conc={PER_DOMAIN_CONCURRENT} "
-    f"workers={WORKERS_PER_INSTANCE} instances={NUM_INSTANCES}"
+    f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s "
+    f"subpages={MAX_SUBPAGES} flush={FLUSH_SIZE} "
+    f"max_concurrent={MAX_CONCURRENT_REQUESTS}"
 )
 
 # ---------------------------------------------------------------------------
-# Fingerprint Rotation — perfis de browser para anti-detecção
+# Fingerprint Rotation
 # ---------------------------------------------------------------------------
 BROWSER_PROFILES = [
     {
@@ -77,10 +70,7 @@ def get_random_impersonate() -> str:
 
 
 def build_headers(referer: Optional[str] = None) -> tuple:
-    """
-    Constrói headers dinâmicos com User-Agent variados.
-    Accept header NÃO inclui imagens — apenas text/html.
-    """
+    """Headers dinamicos com User-Agent variados."""
     profile = get_random_profile()
     headers = {
         "User-Agent": profile["user_agent"],
@@ -103,7 +93,6 @@ def build_headers(referer: Optional[str] = None) -> tuple:
 
 
 def smart_referer(subpage_url: str) -> str:
-    """Gera um referer realista: a raiz do domínio da subpage."""
     try:
         parsed = urlparse(subpage_url)
         return f"{parsed.scheme}://{parsed.netloc}/"
@@ -148,7 +137,7 @@ CLOUDFLARE_SIGNATURES = [
 ]
 
 ERROR_404_KEYWORDS = [
-    "404 not found", "page not found", "página não encontrada",
-    "erro 404", "não encontramos a página", "página inexistente",
-    "ops! página não encontrada", "error 404", "file not found",
+    "404 not found", "page not found", "pagina nao encontrada",
+    "erro 404", "nao encontramos a pagina", "pagina inexistente",
+    "ops! pagina nao encontrada", "error 404", "file not found",
 ]

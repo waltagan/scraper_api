@@ -1,5 +1,5 @@
 """
-Endpoint Batch Scrape v2 - Scraping em massa com instâncias paralelas.
+Endpoint Batch Scrape v2 - Scraping em massa simplificado.
 """
 import logging
 from fastapi import APIRouter, HTTPException
@@ -22,8 +22,7 @@ router = APIRouter()
 @router.post("/scrape/batch", response_model=BatchScrapeResponse)
 async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse:
     """
-    Inicia batch scrape com N instâncias paralelas.
-    Cada instância processa uma partição das empresas com seus próprios workers.
+    Inicia batch scrape. Concorrencia controlada pelo semaforo global (2000).
     """
     existing = get_active_batch()
     if existing and existing.status == "running":
@@ -34,20 +33,16 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
         )
 
     processor = BatchScrapeProcessor(
-        worker_count=request.worker_count,
         flush_size=request.flush_size,
         status_filter=request.status_filter,
         limit=request.limit,
-        instances=request.instances,
     )
     set_active_batch(processor)
     await processor.initialize()
     processor.start()
 
-    workers_per = request.worker_count // request.instances
     logger.info(
         f"Batch {processor.batch_id} iniciado: "
-        f"{request.instances} instâncias × {workers_per} workers, "
         f"flush={request.flush_size}, limit={request.limit}"
     )
 
@@ -58,16 +53,13 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
         worker_count=request.worker_count,
         flush_size=request.flush_size,
         instances=request.instances,
-        message=(
-            f"Batch {processor.batch_id} iniciado: "
-            f"{request.instances} instâncias × {workers_per} workers/inst."
-        ),
+        message=f"Batch {processor.batch_id} iniciado (semaforo global 2000).",
     )
 
 
 @router.get("/scrape/batch/status", response_model=BatchStatusResponse)
 async def get_batch_status() -> BatchStatusResponse:
-    """Retorna status agregado do batch + status por instância."""
+    """Retorna status do batch."""
     batch = get_active_batch()
     if not batch:
         raise HTTPException(status_code=404, detail="Nenhum batch ativo.")
@@ -78,7 +70,7 @@ async def get_batch_status() -> BatchStatusResponse:
 
 @router.post("/scrape/batch/cancel")
 async def cancel_batch_scrape():
-    """Cancela o batch scrape em andamento (faz flush do buffer antes de parar)."""
+    """Cancela o batch scrape em andamento."""
     batch = get_active_batch()
     if not batch or batch.status != "running":
         raise HTTPException(status_code=404, detail="Nenhum batch rodando.")

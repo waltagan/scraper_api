@@ -1,40 +1,23 @@
 """
-Serviço principal de scraping — pipeline direto.
+Servico principal de scraping — pipeline direto.
 
-Pipeline: probe → scrape main → heuristic links → scrape subpages (paralelo).
-Cada request usa IP rotativo descartável. Worker é o único limite.
+Pipeline: GET unico (probe+main) → heuristic links → scrape subpages (paralelo).
+Cada request usa IP rotativo descartavel. Semaforo global (2000) e o unico limite.
 """
 
 import asyncio
 import time
 import logging
 from typing import List, Optional
-from enum import Enum
 
 from .models import ScrapedPage, ScrapeResult
-from .constants import (
-    REQUEST_TIMEOUT, MAX_RETRIES, MAX_SUBPAGES,
-    PER_DOMAIN_CONCURRENT, build_headers, smart_referer,
-)
-from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, parse_html
+from .constants import REQUEST_TIMEOUT, MAX_SUBPAGES, MIN_CONTENT_LENGTH
+from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
 from .link_selector import filter_non_html_links, prioritize_links
-from .url_prober import url_prober, URLNotReachable
-from .http_client import cffi_scrape, cffi_scrape_safe
+from .url_prober import fast_probe_and_scrape, URLNotReachable
+from .http_client import cffi_scrape_safe
 
 logger = logging.getLogger(__name__)
-
-
-class FailureType(Enum):
-    TIMEOUT = "timeout"
-    CONNECTION_ERROR = "connection_error"
-    CLOUDFLARE = "cloudflare"
-    WAF = "waf"
-    CAPTCHA = "captcha"
-    RATE_LIMIT = "rate_limit"
-    EMPTY_CONTENT = "empty_content"
-    SSL_ERROR = "ssl_error"
-    DNS_ERROR = "dns_error"
-    UNKNOWN = "unknown"
 
 
 async def scrape_all_subpages(
@@ -44,34 +27,35 @@ async def scrape_all_subpages(
     request_id: str = "",
 ) -> ScrapeResult:
     """
-    Pipeline principal: probe → scrape main → heuristic links → scrape subpages.
+    Pipeline: GET unico (probe+main) -> select links -> scrape subpages.
     """
     overall_start = time.perf_counter()
     meta = ScrapeResult()
 
-    # 1. PROBE URL
-    t_probe = time.perf_counter()
+    # 1. GET UNICO (probe + main page fundidos)
+    t0 = time.perf_counter()
     try:
-        best_url, probe_time = await url_prober.probe(url)
+        best_url, text, docs, links, probe_time = await fast_probe_and_scrape(url)
         url = best_url
         meta.probe_ok = True
+        meta.probe_time_ms = probe_time
     except URLNotReachable as e:
-        meta.probe_time_ms = (time.perf_counter() - t_probe) * 1000
-        log_msg = e.get_log_message()
-        logger.error(f"{ctx_label} URL inacessível: {url} - {log_msg}")
-        error_type = getattr(e, 'error_type', None)
-        meta.main_page_fail_reason = f"probe_{error_type.value if error_type else 'unknown'}"
+        meta.probe_time_ms = (time.perf_counter() - t0) * 1000
+        logger.error(f"{ctx_label} URL inacessivel: {url} - {e.get_log_message()}")
+        meta.main_page_fail_reason = f"probe_{e.error_type.value if e.error_type else 'unknown'}"
         meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
         return meta
     except Exception as e:
-        meta.probe_ok = True
-        logger.warning(f"{ctx_label} Erro no probe, usando URL original: {e}")
-    meta.probe_time_ms = (time.perf_counter() - t_probe) * 1000
+        meta.probe_time_ms = (time.perf_counter() - t0) * 1000
+        logger.error(f"{ctx_label} Erro inesperado no probe+scrape: {e}")
+        meta.main_page_fail_reason = f"probe_unknown"
+        meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
+        return meta
 
-    # 2. SCRAPE MAIN PAGE
-    t_main = time.perf_counter()
-    main_page = await _scrape_page_with_retry(url, ctx_label)
-    meta.main_scrape_time_ms = (time.perf_counter() - t_main) * 1000
+    meta.main_scrape_time_ms = meta.probe_time_ms
+
+    # Validar conteudo da main page
+    main_page = _validate_main_page(url, text, links, docs)
 
     if not main_page or not main_page.success:
         fail_reason = _get_fail_reason(main_page)
@@ -82,7 +66,7 @@ async def scrape_all_subpages(
 
     meta.main_page_ok = True
 
-    # 3. EXTRAIR E PRIORIZAR LINKS
+    # 2. SELECIONAR TOP LINKS
     all_links = set(main_page.links)
     filtered = filter_non_html_links(all_links)
     target_subpages = prioritize_links(filtered, url)[:max_subpages]
@@ -91,17 +75,14 @@ async def scrape_all_subpages(
     meta.links_after_filter = len(filtered)
     meta.links_selected = len(target_subpages)
 
-    # 4. SCRAPE SUBPAGES EM PARALELO
+    # 3. SCRAPE SUBPAGES EM PARALELO (semaforo global ja controla)
     t_sub = time.perf_counter()
-    subpages = []
+    subpages: List[ScrapedPage] = []
     if target_subpages:
-        domain_sem = asyncio.Semaphore(PER_DOMAIN_CONCURRENT)
-        subpages = await _scrape_subpages_parallel(
-            target_subpages, domain_sem, ctx_label
-        )
+        subpages = await _scrape_subpages(target_subpages, ctx_label)
     meta.subpages_time_ms = (time.perf_counter() - t_sub) * 1000
 
-    # 5. CONSOLIDAR
+    # 4. CONSOLIDAR
     all_pages = [main_page] + subpages
     meta.pages = all_pages
     meta.subpages_attempted = len(subpages)
@@ -118,7 +99,7 @@ async def scrape_all_subpages(
     ok = sum(1 for p in all_pages if p.success)
     logger.info(
         f"{ctx_label} {url[:50]} | {ok}/{len(all_pages)} ok | "
-        f"probe={meta.probe_time_ms:.0f}ms main={meta.main_scrape_time_ms:.0f}ms "
+        f"probe+main={meta.main_scrape_time_ms:.0f}ms "
         f"sub={meta.subpages_time_ms:.0f}ms total={meta.total_time_ms:.0f}ms "
         f"links={meta.links_in_html}->{meta.links_selected} "
         f"subpages={meta.subpages_ok}/{meta.subpages_attempted}"
@@ -126,88 +107,59 @@ async def scrape_all_subpages(
     return meta
 
 
-async def _scrape_page_with_retry(
-    url: str, ctx_label: str = ""
+def _validate_main_page(
+    url: str, text: str, links: set, docs: set
 ) -> Optional[ScrapedPage]:
-    """Scrape com retry. Cada tentativa usa IP rotativo diferente."""
-    last_page = None
+    """Valida o conteudo retornado pelo probe+scrape."""
+    if not text:
+        return ScrapedPage(url=url, content="", error="empty_response")
 
-    for attempt in range(1 + MAX_RETRIES):
-        page = await _do_scrape(url, ctx_label)
+    if is_cloudflare_challenge(text):
+        return ScrapedPage(
+            url=url, content="", error="Cloudflare",
+            links=list(links), document_links=list(docs), status_code=403,
+        )
 
-        if page.success:
-            return page
+    if is_soft_404(text):
+        return ScrapedPage(
+            url=url, content="", error="Soft 404",
+            links=list(links), document_links=list(docs), status_code=404,
+        )
 
-        last_page = page
+    if len(text) < MIN_CONTENT_LENGTH:
+        return ScrapedPage(url=url, content="", error="thin_content")
 
-        if _is_site_rejection(page.error):
-            return page
-
-        if attempt < MAX_RETRIES:
-            logger.debug(f"{ctx_label} Retry {attempt+2}/{1+MAX_RETRIES} para {url[:50]}")
-
-    return last_page
-
-
-async def _do_scrape(url: str, ctx_label: str = "") -> ScrapedPage:
-    """Executa scrape via cffi_scrape_safe — IP rotativo descartável."""
-    try:
-        text, docs, links = await cffi_scrape_safe(url)
-
-        if not text:
-            transport_err = cffi_scrape_safe.last_error or "empty_response"
-            return ScrapedPage(url=url, content="", error=f"proxy_fail:{transport_err}")
-
-        if is_cloudflare_challenge(text):
-            return ScrapedPage(url=url, content="", error="Cloudflare",
-                               links=list(links), document_links=list(docs), status_code=403)
-
-        if is_soft_404(text):
-            return ScrapedPage(url=url, content="", error="Soft 404",
-                               links=list(links), document_links=list(docs), status_code=404)
-
-        return ScrapedPage(url=url, content=text, links=list(links),
-                           document_links=list(docs), status_code=200)
-
-    except Exception as e:
-        return ScrapedPage(url=url, content="",
-                           error=f"scrape_exception:{type(e).__name__}:{str(e)[:50]}")
+    return ScrapedPage(
+        url=url, content=text, links=list(links),
+        document_links=list(docs), status_code=200,
+    )
 
 
-async def _scrape_subpages_parallel(
-    urls: List[str],
-    domain_sem: asyncio.Semaphore,
-    ctx_label: str = "",
+async def _scrape_subpages(
+    urls: List[str], ctx_label: str = ""
 ) -> List[ScrapedPage]:
-    """Scrape subpáginas em paralelo — cada uma com IP rotativo próprio."""
+    """Scrape subpaginas em paralelo. Semaforo global (2000) ja controla concorrencia."""
 
     async def scrape_one(url: str) -> ScrapedPage:
-        async with domain_sem:
-            normalized = normalize_url(url)
-            try:
-                text, docs, _ = await cffi_scrape(normalized)
+        normalized = normalize_url(url)
+        try:
+            text, docs, _ = await cffi_scrape_safe(normalized)
 
-                if not text or len(text) < 100 or is_soft_404(text) or is_cloudflare_challenge(text):
-                    return ScrapedPage(url=normalized, content="", error="Empty or soft 404")
+            if not text or len(text) < MIN_CONTENT_LENGTH:
+                return ScrapedPage(url=normalized, content="", error="empty_content")
+            if is_soft_404(text) or is_cloudflare_challenge(text):
+                return ScrapedPage(url=normalized, content="", error="blocked_or_404")
 
-                return ScrapedPage(url=normalized, content=text,
-                                   document_links=list(docs), status_code=200)
-
-            except Exception as e:
-                return ScrapedPage(url=normalized, content="", error=str(e))
+            return ScrapedPage(
+                url=normalized, content=text,
+                document_links=list(docs), status_code=200,
+            )
+        except Exception as e:
+            return ScrapedPage(url=normalized, content="", error=str(e))
 
     tasks = [scrape_one(u) for u in urls]
     results = await asyncio.gather(*tasks)
     return list(results)
-
-
-def _is_site_rejection(error: str) -> bool:
-    if not error:
-        return False
-    err = error.lower()
-    return any(sig in err for sig in (
-        "403", "429", "cloudflare", "captcha", "waf", "forbidden", "blocked",
-    ))
 
 
 def _get_fail_reason(page: Optional[ScrapedPage]) -> str:
@@ -215,13 +167,9 @@ def _get_fail_reason(page: Optional[ScrapedPage]) -> str:
         return "scrape_null_response"
     if page.error:
         err = page.error.lower()
-        if "proxy_fail" in err:
-            return page.error
         if "cloudflare" in err:
             return "scrape_blocked_cloudflare"
-        return f"scrape_error({page.error[:40]})"
-    if page.content and len(page.content) < 100:
-        return "scrape_thin_content"
+        return f"proxy_fail:{page.error[:40]}"
     if not page.content:
         return "scrape_empty_content"
     return "scrape_unknown"
@@ -235,32 +183,6 @@ def _classify_subpage_error(error: str) -> str:
         return "timeout"
     if "cloudflare" in err:
         return "cloudflare"
-    if "soft 404" in err or "empty" in err:
+    if "soft 404" in err or "empty" in err or "blocked" in err:
         return "empty_content"
     return "scrape_fail"
-
-
-def _classify_error(error_message: str) -> FailureType:
-    if not error_message:
-        return FailureType.UNKNOWN
-    err = error_message.lower()
-
-    if "timeout" in err:
-        return FailureType.TIMEOUT
-    if "cloudflare" in err:
-        return FailureType.CLOUDFLARE
-    if "403" in err or "waf" in err:
-        return FailureType.WAF
-    if "captcha" in err:
-        return FailureType.CAPTCHA
-    if "rate" in err and "limit" in err:
-        return FailureType.RATE_LIMIT
-    if "empty" in err or "404" in err:
-        return FailureType.EMPTY_CONTENT
-    if "ssl" in err or "certificate" in err:
-        return FailureType.SSL_ERROR
-    if "dns" in err or "resolve" in err:
-        return FailureType.DNS_ERROR
-    if "connection" in err or "connect" in err:
-        return FailureType.CONNECTION_ERROR
-    return FailureType.UNKNOWN

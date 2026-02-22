@@ -1,12 +1,8 @@
 {
-  "request_timeout": 12,
-  "probe_timeout": 8,
-  "max_retries": 0,
-  "retry_delay": 0,
-  "max_subpages": 15,
-  "per_domain_concurrent": 8,
-  "workers_per_instance": 200,
-  "num_instances": 5,
-  "flush_size": 1000,
-  "min_content_length": 100
+  "request_timeout": 15,
+  "max_subpages": 10,
+  "per_domain_concurrent": 5,
+  "flush_size": 500,
+  "min_content_length": 100,
+  "max_concurrent_requests": 2000
 }

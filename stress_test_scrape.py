@@ -326,17 +326,15 @@ async def test_analyzer(url: str) -> Dict:
 
 async def test_proxy_pool(n: int = 30) -> Dict:
     """Testa velocidade e disponibilidade do pool de proxy."""
-    from app.core.proxy import proxy_manager
     from app.services.scraper_manager.proxy_manager import proxy_pool
-    proxy_pool.set_source_manager(proxy_manager)
-    await proxy_manager._refresh_proxies()
+    await proxy_pool.preload()
 
     times = []
     found = 0
     proxies_seen = set()
     for _ in range(n):
         start = time.perf_counter()
-        proxy = await proxy_pool.get_healthy_proxy()
+        proxy = proxy_pool.get_next_proxy()
         ms = (time.perf_counter() - start) * 1000
         times.append(ms)
         if proxy:
