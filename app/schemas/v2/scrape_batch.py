@@ -99,6 +99,10 @@ class BatchStatusResponse(BaseModel):
         default_factory=dict,
         description="Diagnóstico de falhas separado por categoria: site_offline, proxy_infra, blocked, content_issue"
     )
+    provider_stats: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Métricas por provider (processed/success/errors + breakdown de erros)"
+    )
     stage_funnel: Dict[str, Any] = Field(
         default_factory=dict,
         description="Funil por etapa: probe → main_page → subpages, com entered/ok/fail/fail_reasons/time_ms"

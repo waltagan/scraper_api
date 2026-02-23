@@ -225,6 +225,7 @@ class CompanyResult:
     pages_scraped: int = 0
     total_pages_attempted: int = 0
     retries_used: int = 0
+    proxy_provider: Optional[str] = None
     page_website: Optional[str] = None
     page_scraped: Optional[str] = None
 
@@ -298,6 +299,7 @@ class BatchScrapeProcessor:
         self._subpage_http_fail: List[float] = []
         self._domain_subpage_success_rates: List[float] = []
         self._subpage_errors_by_quartile: List[Dict[str, int]] = [{}, {}, {}, {}]
+        self._provider_stats: Dict[str, Dict[str, Any]] = {}
 
     @property
     def processed(self) -> int:
@@ -451,6 +453,7 @@ class BatchScrapeProcessor:
             result_obj = CompanyResult(
                 cnpj_basico=cnpj, discovery_id=discovery_id,
                 website_url=url, error=f"{type(e).__name__}: {str(e)[:200]}",
+                proxy_provider=sticky_provider or "unknown",
             )
 
         result_obj.processing_time_ms = (time.perf_counter() - t0) * 1000
@@ -464,6 +467,7 @@ class BatchScrapeProcessor:
             if result_obj.pages_scraped > 0:
                 self._pages_per_company.append(result_obj.pages_scraped)
             self._retries_total += result_obj.retries_used
+            self._register_provider_result(result_obj)
 
             if result_obj.success:
                 self._success_count += 1
@@ -505,6 +509,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, error_msg),
                 total_pages_attempted=total_pages,
+                proxy_provider=proxy_provider or "unknown",
                 page_website=pw,
             )
 
@@ -522,6 +527,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, f"Conteudo insuficiente ({len(aggregated)} chars)"),
                 pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+                proxy_provider=proxy_provider or "unknown",
                 page_website=pw, page_scraped=ps,
             )
 
@@ -531,6 +537,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, "Nenhum chunk gerado"),
                 pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+                proxy_provider=proxy_provider or "unknown",
                 page_website=pw, page_scraped=ps,
             )
 
@@ -542,8 +549,39 @@ class BatchScrapeProcessor:
             cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
             chunks=chunks, success=True,
             pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+            proxy_provider=proxy_provider or "unknown",
             page_website=pw, page_scraped=ps,
         )
+
+    def _register_provider_result(self, result_obj: CompanyResult) -> None:
+        provider = result_obj.proxy_provider or "unknown"
+        p = self._provider_stats.setdefault(provider, {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "error_breakdown": {},
+            "main_fail_reasons": {},
+            "subpage_error_breakdown": {},
+        })
+        p["processed"] += 1
+        if result_obj.success:
+            p["success"] += 1
+            return
+
+        p["errors"] += 1
+        cat = _classify_error(result_obj.error or "")
+        p["error_breakdown"][cat] = p["error_breakdown"].get(cat, 0) + 1
+
+        try:
+            payload = json.loads(result_obj.error or "{}")
+            main_reason = (payload.get("main_page") or {}).get("fail_reason")
+            if main_reason:
+                p["main_fail_reasons"][main_reason] = p["main_fail_reasons"].get(main_reason, 0) + 1
+            sub_errs = (payload.get("subpages") or {}).get("errors") or {}
+            for k, v in sub_errs.items():
+                p["subpage_error_breakdown"][k] = p["subpage_error_breakdown"].get(k, 0) + int(v)
+        except Exception:
+            pass
 
     def _aggregate_scrape_meta(self, result: ScrapeResult) -> None:
         self._links_in_html_total += result.links_in_html
@@ -775,6 +813,20 @@ class BatchScrapeProcessor:
 
         infra = self._get_infrastructure_stats()
         diagnosis = _build_failure_diagnosis(self._main_page_fail_reasons, processed)
+        provider_stats = {}
+        for provider, s in self._provider_stats.items():
+            prov_processed = s.get("processed", 0)
+            prov_success = s.get("success", 0)
+            prov_errors = s.get("errors", 0)
+            provider_stats[provider] = {
+                "processed": prov_processed,
+                "success": prov_success,
+                "errors": prov_errors,
+                "success_rate_pct": round(prov_success / prov_processed * 100, 1) if prov_processed else 0,
+                "error_breakdown": dict(sorted((s.get("error_breakdown") or {}).items(), key=lambda x: -x[1])),
+                "main_fail_reasons": dict(sorted((s.get("main_fail_reasons") or {}).items(), key=lambda x: -x[1])),
+                "subpage_error_breakdown": dict(sorted((s.get("subpage_error_breakdown") or {}).items(), key=lambda x: -x[1])),
+            }
 
         inst_elapsed = elapsed
         inst_tp = (processed / inst_elapsed * 60) if inst_elapsed > 0 else 0
@@ -800,6 +852,7 @@ class BatchScrapeProcessor:
             "pages_per_company_avg": avg_pages,
             "total_retries": self._retries_total,
             "failure_diagnosis": diagnosis,
+            "provider_stats": provider_stats,
             "stage_funnel": stage_funnel,
             "http_time_histogram": http_histogram,
             "domain_success_distribution": domain_dist,

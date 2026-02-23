@@ -80,6 +80,13 @@ class ProxyPool:
 
         self._evomi_proxies: List[str] = []
         self._evomi_index: int = 0
+        self._evomi_meta: dict = {
+            "file_path": _EVOMI_FILE,
+            "file_exists": False,
+            "loaded_count": 0,
+            "invalid_lines": 0,
+            "reason": "not_loaded",
+        }
 
         self._weighted_cycle: List[str] = []
         self._weighted_index: int = 0
@@ -157,18 +164,37 @@ class ProxyPool:
 
     def _load_evomi_proxies(self):
         """Carrega proxy URLs do arquivo Evomi."""
-        if not os.path.exists(_EVOMI_FILE):
+        self._evomi_meta = {
+            "file_path": _EVOMI_FILE,
+            "file_exists": os.path.exists(_EVOMI_FILE),
+            "loaded_count": 0,
+            "invalid_lines": 0,
+            "reason": "not_loaded",
+        }
+        if not self._evomi_meta["file_exists"]:
+            self._evomi_meta["reason"] = "file_not_found"
             logger.warning(f"[ProxyPool] arquivo Evomi não encontrado: {_EVOMI_FILE}")
             return
         proxies: List[str] = []
+        invalid = 0
         with open(_EVOMI_FILE, encoding="utf-8") as f:
             for line in f:
                 parsed = _parse_evomi_line(line)
                 if parsed:
                     proxies.append(parsed)
+                elif (line or "").strip() and not (line or "").strip().startswith("#"):
+                    invalid += 1
         self._evomi_proxies = proxies
+        self._evomi_meta["loaded_count"] = len(proxies)
+        self._evomi_meta["invalid_lines"] = invalid
+        self._evomi_meta["reason"] = "loaded" if proxies else "empty_or_invalid_file"
         if self._evomi_proxies:
             logger.info(f"[ProxyPool] Evomi OK: {len(self._evomi_proxies)} proxies")
+        else:
+            logger.warning(
+                f"[ProxyPool] Evomi sem proxies válidos: "
+                f"path={_EVOMI_FILE} invalid_lines={invalid}"
+            )
 
     def _build_weighted_cycle(self):
         cycle: List[str] = []
@@ -236,7 +262,10 @@ class ProxyPool:
             ("evomi", self._next_evomi if self._evomi_proxies else None),
         ]:
             if not get_proxy:
-                results[label] = {"healthy": False, "error": "no proxies loaded"}
+                err = "no proxies loaded"
+                if label == "evomi":
+                    err = f"no proxies loaded ({self._evomi_meta.get('reason')})"
+                results[label] = {"healthy": False, "error": err}
                 continue
 
             latencies = []
@@ -290,6 +319,7 @@ class ProxyPool:
             "decodo_proxies": len(self._decodo_proxies),
             "evomi_proxies": len(self._evomi_proxies),
             "provider_weights": _PROVIDER_WEIGHTS,
+            "evomi_source": self._evomi_meta,
             "total_proxies": len(self._711_proxies) + len(self._decodo_proxies) + len(self._evomi_proxies),
         }
 
