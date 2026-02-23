@@ -167,6 +167,25 @@ def _percentiles(sorted_values: List[float], pcts: List[int]) -> Dict[str, float
     return {f"p{p}": round(sorted_values[min(int(n * p / 100), n - 1)], 1) for p in pcts}
 
 
+def _http_time_histogram(ok_sorted: List[float], fail_sorted: List[float]) -> dict:
+    """Distribui requests OK e FAIL por faixas de http_time (ms)."""
+    boundaries_ms = [3000, 6000, 9000, 12000, 15000, 18000, 21000]
+    labels = ["0-3s", "3-6s", "6-9s", "9-12s", "12-15s", "15-18s", "18-21s", "21s+"]
+    result = {}
+    for i, label in enumerate(labels):
+        lo = boundaries_ms[i - 1] if i > 0 else 0
+        hi = boundaries_ms[i] if i < len(boundaries_ms) else float('inf')
+        ok_lo = bisect.bisect_left(ok_sorted, lo)
+        ok_hi = bisect.bisect_left(ok_sorted, hi) if hi != float('inf') else len(ok_sorted)
+        fail_lo = bisect.bisect_left(fail_sorted, lo)
+        fail_hi = bisect.bisect_left(fail_sorted, hi) if hi != float('inf') else len(fail_sorted)
+        ok_n = ok_hi - ok_lo
+        fail_n = fail_hi - fail_lo
+        if ok_n > 0 or fail_n > 0:
+            result[label] = {"ok": ok_n, "fail": fail_n}
+    return result
+
+
 def _build_error_summary(scrape_result: ScrapeResult, fallback_error: str = "") -> str:
     pages = scrape_result.pages or []
     successful = [p for p in pages if p.success]
@@ -269,6 +288,8 @@ class BatchScrapeProcessor:
         self._subpage_sem_wait_fail: List[float] = []
         self._subpage_http_ok: List[float] = []
         self._subpage_http_fail: List[float] = []
+        self._domain_subpage_success_rates: List[float] = []
+        self._subpage_errors_by_quartile: List[Dict[str, int]] = [{}, {}, {}, {}]
 
     @property
     def processed(self) -> int:
@@ -495,6 +516,17 @@ class BatchScrapeProcessor:
         if result.main_page_ok and result.subpages_time_ms > 0:
             self._subpages_times.append(result.subpages_time_ms)
 
+        if result.subpages_attempted > 0:
+            rate = result.subpages_ok / result.subpages_attempted * 100
+            self._domain_subpage_success_rates.append(rate)
+
+        if result.subpage_errors and self.total > 0:
+            progress = self._processed / self.total
+            qi = min(3, int(progress * 4))
+            for cat, count in result.subpage_errors.items():
+                bucket = self._subpage_errors_by_quartile[qi]
+                bucket[cat] = bucket.get(cat, 0) + count
+
         if result.pages and result.main_page_ok:
             for page in result.pages[1:]:
                 if page.response_time_ms > 0:
@@ -643,6 +675,27 @@ class BatchScrapeProcessor:
             "overall_funnel_pct": success_rate,
         }
 
+        http_histogram = _http_time_histogram(self._subpage_http_ok, self._subpage_http_fail)
+
+        rates = self._domain_subpage_success_rates
+        domain_dist = {}
+        if rates:
+            domain_dist = {
+                "total_domains_with_subpages": len(rates),
+                "100pct_success": sum(1 for r in rates if r >= 100),
+                "50_99pct_success": sum(1 for r in rates if 50 <= r < 100),
+                "1_49pct_success": sum(1 for r in rates if 0 < r < 50),
+                "0pct_success": sum(1 for r in rates if r == 0),
+                "avg_success_rate_pct": round(sum(rates) / len(rates), 1),
+            }
+
+        error_timeline = {
+            "q1_0_25pct": self._subpage_errors_by_quartile[0] or {},
+            "q2_25_50pct": self._subpage_errors_by_quartile[1] or {},
+            "q3_50_75pct": self._subpage_errors_by_quartile[2] or {},
+            "q4_75_100pct": self._subpage_errors_by_quartile[3] or {},
+        }
+
         links_in_html = self._links_in_html_total
         links_selected = self._links_selected_total
         subpages_attempted = self._subpages_attempted_total
@@ -676,6 +729,9 @@ class BatchScrapeProcessor:
             "total_retries": self._retries_total,
             "failure_diagnosis": diagnosis,
             "stage_funnel": stage_funnel,
+            "http_time_histogram": http_histogram,
+            "domain_success_distribution": domain_dist,
+            "error_timeline_by_quartile": error_timeline,
             "subpage_pipeline": {
                 "links_in_html_total": links_in_html,
                 "links_after_filter": self._links_after_filter_total,
