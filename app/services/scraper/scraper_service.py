@@ -15,7 +15,7 @@ from .models import ScrapedPage, ScrapeResult
 from .constants import (
     REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES, MIN_CONTENT_LENGTH,
     PER_DOMAIN_CONCURRENT, CIRCUIT_BREAKER_THRESHOLD,
-    RETRY_TIMEOUT, MAX_RETRIES,
+    RETRY_TIMEOUT, MAX_RETRIES, PROBE_ONLY_MODE,
     smart_referer,
 )
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
@@ -80,6 +80,19 @@ async def scrape_all_subpages(
         return meta
 
     meta.main_page_ok = True
+
+    if PROBE_ONLY_MODE:
+        meta.pages = [main_page]
+        meta.subpages_attempted = 0
+        meta.subpages_ok = 0
+        meta.subpages_skipped = 0
+        meta.subpages_time_ms = 0.0
+        meta.total_time_ms = (time.perf_counter() - overall_start) * 1000
+        logger.info(
+            f"{ctx_label} {url[:50]} | probe_only=on | main_ok=1/1 "
+            f"probe+main={meta.main_scrape_time_ms:.0f}ms total={meta.total_time_ms:.0f}ms"
+        )
+        return meta
 
     # 2. SELECIONAR TOP LINKS
     all_links = set(main_page.links)
