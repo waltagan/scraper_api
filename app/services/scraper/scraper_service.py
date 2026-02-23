@@ -82,6 +82,8 @@ async def scrape_all_subpages(
     meta.links_in_html = len(all_links)
     meta.links_after_filter = len(filtered)
     meta.links_selected = len(target_subpages)
+    meta.all_links = sorted(all_links)
+    meta.target_links = list(target_subpages)
 
     # 3. SCRAPE SUBPAGES (stagger + domain_sem + circuit breaker)
     base_referer = smart_referer(url)

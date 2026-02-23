@@ -22,13 +22,18 @@ STAGGER_DELAY: float = _cfg.get("stagger_delay", 0.3)
 CIRCUIT_BREAKER_THRESHOLD: int = _cfg.get("circuit_breaker_threshold", 2)
 FLUSH_SIZE: int = _cfg.get("flush_size", 500)
 MIN_CONTENT_LENGTH: int = _cfg.get("min_content_length", 100)
-MAX_CONCURRENT_REQUESTS: int = _cfg.get("max_concurrent_requests", 2000)
+MAX_CONCURRENT_711: int = _cfg.get("max_concurrent_711", 800)
+MAX_CONCURRENT_DECODO: int = _cfg.get("max_concurrent_decodo", 1500)
+MAX_CONCURRENT_REQUESTS: int = MAX_CONCURRENT_711 + MAX_CONCURRENT_DECODO
+CHUNK_SIZE: int = _cfg.get("chunk_size", 5000)
 
 logger.info(
     f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s sub_timeout={SUBPAGE_TIMEOUT}s "
     f"subpages={MAX_SUBPAGES} domain_conc={PER_DOMAIN_CONCURRENT} "
     f"stagger={STAGGER_DELAY}s cb_threshold={CIRCUIT_BREAKER_THRESHOLD} "
-    f"flush={FLUSH_SIZE} max_concurrent={MAX_CONCURRENT_REQUESTS}"
+    f"flush={FLUSH_SIZE} chunk={CHUNK_SIZE} "
+    f"concurrent: 711={MAX_CONCURRENT_711} decodo={MAX_CONCURRENT_DECODO} "
+    f"total={MAX_CONCURRENT_REQUESTS}"
 )
 
 # ---------------------------------------------------------------------------

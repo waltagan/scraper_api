@@ -370,7 +370,7 @@ class DatabaseService:
         
         Cada record e uma tupla:
         (cnpj_basico, discovery_id, website_url, chunk_index, total_chunks, 
-         chunk_content, token_count, page_source, error)
+         chunk_content, token_count, page_source, error, page_website, page_scraped)
         """
         if not records:
             return 0
@@ -384,7 +384,8 @@ class DatabaseService:
                     columns=[
                         'cnpj_basico', 'discovery_id', 'website_url',
                         'chunk_index', 'total_chunks', 'chunk_content',
-                        'token_count', 'page_source', 'error'
+                        'token_count', 'page_source', 'error',
+                        'page_website', 'page_scraped',
                     ],
                     schema_name=SCHEMA,
                 )

@@ -36,6 +36,7 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
         flush_size=request.flush_size,
         status_filter=request.status_filter,
         limit=request.limit,
+        chunk_size=request.chunk_size,
     )
     set_active_batch(processor)
     await processor.initialize()

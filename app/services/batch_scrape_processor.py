@@ -1,8 +1,9 @@
 """
-Batch Scrape Processor — pipeline simplificado.
+Batch Scrape Processor — pipeline com chunking.
 
-asyncio.gather com semaforo global. Sem multi-instance, sem queues.
-Concorrencia controlada pelo semaforo global de 2000 no http_client.
+Processa empresas em chunks de CHUNK_SIZE para limitar memória e
+permitir renovação de sessões sticky entre lotes.
+Semáforos por provider: 711Proxy (800) + Decodo (1500).
 """
 
 import asyncio
@@ -18,7 +19,7 @@ from app.services.scraper.scraper_service import scrape_all_subpages
 from app.services.scraper.models import ScrapeResult
 from app.core.chunking import process_content
 from app.services.database_service import get_db_service
-from app.services.scraper.constants import FLUSH_SIZE, MAX_SUBPAGES
+from app.services.scraper.constants import FLUSH_SIZE, MAX_SUBPAGES, CHUNK_SIZE
 from app.services.scraper_manager.proxy_manager import proxy_pool
 
 logger = logging.getLogger(__name__)
@@ -224,23 +225,27 @@ class CompanyResult:
     pages_scraped: int = 0
     total_pages_attempted: int = 0
     retries_used: int = 0
+    page_website: Optional[str] = None
+    page_scraped: Optional[str] = None
 
 
 class BatchScrapeProcessor:
-    """Processador batch simplificado — asyncio.gather com semaforo global."""
+    """Processador batch com chunking — processa CHUNK_SIZE empresas por vez."""
 
     def __init__(
         self,
-        worker_count: int = 2000,
+        worker_count: int = 2300,
         flush_size: int = FLUSH_SIZE,
         status_filter: Optional[List[str]] = None,
         limit: Optional[int] = None,
         instances: int = 1,
+        chunk_size: Optional[int] = None,
     ):
         self.batch_id = str(uuid.uuid4())[:8]
         self.flush_size = flush_size
         self.status_filter = status_filter or ['muito_alto', 'alto', 'medio']
         self.limit = limit
+        self.chunk_size = chunk_size or CHUNK_SIZE
 
         self._task: Optional[asyncio.Task] = None
         self.total = 0
@@ -351,12 +356,14 @@ class BatchScrapeProcessor:
             return
 
         self._proxy_health = await proxy_pool.health_check()
-        if not self._proxy_health.get("healthy", False):
-            logger.error(f"[Batch {self.batch_id}] Gateway proxy falhou! Abortando.")
+        providers = self._proxy_health.get("providers", {})
+        any_healthy = any(p.get("healthy") for p in providers.values())
+        if not any_healthy:
+            logger.error(f"[Batch {self.batch_id}] Nenhum proxy healthy! Abortando.")
             self.status = "error"
             return
 
-        logger.info(f"[Batch {self.batch_id}] Gateway OK. Carregando empresas...")
+        logger.info(f"[Batch {self.batch_id}] Proxies OK. Carregando empresas...")
         all_companies = await self._load_all_companies()
 
         if not all_companies:
@@ -365,14 +372,38 @@ class BatchScrapeProcessor:
             return
 
         self.total = len(all_companies)
-        logger.info(f"[Batch {self.batch_id}] {self.total} empresas — asyncio.gather direto")
+        cs = self.chunk_size
+        total_chunks = (self.total + cs - 1) // cs
+        logger.info(
+            f"[Batch {self.batch_id}] {self.total} empresas em "
+            f"{total_chunks} chunks de {cs}"
+        )
 
         try:
             self._sampler_task = asyncio.create_task(self._sample_connections())
-            tasks = [self._process_company(c) for c in all_companies]
-            await asyncio.gather(*tasks)
+
+            for chunk_start in range(0, len(all_companies), cs):
+                chunk = all_companies[chunk_start:chunk_start + cs]
+                chunk_num = chunk_start // cs + 1
+
+                logger.info(
+                    f"[Batch {self.batch_id}] Chunk {chunk_num}/{total_chunks}: "
+                    f"{len(chunk)} empresas (progresso: {self._processed}/{self.total})"
+                )
+
+                tasks = [self._process_company(c) for c in chunk]
+                await asyncio.gather(*tasks)
+                await self._flush_buffer(force=True)
+
+                if chunk_start + cs < len(all_companies):
+                    await proxy_pool.preload()
+                    logger.info(
+                        f"[Batch {self.batch_id}] Chunk {chunk_num} concluído. "
+                        f"Sessões renovadas. "
+                        f"{self._success_count} ok, {self._error_count} erros até agora."
+                    )
+
             self._sampler_task.cancel()
-            await self._flush_buffer(force=True)
             self.status = "completed"
             elapsed = time.time() - self._start_time
             logger.info(
@@ -454,6 +485,8 @@ class BatchScrapeProcessor:
         total_pages = len(pages) if pages else 0
         successful_pages = [p for p in (pages or []) if p.success]
 
+        pw = json.dumps({"num_links": len(result.all_links), "links": result.all_links})
+
         if not successful_pages:
             error_msg = "Nenhum conteudo obtido"
             if pages:
@@ -464,6 +497,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, error_msg),
                 total_pages_attempted=total_pages,
+                page_website=pw,
             )
 
         parts = []
@@ -472,12 +506,15 @@ class BatchScrapeProcessor:
             parts.append(f"--- PAGE START: {page.url} ---\n{page.content}\n--- PAGE END ---")
             visited.append(page.url)
 
+        ps = json.dumps({"num_links": len(visited), "links": visited})
+
         aggregated = "\n\n".join(parts)
         if len(aggregated.strip()) < 100:
             return CompanyResult(
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, f"Conteudo insuficiente ({len(aggregated)} chars)"),
                 pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+                page_website=pw, page_scraped=ps,
             )
 
         chunks = process_content(aggregated)
@@ -486,6 +523,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, "Nenhum chunk gerado"),
                 pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+                page_website=pw, page_scraped=ps,
             )
 
         for chunk in chunks:
@@ -496,6 +534,7 @@ class BatchScrapeProcessor:
             cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
             chunks=chunks, success=True,
             pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+            page_website=pw, page_scraped=ps,
         )
 
     def _aggregate_scrape_meta(self, result: ScrapeResult) -> None:
@@ -584,11 +623,13 @@ class BatchScrapeProcessor:
                         result.cnpj_basico, result.discovery_id,
                         result.website_url, chunk.index, chunk.total_chunks,
                         chunk.content, chunk.tokens, page_source, None,
+                        result.page_website, result.page_scraped,
                     ))
             else:
                 records.append((
                     result.cnpj_basico, result.discovery_id,
                     result.website_url, 0, 0, None, 0, None, result.error,
+                    result.page_website, result.page_scraped,
                 ))
         try:
             db = get_db_service()
@@ -807,6 +848,7 @@ class BatchScrapeProcessor:
                 REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES,
                 PER_DOMAIN_CONCURRENT, STAGGER_DELAY,
                 CIRCUIT_BREAKER_THRESHOLD, FLUSH_SIZE, MIN_CONTENT_LENGTH,
+                MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO,
             )
             stats["config"] = {
                 "request_timeout": REQUEST_TIMEOUT,
@@ -817,6 +859,9 @@ class BatchScrapeProcessor:
                 "circuit_breaker_threshold": CIRCUIT_BREAKER_THRESHOLD,
                 "flush_size": FLUSH_SIZE,
                 "min_content_length": MIN_CONTENT_LENGTH,
+                "max_concurrent_711": MAX_CONCURRENT_711,
+                "max_concurrent_decodo": MAX_CONCURRENT_DECODO,
+                "chunk_size": self.chunk_size,
             }
         except Exception:
             pass

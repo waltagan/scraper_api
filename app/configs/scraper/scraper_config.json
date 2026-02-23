@@ -1,11 +1,13 @@
 {
-  "request_timeout": 20,
-  "subpage_timeout": 30,
+  "request_timeout": 40,
+  "subpage_timeout": 40,
   "max_subpages": 10,
   "per_domain_concurrent": 3,
   "stagger_delay": 0.5,
   "circuit_breaker_threshold": 3,
   "flush_size": 500,
   "min_content_length": 100,
-  "max_concurrent_requests": 800
+  "max_concurrent_711": 800,
+  "max_concurrent_decodo": 1500,
+  "chunk_size": 1000
 }

@@ -1,7 +1,6 @@
 """
 Cliente HTTP para scraping usando curl_cffi.
-Session compartilhada + semáforo global de 2000 requests simultâneos.
-Stress test provou: proxy aguenta 2000 conns (83.8% sucesso), acima degrada.
+Semáforos por provider: 711Proxy (800) + Decodo (1500) = 2300 total.
 """
 
 import asyncio
@@ -19,7 +18,11 @@ except ImportError:
     HAS_CURL_CFFI = False
     AsyncSession = None
 
-from .constants import REQUEST_TIMEOUT, MAX_CONCURRENT_REQUESTS, build_headers, BROWSER_PROFILES
+from .constants import (
+    REQUEST_TIMEOUT, MAX_CONCURRENT_REQUESTS,
+    MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO,
+    build_headers, BROWSER_PROFILES,
+)
 from .html_parser import parse_html
 
 logger = logging.getLogger(__name__)
@@ -34,9 +37,9 @@ _CHARSET_CONTENT_TYPE_REGEX = re.compile(
 )
 
 _MAX_CLIENTS = 3000
-_MAX_CONCURRENT_REQUESTS = MAX_CONCURRENT_REQUESTS
 _sessions: List = []
-_semaphore: Optional[asyncio.Semaphore] = None
+_sem_711: Optional[asyncio.Semaphore] = None
+_sem_decodo: Optional[asyncio.Semaphore] = None
 _init_done = False
 
 _active_connections: int = 0
@@ -45,8 +48,8 @@ _total_requests: int = 0
 
 
 def _ensure_sessions():
-    """Cria sessions compartilhadas e semáforo global (lazy, uma vez só)."""
-    global _sessions, _semaphore, _init_done
+    """Cria sessions compartilhadas e semáforos por provider (lazy, uma vez só)."""
+    global _sessions, _sem_711, _sem_decodo, _init_done
     if _init_done:
         return
     if not HAS_CURL_CFFI:
@@ -58,11 +61,13 @@ def _ensure_sessions():
         s = AsyncSession(impersonate=p, verify=False, max_clients=_MAX_CLIENTS)
         _sessions.append(s)
 
-    _semaphore = asyncio.Semaphore(_MAX_CONCURRENT_REQUESTS)
+    _sem_711 = asyncio.Semaphore(MAX_CONCURRENT_711)
+    _sem_decodo = asyncio.Semaphore(MAX_CONCURRENT_DECODO)
 
     logger.info(
         f"[http_client] {len(_sessions)} sessions | "
-        f"semaphore={_MAX_CONCURRENT_REQUESTS} max concurrent requests"
+        f"sem_711={MAX_CONCURRENT_711} sem_decodo={MAX_CONCURRENT_DECODO} "
+        f"total={MAX_CONCURRENT_REQUESTS}"
     )
     _init_done = True
 
@@ -75,12 +80,16 @@ def get_shared_session() -> "AsyncSession":
     return random.choice(_sessions)
 
 
-def get_semaphore() -> asyncio.Semaphore:
-    """Retorna semáforo global de requests."""
+def _is_decodo(proxy: str) -> bool:
+    return "decodo" in proxy
+
+
+def get_semaphore(proxy: str = "") -> asyncio.Semaphore:
+    """Retorna semáforo do provider correto baseado na proxy URL."""
     _ensure_sessions()
-    if _semaphore is None:
-        return asyncio.Semaphore(_MAX_CONCURRENT_REQUESTS)
-    return _semaphore
+    if _is_decodo(proxy):
+        return _sem_decodo or asyncio.Semaphore(MAX_CONCURRENT_DECODO)
+    return _sem_711 or asyncio.Semaphore(MAX_CONCURRENT_711)
 
 
 def _get_proxy() -> str:
@@ -105,7 +114,9 @@ def get_connection_stats() -> dict:
         "active": _active_connections,
         "peak": _peak_connections,
         "total_requests": _total_requests,
-        "semaphore_capacity": _MAX_CONCURRENT_REQUESTS,
+        "capacity_711": MAX_CONCURRENT_711,
+        "capacity_decodo": MAX_CONCURRENT_DECODO,
+        "capacity_total": MAX_CONCURRENT_REQUESTS,
     }
 
 
@@ -170,14 +181,14 @@ async def cffi_scrape(
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
-    """Scrape com semáforo global — máximo 2000 requests simultâneos ao proxy."""
+    """Scrape com semáforo por provider (711=800, Decodo=1500)."""
     if not HAS_CURL_CFFI:
         raise RuntimeError("curl_cffi não está instalado")
 
     headers, _ = build_headers()
     proxy_url = proxy or _get_proxy()
     req_timeout = timeout or REQUEST_TIMEOUT
-    sem = get_semaphore()
+    sem = get_semaphore(proxy_url)
 
     async with sem:
         _track_request_start()
@@ -218,7 +229,7 @@ async def cffi_scrape_safe(
         headers, _ = build_headers(referer=referer)
         proxy_url = proxy or _get_proxy()
         req_timeout = timeout or REQUEST_TIMEOUT
-        sem = get_semaphore()
+        sem = get_semaphore(proxy_url)
 
         async with sem:
             t_http = _time.perf_counter()

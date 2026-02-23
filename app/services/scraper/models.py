@@ -31,6 +31,8 @@ class ScrapeResult:
     links_in_html: int = 0
     links_after_filter: int = 0
     links_selected: int = 0
+    all_links: List[str] = field(default_factory=list)
+    target_links: List[str] = field(default_factory=list)
     subpages_attempted: int = 0
     subpages_ok: int = 0
     subpages_skipped: int = 0
