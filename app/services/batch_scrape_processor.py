@@ -263,6 +263,8 @@ class BatchScrapeProcessor:
         self._main_scrape_fail: int = 0
         self._main_scrape_fail_reasons: Dict[str, int] = {}
         self._subpages_times: List[float] = []
+        self._subpage_individual_ok: List[float] = []
+        self._subpage_individual_fail: List[float] = []
 
     @property
     def processed(self) -> int:
@@ -489,6 +491,14 @@ class BatchScrapeProcessor:
         if result.main_page_ok and result.subpages_time_ms > 0:
             self._subpages_times.append(result.subpages_time_ms)
 
+        if result.pages and result.main_page_ok:
+            for page in result.pages[1:]:
+                if page.response_time_ms > 0:
+                    if page.success:
+                        bisect.insort(self._subpage_individual_ok, page.response_time_ms)
+                    else:
+                        bisect.insort(self._subpage_individual_fail, page.response_time_ms)
+
     async def _flush_buffer(self, force: bool = False):
         async with self._buffer_lock:
             if not self._buffer:
@@ -596,7 +606,15 @@ class BatchScrapeProcessor:
                 "success_rate_pct": round(self._subpages_ok_total / self._subpages_attempted_total * 100, 1) if self._subpages_attempted_total > 0 else 0,
                 "success_rate_real_pct": round(self._subpages_ok_total / max(1, self._subpages_attempted_total + self._subpages_skipped_total) * 100, 1),
                 "fail_reasons": dict(sorted(self._subpage_error_cats.items(), key=lambda x: -x[1])) if self._subpage_error_cats else {},
-                "time_ms": _percentiles(sub_times_sorted, [50, 75, 90, 95, 99]) if sub_times_sorted else {},
+                "total_time_per_company_ms": _percentiles(sub_times_sorted, [50, 75, 90, 95, 99]) if sub_times_sorted else {},
+                "individual_ok_ms": {
+                    "count": len(self._subpage_individual_ok),
+                    **_percentiles(self._subpage_individual_ok, [50, 75, 90, 95, 99]),
+                } if self._subpage_individual_ok else {},
+                "individual_fail_ms": {
+                    "count": len(self._subpage_individual_fail),
+                    **_percentiles(self._subpage_individual_fail, [50, 75, 90, 95, 99]),
+                } if self._subpage_individual_fail else {},
             },
             "overall_funnel_pct": success_rate,
         }

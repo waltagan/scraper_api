@@ -1,9 +1,9 @@
 {
   "request_timeout": 20,
-  "subpage_timeout": 12,
+  "subpage_timeout": 8,
   "max_subpages": 10,
   "per_domain_concurrent": 3,
-  "stagger_delay": 0.3,
+  "stagger_delay": 0.15,
   "circuit_breaker_threshold": 2,
   "flush_size": 500,
   "min_content_length": 100,
