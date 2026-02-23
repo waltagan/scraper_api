@@ -1,0 +1,206 @@
+[
+  {
+    "proxy": "direct_ip",
+    "concurrent": 500,
+    "total_requests": 500,
+    "success": 496,
+    "failed": 4,
+    "success_rate_pct": 99.2,
+    "total_time_s": 30.1,
+    "requests_per_second": 16.6,
+    "latency_all_ms": {
+      "min": 1157.3,
+      "p50": 1647.0,
+      "p75": 1853.6,
+      "p90": 2302.5,
+      "p95": 2848.1,
+      "p99": 5136.3,
+      "max": 30042.7,
+      "avg": 1856.7
+    },
+    "latency_success_ms": {
+      "min": 1157.3,
+      "p50": 1644.6,
+      "p75": 1851.5,
+      "p90": 2242.9,
+      "p95": 2683.6,
+      "p99": 4041.3,
+      "max": 7746.2,
+      "avg": 1760.5
+    },
+    "error_breakdown": {
+      "ConnectionError": 3,
+      "Timeout": 1
+    }
+  },
+  {
+    "proxy": "gateway_us",
+    "concurrent": 500,
+    "total_requests": 500,
+    "success": 499,
+    "failed": 1,
+    "success_rate_pct": 99.8,
+    "total_time_s": 6.6,
+    "requests_per_second": 76.0,
+    "latency_all_ms": {
+      "min": 1229.9,
+      "p50": 1760.8,
+      "p75": 2009.8,
+      "p90": 2377.2,
+      "p95": 3678.6,
+      "p99": 5020.6,
+      "max": 6566.9,
+      "avg": 1927.1
+    },
+    "latency_success_ms": {
+      "min": 1229.9,
+      "p50": 1759.4,
+      "p75": 2008.2,
+      "p90": 2377.2,
+      "p95": 3678.6,
+      "p99": 5020.6,
+      "max": 6566.9,
+      "avg": 1926.6
+    },
+    "error_breakdown": {
+      "unknown": 1
+    }
+  },
+  {
+    "proxy": "direct_ip",
+    "concurrent": 1000,
+    "total_requests": 1000,
+    "success": 999,
+    "failed": 1,
+    "success_rate_pct": 99.9,
+    "total_time_s": 8.3,
+    "requests_per_second": 120.8,
+    "latency_all_ms": {
+      "min": 1658.8,
+      "p50": 2175.7,
+      "p75": 2409.5,
+      "p90": 2763.9,
+      "p95": 3403.5,
+      "p99": 4607.7,
+      "max": 8231.5,
+      "avg": 2314.5
+    },
+    "latency_success_ms": {
+      "min": 1658.8,
+      "p50": 2175.7,
+      "p75": 2409.5,
+      "p90": 2763.9,
+      "p95": 3403.5,
+      "p99": 4607.7,
+      "max": 8231.5,
+      "avg": 2314.7
+    },
+    "error_breakdown": {
+      "ConnectionError": 1
+    }
+  },
+  {
+    "proxy": "gateway_us",
+    "concurrent": 1000,
+    "total_requests": 1000,
+    "success": 996,
+    "failed": 4,
+    "success_rate_pct": 99.6,
+    "total_time_s": 30.1,
+    "requests_per_second": 33.2,
+    "latency_all_ms": {
+      "min": 2196.1,
+      "p50": 2996.7,
+      "p75": 3347.2,
+      "p90": 3728.6,
+      "p95": 4403.3,
+      "p99": 5983.2,
+      "max": 30109.6,
+      "avg": 3212.2
+    },
+    "latency_success_ms": {
+      "min": 2196.1,
+      "p50": 2996.3,
+      "p75": 3337.5,
+      "p90": 3708.3,
+      "p95": 4247.8,
+      "p99": 5556.9,
+      "max": 7817.5,
+      "avg": 3141.0
+    },
+    "error_breakdown": {
+      "Timeout": 2,
+      "ConnectionError": 2
+    }
+  },
+  {
+    "proxy": "direct_ip",
+    "concurrent": 2000,
+    "total_requests": 2000,
+    "success": 1994,
+    "failed": 6,
+    "success_rate_pct": 99.7,
+    "total_time_s": 30.2,
+    "requests_per_second": 66.2,
+    "latency_all_ms": {
+      "min": 1878.9,
+      "p50": 3423.2,
+      "p75": 3973.2,
+      "p90": 5848.9,
+      "p95": 6309.1,
+      "p99": 7156.8,
+      "max": 30159.5,
+      "avg": 3621.3
+    },
+    "latency_success_ms": {
+      "min": 1878.9,
+      "p50": 3422.5,
+      "p75": 3969.2,
+      "p90": 5818.9,
+      "p95": 6302.6,
+      "p99": 7097.0,
+      "max": 15668.5,
+      "avg": 3593.9
+    },
+    "error_breakdown": {
+      "unknown": 2,
+      "Timeout": 2,
+      "ConnectionError": 2
+    }
+  },
+  {
+    "proxy": "gateway_us",
+    "concurrent": 2000,
+    "total_requests": 2000,
+    "success": 1985,
+    "failed": 15,
+    "success_rate_pct": 99.2,
+    "total_time_s": 30.2,
+    "requests_per_second": 66.3,
+    "latency_all_ms": {
+      "min": 2411.0,
+      "p50": 3926.3,
+      "p75": 4401.0,
+      "p90": 4926.5,
+      "p95": 5678.5,
+      "p99": 7027.7,
+      "max": 30137.7,
+      "avg": 4001.8
+    },
+    "latency_success_ms": {
+      "min": 2411.0,
+      "p50": 3917.5,
+      "p75": 4392.1,
+      "p90": 4900.8,
+      "p95": 5598.0,
+      "p99": 6932.2,
+      "max": 9757.9,
+      "avg": 3964.7
+    },
+    "error_breakdown": {
+      "ConnectionError": 12,
+      "Timeout": 2,
+      "unknown": 1
+    }
+  }
+]

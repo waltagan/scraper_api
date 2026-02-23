@@ -1,0 +1,86 @@
+[
+  {
+    "label": "2000_concurrent",
+    "total_urls": 2000,
+    "concurrent": 2000,
+    "total_time_s": 30.3,
+    "success": 1497,
+    "failed": 503,
+    "success_rate_pct": 74.9,
+    "requests_per_second": 66.0,
+    "companies_per_minute": 3961.2,
+    "latency_all_ms": {
+      "min": 2302.5,
+      "p25": 8280.2,
+      "p50": 24973.5,
+      "p75": 27147.8,
+      "p90": 27299.1,
+      "p95": 28492.6,
+      "p99": 30260.4,
+      "max": 30264.4,
+      "avg": 18301.5
+    },
+    "latency_success_ms": {
+      "min": 2304.4,
+      "p25": 8278.2,
+      "p50": 22459.2,
+      "p75": 27140.2,
+      "p90": 27291.9,
+      "p95": 27303.8,
+      "p99": 28502.5,
+      "max": 30187.8,
+      "avg": 17630.2
+    },
+    "latency_fail_ms": {
+      "min": 2302.5,
+      "p25": 8283.1,
+      "p50": 27136.0,
+      "p75": 27287.0,
+      "p90": 30230.8,
+      "p95": 30250.3,
+      "p99": 30262.6,
+      "max": 30264.4,
+      "avg": 20299.6
+    },
+    "content_bytes": {
+      "min": 107,
+      "p25": 32022,
+      "p50": 107732,
+      "p75": 214145,
+      "p90": 527217,
+      "p95": 859309,
+      "p99": 1599441,
+      "max": 13637122,
+      "avg": 221201.7
+    },
+    "status_codes": {
+      "200": 1506,
+      "0": 417,
+      "403": 51,
+      "404": 18,
+      "503": 3,
+      "412": 3,
+      "400": 1,
+      "500": 1
+    },
+    "error_categories": {
+      "connection": 181,
+      "other": 155,
+      "timeout": 81,
+      "http_error": 74,
+      "empty_content": 12
+    },
+    "error_top10": {
+      "connection:ConnectionError:Failed to perform, curl: (56) Rec": 129,
+      "other:SSLError:Failed to perform, curl: (35) Send failure: B": 81,
+      "other:ConnectionError:Failed to perform, curl: (55) Send fai": 74,
+      "timeout:Timeout:Failed to perform, curl: (28) Operation time": 58,
+      "http_error:status_403": 51,
+      "connection:SSLError:Failed to perform, curl: (35) Recv failu": 48,
+      "timeout:Timeout:Failed to perform, curl: (28) Connection tim": 23,
+      "http_error:status_404": 17,
+      "http_error:status_503": 3,
+      "connection:ConnectionError:Failed to perform, curl: (55) Rec": 3
+    }
+  }
+]

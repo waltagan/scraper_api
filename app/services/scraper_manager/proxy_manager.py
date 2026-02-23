@@ -62,12 +62,13 @@ class ProxyPool:
             logger.error(f"[ProxyPool] Failed to load sticky sessions: {e}")
 
     def get_sticky_proxy(self) -> Optional[str]:
-        """Retorna proxy URL com porta sticky (round-robin). Mesma porta = mesmo IP."""
-        if not self._sticky_ports or not self._base_auth or not self._base_host:
+        """Retorna proxy URL com porta sticky (round-robin). Mesma porta = mesmo IP.
+        Portas sticky usam IP Whitelist (sem credenciais), não username/password."""
+        if not self._sticky_ports or not self._base_host:
             return None
         port = self._sticky_ports[self._sticky_index % len(self._sticky_ports)]
         self._sticky_index += 1
-        return f"http://{self._base_auth}@{self._base_host}:{port}"
+        return f"http://{self._base_host}:{port}"
 
     async def health_check(self, test_url: str = "http://httpbin.org/ip", timeout: int = 8) -> dict:
         if not self._gateway_url:
@@ -76,12 +77,17 @@ class ProxyPool:
         from app.services.scraper.http_client import get_shared_session
         latencies = []
         errors = []
+
+        sticky_proxy = self.get_sticky_proxy()
+        test_proxy = sticky_proxy or self._gateway_url
+        label = "sticky" if sticky_proxy else "gateway"
+
         for _ in range(3):
             t0 = time.perf_counter()
             try:
                 session = get_shared_session()
                 resp = await asyncio.wait_for(
-                    session.get(test_url, proxy=self._gateway_url, timeout=timeout),
+                    session.get(test_url, proxy=test_proxy, timeout=timeout),
                     timeout=timeout,
                 )
                 if resp.status_code == 200:
@@ -93,13 +99,17 @@ class ProxyPool:
 
         healthy = len(latencies) > 0
         avg_lat = sum(latencies) / len(latencies) if latencies else 0
-        logger.info(f"[ProxyPool] Health {'OK' if healthy else 'FALHA'}: {len(latencies)}/3 OK, lat={avg_lat:.0f}ms")
+        logger.info(
+            f"[ProxyPool] Health {label} {'OK' if healthy else 'FALHA'}: "
+            f"{len(latencies)}/3 OK, lat={avg_lat:.0f}ms"
+        )
         return {
             "mode": "sticky_sessions" if self._sticky_ports else "direct_ip",
             "healthy": healthy,
             "tests_ok": len(latencies), "tests_failed": len(errors),
             "latency_ms": {"avg": round(avg_lat, 1)} if latencies else {},
             "sticky_sessions_loaded": len(self._sticky_ports),
+            "test_type": label,
             "errors": errors or None,
         }
 

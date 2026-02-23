@@ -1,0 +1,256 @@
+[
+  {
+    "label": "500_concurrent",
+    "total_urls": 2000,
+    "concurrent": 500,
+    "total_time_s": 89.8,
+    "success": 1529,
+    "failed": 471,
+    "success_rate_pct": 76.4,
+    "requests_per_second": 22.3,
+    "companies_per_minute": 1336.0,
+    "latency_all_ms": {
+      "min": 474.2,
+      "p25": 3849.0,
+      "p50": 13564.6,
+      "p75": 23397.2,
+      "p90": 33081.8,
+      "p95": 39085.3,
+      "p99": 44186.9,
+      "max": 47199.4,
+      "avg": 15233.4
+    },
+    "latency_success_ms": {
+      "min": 1335.8,
+      "p25": 3523.3,
+      "p50": 9023.7,
+      "p75": 17591.8,
+      "p90": 26680.3,
+      "p95": 33064.8,
+      "p99": 38676.8,
+      "max": 40857.4,
+      "avg": 11882.3
+    },
+    "latency_fail_ms": {
+      "min": 474.2,
+      "p25": 17394.4,
+      "p50": 27998.8,
+      "p75": 36725.2,
+      "p90": 41928.8,
+      "p95": 43530.1,
+      "p99": 47198.2,
+      "max": 47199.4,
+      "avg": 26111.9
+    },
+    "content_bytes": {
+      "min": 115,
+      "p25": 32184,
+      "p50": 110119,
+      "p75": 234807,
+      "p90": 564659,
+      "p95": 909260,
+      "p99": 1828352,
+      "max": 13652379,
+      "avg": 237047.8
+    },
+    "status_codes": {
+      "200": 1541,
+      "0": 335,
+      "403": 61,
+      "404": 39,
+      "500": 16,
+      "503": 5,
+      "402": 1,
+      "409": 1,
+      "400": 1
+    },
+    "error_categories": {
+      "other": 173,
+      "http_error": 120,
+      "timeout": 93,
+      "connection": 69,
+      "empty_content": 16
+    },
+    "error_top10": {
+      "other:ConnectionError:Failed to perform, curl: (55) Send fai": 108,
+      "timeout:Timeout:Failed to perform, curl: (28) Operation time": 68,
+      "http_error:status_403": 58,
+      "connection:ConnectionError:Failed to perform, curl: (56) Rec": 40,
+      "http_error:status_404": 38,
+      "other:SSLError:Failed to perform, curl: (35) Send failure: B": 35,
+      "connection:SSLError:Failed to perform, curl: (35) Recv failu": 26,
+      "timeout:Timeout:Failed to perform, curl: (28) Connection tim": 25,
+      "http_error:status_500": 16,
+      "other:HTTPError:Failed to perform, curl: (92) HTTP/2 stream ": 15
+    }
+  },
+  {
+    "label": "1000_concurrent",
+    "total_urls": 2000,
+    "concurrent": 1000,
+    "total_time_s": 38.9,
+    "success": 1645,
+    "failed": 355,
+    "success_rate_pct": 82.2,
+    "requests_per_second": 51.4,
+    "companies_per_minute": 3082.7,
+    "latency_all_ms": {
+      "min": 391.9,
+      "p25": 3630.2,
+      "p50": 5276.4,
+      "p75": 7737.4,
+      "p90": 11490.1,
+      "p95": 13968.8,
+      "p99": 30094.3,
+      "max": 30814.9,
+      "avg": 6446.1
+    },
+    "latency_success_ms": {
+      "min": 399.8,
+      "p25": 3998.0,
+      "p50": 5480.5,
+      "p75": 7685.0,
+      "p90": 10824.9,
+      "p95": 12296.0,
+      "p99": 18147.1,
+      "max": 26760.0,
+      "avg": 6273.8
+    },
+    "latency_fail_ms": {
+      "min": 391.9,
+      "p25": 1693.8,
+      "p50": 3613.3,
+      "p75": 7820.7,
+      "p90": 30011.6,
+      "p95": 30106.7,
+      "p99": 30463.1,
+      "max": 30814.9,
+      "avg": 7244.4
+    },
+    "content_bytes": {
+      "min": 107,
+      "p25": 33413,
+      "p50": 114698,
+      "p75": 232446,
+      "p90": 568546,
+      "p95": 909260,
+      "p99": 1611229,
+      "max": 13652379,
+      "avg": 236307.5
+    },
+    "status_codes": {
+      "200": 1666,
+      "0": 199,
+      "403": 78,
+      "404": 39,
+      "500": 12,
+      "503": 3,
+      "402": 1,
+      "400": 1,
+      "502": 1
+    },
+    "error_categories": {
+      "http_error": 129,
+      "connection": 113,
+      "other": 45,
+      "timeout": 41,
+      "empty_content": 27
+    },
+    "error_top10": {
+      "http_error:status_403": 75,
+      "connection:ConnectionError:Failed to perform, curl: (56) Rec": 72,
+      "connection:SSLError:Failed to perform, curl: (35) Recv failu": 39,
+      "http_error:status_404": 36,
+      "other:ConnectionError:Failed to perform, curl: (55) Send fai": 35,
+      "timeout:Timeout:Failed to perform, curl: (28) Operation time": 29,
+      "timeout:Timeout:Failed to perform, curl: (28) Connection tim": 12,
+      "http_error:status_500": 12,
+      "empty_content:status_200:len_13": 10,
+      "other:HTTPError:Failed to perform, curl: (92) HTTP/2 stream ": 10
+    }
+  },
+  {
+    "label": "2000_concurrent",
+    "total_urls": 2000,
+    "concurrent": 2000,
+    "total_time_s": 30.3,
+    "success": 1675,
+    "failed": 325,
+    "success_rate_pct": 83.8,
+    "requests_per_second": 66.1,
+    "companies_per_minute": 3966.9,
+    "latency_all_ms": {
+      "min": 1864.9,
+      "p25": 6756.9,
+      "p50": 9425.8,
+      "p75": 12115.8,
+      "p90": 14462.0,
+      "p95": 17699.5,
+      "p99": 30199.1,
+      "max": 30206.6,
+      "avg": 10013.1
+    },
+    "latency_success_ms": {
+      "min": 2674.6,
+      "p25": 6944.6,
+      "p50": 9534.9,
+      "p75": 11982.0,
+      "p90": 14036.1,
+      "p95": 15673.6,
+      "p99": 19575.1,
+      "max": 29003.1,
+      "avg": 9730.7
+    },
+    "latency_fail_ms": {
+      "min": 1864.9,
+      "p25": 5453.2,
+      "p50": 8573.8,
+      "p75": 13161.9,
+      "p90": 30191.1,
+      "p95": 30202.1,
+      "p99": 30205.4,
+      "max": 30206.6,
+      "avg": 11468.4
+    },
+    "content_bytes": {
+      "min": 107,
+      "p25": 33156,
+      "p50": 109284,
+      "p75": 227153,
+      "p90": 548594,
+      "p95": 883030,
+      "p99": 1710401,
+      "max": 13652373,
+      "avg": 229957.3
+    },
+    "status_codes": {
+      "200": 1685,
+      "0": 224,
+      "403": 54,
+      "404": 25,
+      "503": 6,
+      "500": 3,
+      "402": 1,
+      "400": 1,
+      "412": 1
+    },
+    "error_categories": {
+      "connection": 179,
+      "http_error": 89,
+      "timeout": 45,
+      "empty_content": 12
+    },
+    "error_top10": {
+      "connection:ConnectionError:Failed to perform, curl: (56) Rec": 124,
+      "connection:SSLError:Failed to perform, curl: (35) Recv failu": 54,
+      "http_error:status_403": 54,
+      "timeout:Timeout:Failed to perform, curl: (28) Operation time": 26,
+      "http_error:status_404": 24,
+      "timeout:Timeout:Failed to perform, curl: (28) Connection tim": 19,
+      "http_error:status_503": 6,
+      "http_error:status_500": 3,
+      "empty_content:status_200:len_0": 2,
+      "empty_content:status_200:len_53": 2
+    }
+  }
+]
