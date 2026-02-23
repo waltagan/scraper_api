@@ -101,6 +101,18 @@ class BatchStatusResponse(BaseModel):
         default_factory=dict,
         description="Funil por etapa: probe → main_page → subpages, com entered/ok/fail/fail_reasons/time_ms"
     )
+    http_time_histogram: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Distribuição de requests OK/FAIL por faixa de tempo HTTP (0-3s, 3-6s, ..., 21s+)"
+    )
+    domain_success_distribution: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Distribuição de taxa de sucesso de subpages por domínio (100%, 50-99%, 1-49%, 0%)"
+    )
+    error_timeline_by_quartile: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Erros de subpage por quartil de progresso do batch (q1=0-25%, q2=25-50%, q3=50-75%, q4=75-100%)"
+    )
     subpage_pipeline: Dict[str, Any] = Field(
         default_factory=dict,
         description="Metricas do pipeline de subpages: links encontrados/filtrados/selecionados, "
