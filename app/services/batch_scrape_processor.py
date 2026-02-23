@@ -694,11 +694,17 @@ class BatchScrapeProcessor:
 
         try:
             from app.services.scraper.constants import (
-                REQUEST_TIMEOUT, MAX_SUBPAGES, FLUSH_SIZE, MIN_CONTENT_LENGTH,
+                REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES,
+                PER_DOMAIN_CONCURRENT, STAGGER_DELAY,
+                CIRCUIT_BREAKER_THRESHOLD, FLUSH_SIZE, MIN_CONTENT_LENGTH,
             )
             stats["config"] = {
                 "request_timeout": REQUEST_TIMEOUT,
+                "subpage_timeout": SUBPAGE_TIMEOUT,
                 "max_subpages": MAX_SUBPAGES,
+                "per_domain_concurrent": PER_DOMAIN_CONCURRENT,
+                "stagger_delay": STAGGER_DELAY,
+                "circuit_breaker_threshold": CIRCUIT_BREAKER_THRESHOLD,
                 "flush_size": FLUSH_SIZE,
                 "min_content_length": MIN_CONTENT_LENGTH,
             }

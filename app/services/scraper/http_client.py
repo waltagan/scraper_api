@@ -174,13 +174,13 @@ async def cffi_scrape_safe(
         cffi_scrape_safe.last_error = "no_curl_cffi"
         return "", set(), set()
 
+    t0 = _time.perf_counter()
     try:
         headers, _ = build_headers(referer=referer)
         proxy_url = proxy or _get_proxy()
         req_timeout = timeout or REQUEST_TIMEOUT
         sem = get_semaphore()
 
-        t0 = _time.perf_counter()
         async with sem:
             session = get_shared_session()
             resp = await session.get(
@@ -198,6 +198,7 @@ async def cffi_scrape_safe(
         return parse_html(text, url)
 
     except Exception as e:
+        cffi_scrape_safe.elapsed_ms = (_time.perf_counter() - t0) * 1000
         err_msg = str(e).lower()
         if "timeout" in err_msg or "timed out" in err_msg:
             cffi_scrape_safe.last_error = "proxy_timeout"

@@ -247,6 +247,12 @@ def _get_fail_reason(page: Optional[ScrapedPage]) -> str:
         err = page.error.lower()
         if "cloudflare" in err:
             return "scrape_blocked_cloudflare"
+        if "soft 404" in err:
+            return "scrape_soft_404"
+        if "thin_content" in err:
+            return "scrape_thin_content"
+        if "empty_response" in err:
+            return "scrape_empty_content"
         return f"proxy_fail:{page.error[:40]}"
     if not page.content:
         return "scrape_empty_content"
