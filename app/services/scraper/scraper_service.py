@@ -6,6 +6,7 @@ Subpages usam stagger delay + semaforo por dominio + circuit breaker.
 """
 
 import asyncio
+import random
 import time
 import logging
 from typing import List, Optional
@@ -13,7 +14,7 @@ from typing import List, Optional
 from .models import ScrapedPage, ScrapeResult
 from .constants import (
     REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES, MIN_CONTENT_LENGTH,
-    PER_DOMAIN_CONCURRENT, STAGGER_DELAY, CIRCUIT_BREAKER_THRESHOLD,
+    PER_DOMAIN_CONCURRENT, CIRCUIT_BREAKER_THRESHOLD,
     smart_referer,
 )
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
@@ -225,12 +226,12 @@ async def _scrape_subpages(
         if abort:
             return None
 
-        await asyncio.sleep(idx * STAGGER_DELAY)
-
-        if abort:
-            return None
-
         async with domain_sem:
+            if abort:
+                return None
+            if idx > 0:
+                delay = random.uniform(0.4, 0.65)
+                await asyncio.sleep(delay)
             if abort:
                 return None
             result = await scrape_one(url)
