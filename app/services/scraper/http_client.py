@@ -20,7 +20,8 @@ except ImportError:
 
 from .constants import (
     REQUEST_TIMEOUT, MAX_CONCURRENT_REQUESTS,
-    MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO,
+    MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO, MAX_CONCURRENT_EVOMI,
+    MAX_CONCURRENT_PER_PROXY,
     build_headers, BROWSER_PROFILES,
 )
 from .html_parser import parse_html
@@ -40,6 +41,8 @@ _MAX_CLIENTS = 3000
 _sessions: List = []
 _sem_711: Optional[asyncio.Semaphore] = None
 _sem_decodo: Optional[asyncio.Semaphore] = None
+_sem_evomi: Optional[asyncio.Semaphore] = None
+_proxy_semaphores: dict[str, asyncio.Semaphore] = {}
 _init_done = False
 
 _active_connections: int = 0
@@ -49,7 +52,7 @@ _total_requests: int = 0
 
 def _ensure_sessions():
     """Cria sessions compartilhadas e semáforos por provider (lazy, uma vez só)."""
-    global _sessions, _sem_711, _sem_decodo, _init_done
+    global _sessions, _sem_711, _sem_decodo, _sem_evomi, _init_done
     if _init_done:
         return
     if not HAS_CURL_CFFI:
@@ -63,10 +66,12 @@ def _ensure_sessions():
 
     _sem_711 = asyncio.Semaphore(MAX_CONCURRENT_711)
     _sem_decodo = asyncio.Semaphore(MAX_CONCURRENT_DECODO)
+    _sem_evomi = asyncio.Semaphore(MAX_CONCURRENT_EVOMI)
 
     logger.info(
         f"[http_client] {len(_sessions)} sessions | "
-        f"sem_711={MAX_CONCURRENT_711} sem_decodo={MAX_CONCURRENT_DECODO} "
+        f"sem_711={MAX_CONCURRENT_711} sem_decodo={MAX_CONCURRENT_DECODO} sem_evomi={MAX_CONCURRENT_EVOMI} "
+        f"sem_proxy={MAX_CONCURRENT_PER_PROXY} "
         f"total={MAX_CONCURRENT_REQUESTS}"
     )
     _init_done = True
@@ -80,16 +85,37 @@ def get_shared_session() -> "AsyncSession":
     return random.choice(_sessions)
 
 
-def _is_decodo(proxy: str) -> bool:
-    return "decodo" in proxy
+def _infer_provider(proxy: str = "", provider: Optional[str] = None) -> str:
+    if provider in {"711proxy", "decodo", "evomi"}:
+        return provider
+    p = (proxy or "").lower()
+    if "evomi" in p:
+        return "evomi"
+    if "decodo" in p:
+        return "decodo"
+    return "711proxy"
 
 
-def get_semaphore(proxy: str = "") -> asyncio.Semaphore:
-    """Retorna semáforo do provider correto baseado na proxy URL."""
+def get_provider_semaphore(proxy: str = "", provider: Optional[str] = None) -> asyncio.Semaphore:
+    """Retorna semáforo do provider correto baseado na proxy URL/provider."""
     _ensure_sessions()
-    if _is_decodo(proxy):
+    resolved_provider = _infer_provider(proxy, provider)
+    if resolved_provider == "decodo":
         return _sem_decodo or asyncio.Semaphore(MAX_CONCURRENT_DECODO)
+    if resolved_provider == "evomi":
+        return _sem_evomi or asyncio.Semaphore(MAX_CONCURRENT_EVOMI)
     return _sem_711 or asyncio.Semaphore(MAX_CONCURRENT_711)
+
+
+def get_proxy_semaphore(proxy: str = "") -> asyncio.Semaphore:
+    """Retorna semáforo por proxy específico para evitar hot proxy."""
+    _ensure_sessions()
+    key = proxy or _get_proxy()
+    sem = _proxy_semaphores.get(key)
+    if sem is None:
+        sem = asyncio.Semaphore(MAX_CONCURRENT_PER_PROXY)
+        _proxy_semaphores[key] = sem
+    return sem
 
 
 def _get_proxy() -> str:
@@ -180,6 +206,7 @@ async def cffi_scrape(
     url: str,
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
+    provider: Optional[str] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
     """Scrape com semáforo por provider (711=800, Decodo=1500)."""
     if not HAS_CURL_CFFI:
@@ -188,18 +215,20 @@ async def cffi_scrape(
     headers, _ = build_headers()
     proxy_url = proxy or _get_proxy()
     req_timeout = timeout or REQUEST_TIMEOUT
-    sem = get_semaphore(proxy_url)
+    sem_provider = get_provider_semaphore(proxy_url, provider)
+    sem_proxy = get_proxy_semaphore(proxy_url)
 
-    async with sem:
-        _track_request_start()
-        try:
-            session = get_shared_session()
-            resp = await session.get(
-                url, headers=headers, proxy=proxy_url,
-                timeout=req_timeout, allow_redirects=True, max_redirects=5,
-            )
-        finally:
-            _track_request_end()
+    async with sem_provider:
+        async with sem_proxy:
+            _track_request_start()
+            try:
+                session = get_shared_session()
+                resp = await session.get(
+                    url, headers=headers, proxy=proxy_url,
+                    timeout=req_timeout, allow_redirects=True, max_redirects=5,
+                )
+            finally:
+                _track_request_end()
 
     if resp.status_code != 200:
         raise Exception(f"Status {resp.status_code}")
@@ -214,6 +243,7 @@ async def cffi_scrape_safe(
     proxy: Optional[str] = None,
     timeout: Optional[int] = None,
     referer: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> Tuple[str, Set[str], Set[str]]:
     """Versão safe com semáforo global — não propaga exceções."""
     cffi_scrape_safe.last_error = None
@@ -229,20 +259,22 @@ async def cffi_scrape_safe(
         headers, _ = build_headers(referer=referer)
         proxy_url = proxy or _get_proxy()
         req_timeout = timeout or REQUEST_TIMEOUT
-        sem = get_semaphore(proxy_url)
+        sem_provider = get_provider_semaphore(proxy_url, provider)
+        sem_proxy = get_proxy_semaphore(proxy_url)
 
-        async with sem:
-            t_http = _time.perf_counter()
-            cffi_scrape_safe.sem_wait_ms = (t_http - t0) * 1000
-            _track_request_start()
-            try:
-                session = get_shared_session()
-                resp = await session.get(
-                    url, headers=headers, proxy=proxy_url,
-                    timeout=req_timeout, allow_redirects=True, max_redirects=5,
-                )
-            finally:
-                _track_request_end()
+        async with sem_provider:
+            async with sem_proxy:
+                t_http = _time.perf_counter()
+                cffi_scrape_safe.sem_wait_ms = (t_http - t0) * 1000
+                _track_request_start()
+                try:
+                    session = get_shared_session()
+                    resp = await session.get(
+                        url, headers=headers, proxy=proxy_url,
+                        timeout=req_timeout, allow_redirects=True, max_redirects=5,
+                    )
+                finally:
+                    _track_request_end()
         cffi_scrape_safe.http_time_ms = (_time.perf_counter() - t_http) * 1000
         cffi_scrape_safe.elapsed_ms = (_time.perf_counter() - t0) * 1000
 

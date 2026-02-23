@@ -1,13 +1,23 @@
 {
-  "request_timeout": 40,
-  "subpage_timeout": 40,
+  "request_timeout": 22,
+  "subpage_timeout": 22,
+  "retry_timeout": 30,
+  "max_retries": 1,
   "max_subpages": 10,
-  "per_domain_concurrent": 3,
+  "per_domain_concurrent": 4,
   "stagger_delay": 0.5,
   "circuit_breaker_threshold": 3,
   "flush_size": 500,
   "min_content_length": 100,
-  "max_concurrent_711": 800,
-  "max_concurrent_decodo": 1500,
-  "chunk_size": 1000
+  "max_concurrent_711": 1200,
+  "max_concurrent_decodo": 1200,
+  "max_concurrent_evomi": 1200,
+  "max_concurrent_per_proxy": 4,
+  "evomi_proxy_file": "proxies_evomi.txt",
+  "provider_weights": {
+    "711proxy": 1,
+    "decodo": 1,
+    "evomi": 1
+  },
+  "chunk_size": 360
 }

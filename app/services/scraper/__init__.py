@@ -29,7 +29,10 @@ except ImportError as e:
     import logging
     logging.getLogger(__name__).warning(f"curl_cffi nao disponivel: {e}")
 
-    async def scrape_all_subpages(url: str, max_subpages: int = 5, ctx_label: str = "", request_id: str = ""):
+    async def scrape_all_subpages(
+        url: str, max_subpages: int = 5, ctx_label: str = "",
+        request_id: str = "", proxy: str = "", proxy_provider: str = "",
+    ):
         return ScrapeResult()
 
 

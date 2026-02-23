@@ -434,14 +434,19 @@ class BatchScrapeProcessor:
         url = company['website_url']
         discovery_id = company.get('wd_id')
 
-        sticky_proxy = proxy_pool.get_sticky_proxy() or ""
+        picked_proxy = proxy_pool.get_sticky_proxy_with_provider()
+        sticky_proxy = picked_proxy[0] if picked_proxy else ""
+        sticky_provider = picked_proxy[1] if picked_proxy else ""
 
         self._in_progress += 1
         self._peak_in_progress = max(self._peak_in_progress, self._in_progress)
         t0 = time.perf_counter()
 
         try:
-            result_obj = await self._do_scrape(cnpj, url, discovery_id, proxy=sticky_proxy)
+            result_obj = await self._do_scrape(
+                cnpj, url, discovery_id,
+                proxy=sticky_proxy, proxy_provider=sticky_provider,
+            )
         except Exception as e:
             result_obj = CompanyResult(
                 cnpj_basico=cnpj, discovery_id=discovery_id,
@@ -474,11 +479,14 @@ class BatchScrapeProcessor:
         if pending_flush is not None:
             await self._flush_records(pending_flush)
 
-    async def _do_scrape(self, cnpj: str, url: str, discovery_id: Optional[int], proxy: str = "") -> CompanyResult:
+    async def _do_scrape(
+        self, cnpj: str, url: str, discovery_id: Optional[int],
+        proxy: str = "", proxy_provider: str = "",
+    ) -> CompanyResult:
         result = await scrape_all_subpages(
             url=url, max_subpages=MAX_SUBPAGES,
             ctx_label=f"[B{self.batch_id}]", request_id=cnpj,
-            proxy=proxy,
+            proxy=proxy, proxy_provider=proxy_provider,
         )
         self._aggregate_scrape_meta(result)
         pages = result.pages
@@ -848,11 +856,14 @@ class BatchScrapeProcessor:
                 REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES,
                 PER_DOMAIN_CONCURRENT, STAGGER_DELAY,
                 CIRCUIT_BREAKER_THRESHOLD, FLUSH_SIZE, MIN_CONTENT_LENGTH,
-                MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO,
+                MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO, MAX_CONCURRENT_EVOMI,
+                MAX_CONCURRENT_PER_PROXY, RETRY_TIMEOUT, MAX_RETRIES,
             )
             stats["config"] = {
                 "request_timeout": REQUEST_TIMEOUT,
                 "subpage_timeout": SUBPAGE_TIMEOUT,
+                "retry_timeout": RETRY_TIMEOUT,
+                "max_retries": MAX_RETRIES,
                 "max_subpages": MAX_SUBPAGES,
                 "per_domain_concurrent": PER_DOMAIN_CONCURRENT,
                 "stagger_delay": STAGGER_DELAY,
@@ -861,6 +872,8 @@ class BatchScrapeProcessor:
                 "min_content_length": MIN_CONTENT_LENGTH,
                 "max_concurrent_711": MAX_CONCURRENT_711,
                 "max_concurrent_decodo": MAX_CONCURRENT_DECODO,
+                "max_concurrent_evomi": MAX_CONCURRENT_EVOMI,
+                "max_concurrent_per_proxy": MAX_CONCURRENT_PER_PROXY,
                 "chunk_size": self.chunk_size,
             }
         except Exception:

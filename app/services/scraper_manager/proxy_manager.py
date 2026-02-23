@@ -10,8 +10,8 @@ import asyncio
 import logging
 import time
 import httpx
-from typing import List, Optional
-from urllib.parse import urlparse
+from typing import List, Optional, Tuple
+from app.configs.config_loader import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +22,50 @@ _STICKY_API_URL = (
     "&proto=http&stype=json&sessType=sticky&sessTime=30&sessAuto=1"
 )
 _DECODO_CSV = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data_decodo_ips.csv")
+_cfg = load_config("scraper/scraper_config.json") or {}
+_EVOMI_FILE = os.path.normpath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "..", "..",
+        _cfg.get("evomi_proxy_file", "proxies_evomi.txt"),
+    )
+)
+_PROVIDER_WEIGHTS = _cfg.get(
+    "provider_weights",
+    {"711proxy": 1, "decodo": 1, "evomi": 1},
+)
+
+
+def _parse_evomi_line(line: str) -> Optional[str]:
+    """
+    Converte formatos Evomi para proxy URL padrão.
+    Aceita:
+      - http://user:pass@host:port (já pronto)
+      - http://host:port:user:pass
+    """
+    raw = (line or "").strip()
+    if not raw or raw.startswith("#"):
+        return None
+    if "@" in raw and raw.startswith(("http://", "https://")):
+        return raw
+    try:
+        scheme = "http"
+        rest = raw
+        if "://" in raw:
+            scheme, rest = raw.split("://", 1)
+        parts = rest.split(":")
+        if len(parts) < 4:
+            return None
+        host = parts[0]
+        port = parts[1]
+        user = parts[2]
+        password = ":".join(parts[3:])
+        return f"{scheme}://{user}:{password}@{host}:{port}"
+    except Exception:
+        return None
 
 
 class ProxyPool:
-    """Pool dual: 711Proxy + Decodo com round-robin balanceado."""
+    """Pool multi-provider: 711Proxy + Decodo + Evomi com round-robin ponderado."""
 
     def __init__(self):
         self._gateway_url: str = _GATEWAY_URL
@@ -38,20 +78,27 @@ class ProxyPool:
         self._decodo_proxies: List[str] = []
         self._decodo_index: int = 0
 
-        self._call_counter: int = 0
+        self._evomi_proxies: List[str] = []
+        self._evomi_index: int = 0
+
+        self._weighted_cycle: List[str] = []
+        self._weighted_index: int = 0
 
     async def preload(self) -> int:
         self._gateway_url = os.getenv("PROXY_GATEWAY_URL", "")
 
         await self._fetch_711_sessions()
         self._load_decodo_proxies()
+        self._load_evomi_proxies()
+        self._build_weighted_cycle()
 
-        total = len(self._711_proxies) + len(self._decodo_proxies)
+        total = len(self._711_proxies) + len(self._decodo_proxies) + len(self._evomi_proxies)
         self._loaded = total > 0
 
         logger.info(
             f"[ProxyPool] 711Proxy: {len(self._711_proxies)} proxies (host={self._711_host}) | "
-            f"Decodo: {len(self._decodo_proxies)} proxies | Total: {total}"
+            f"Decodo: {len(self._decodo_proxies)} proxies | "
+            f"Evomi: {len(self._evomi_proxies)} proxies | Total: {total}"
         )
         return 1 if self._loaded else 0
 
@@ -108,24 +155,59 @@ class ProxyPool:
                 f"-{self._decodo_proxies[-1].split(':')[-1]})"
             )
 
-    def get_sticky_proxy(self) -> Optional[str]:
-        """Retorna proxy round-robin balanceado entre 711 e Decodo.
-        Ratio ~35% 711 / ~65% Decodo (proporcional aos limites 800/1500)."""
-        has_711 = bool(self._711_proxies)
-        has_decodo = bool(self._decodo_proxies)
+    def _load_evomi_proxies(self):
+        """Carrega proxy URLs do arquivo Evomi."""
+        if not os.path.exists(_EVOMI_FILE):
+            logger.warning(f"[ProxyPool] arquivo Evomi não encontrado: {_EVOMI_FILE}")
+            return
+        proxies: List[str] = []
+        with open(_EVOMI_FILE, encoding="utf-8") as f:
+            for line in f:
+                parsed = _parse_evomi_line(line)
+                if parsed:
+                    proxies.append(parsed)
+        self._evomi_proxies = proxies
+        if self._evomi_proxies:
+            logger.info(f"[ProxyPool] Evomi OK: {len(self._evomi_proxies)} proxies")
 
-        if not has_711 and not has_decodo:
+    def _build_weighted_cycle(self):
+        cycle: List[str] = []
+        providers = [
+            ("711proxy", bool(self._711_proxies)),
+            ("decodo", bool(self._decodo_proxies)),
+            ("evomi", bool(self._evomi_proxies)),
+        ]
+        for provider, available in providers:
+            if not available:
+                continue
+            w = int(_PROVIDER_WEIGHTS.get(provider, 1) or 0)
+            if w > 0:
+                cycle.extend([provider] * w)
+        self._weighted_cycle = cycle
+        self._weighted_index = 0
+        if cycle:
+            logger.info(f"[ProxyPool] provider cycle: {cycle}")
+
+    def get_sticky_proxy_with_provider(self) -> Optional[Tuple[str, str]]:
+        """Retorna (proxy_url, provider) usando round-robin ponderado por provider."""
+        if not self._weighted_cycle:
             return None
+        for _ in range(len(self._weighted_cycle)):
+            provider = self._weighted_cycle[self._weighted_index % len(self._weighted_cycle)]
+            self._weighted_index += 1
+            if provider == "711proxy" and self._711_proxies:
+                return self._next_711(), "711proxy"
+            if provider == "decodo" and self._decodo_proxies:
+                return self._next_decodo(), "decodo"
+            if provider == "evomi" and self._evomi_proxies:
+                return self._next_evomi(), "evomi"
+        return None
 
-        if not has_decodo:
-            return self._next_711()
-        if not has_711:
-            return self._next_decodo()
-
-        self._call_counter += 1
-        if self._call_counter % 23 < 8:
-            return self._next_711()
-        return self._next_decodo()
+    def get_sticky_proxy(self) -> Optional[str]:
+        picked = self.get_sticky_proxy_with_provider()
+        if not picked:
+            return None
+        return picked[0]
 
     def _next_711(self) -> str:
         proxy = self._711_proxies[self._711_index % len(self._711_proxies)]
@@ -137,14 +219,22 @@ class ProxyPool:
         self._decodo_index += 1
         return proxy
 
+    def _next_evomi(self) -> str:
+        proxy = self._evomi_proxies[self._evomi_index % len(self._evomi_proxies)]
+        self._evomi_index += 1
+        return proxy
+
     async def health_check(
         self, test_url: str = "http://httpbin.org/ip", timeout: int = 10
     ) -> dict:
         from app.services.scraper.http_client import get_shared_session
 
         results = {}
-        for label, get_proxy in [("711proxy", self._next_711 if self._711_proxies else None),
-                                  ("decodo", self._next_decodo if self._decodo_proxies else None)]:
+        for label, get_proxy in [
+            ("711proxy", self._next_711 if self._711_proxies else None),
+            ("decodo", self._next_decodo if self._decodo_proxies else None),
+            ("evomi", self._next_evomi if self._evomi_proxies else None),
+        ]:
             if not get_proxy:
                 results[label] = {"healthy": False, "error": "no proxies loaded"}
                 continue
@@ -180,10 +270,11 @@ class ProxyPool:
             )
 
         return {
-            "mode": "dual_proxy",
+            "mode": "multi_proxy",
             "providers": results,
             "711_proxies": len(self._711_proxies),
             "decodo_proxies": len(self._decodo_proxies),
+            "evomi_proxies": len(self._evomi_proxies),
             "711_host": self._711_host,
         }
 
@@ -193,11 +284,13 @@ class ProxyPool:
     def get_status(self) -> dict:
         return {
             "loaded": self._loaded,
-            "mode": "dual_proxy",
+            "mode": "multi_proxy",
             "711_host": self._711_host,
             "711_proxies": len(self._711_proxies),
             "decodo_proxies": len(self._decodo_proxies),
-            "total_proxies": len(self._711_proxies) + len(self._decodo_proxies),
+            "evomi_proxies": len(self._evomi_proxies),
+            "provider_weights": _PROVIDER_WEIGHTS,
+            "total_proxies": len(self._711_proxies) + len(self._decodo_proxies) + len(self._evomi_proxies),
         }
 
 

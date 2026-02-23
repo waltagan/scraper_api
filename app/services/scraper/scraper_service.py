@@ -15,6 +15,7 @@ from .models import ScrapedPage, ScrapeResult
 from .constants import (
     REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES, MIN_CONTENT_LENGTH,
     PER_DOMAIN_CONCURRENT, CIRCUIT_BREAKER_THRESHOLD,
+    RETRY_TIMEOUT, MAX_RETRIES,
     smart_referer,
 )
 from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
@@ -31,6 +32,7 @@ async def scrape_all_subpages(
     ctx_label: str = "",
     request_id: str = "",
     proxy: str = "",
+    proxy_provider: str = "",
 ) -> ScrapeResult:
     """
     Pipeline: GET unico (probe+main) -> select links -> scrape subpages.
@@ -42,7 +44,12 @@ async def scrape_all_subpages(
     t0 = time.perf_counter()
     try:
         best_url, text, docs, links, probe_time = await fast_probe_and_scrape(
-            url, proxy=proxy or None,
+            url,
+            proxy=proxy or None,
+            proxy_provider=proxy_provider or None,
+            timeout=REQUEST_TIMEOUT,
+            retry_timeout=RETRY_TIMEOUT,
+            max_retries=MAX_RETRIES,
         )
         url = best_url
         meta.probe_ok = True
@@ -92,7 +99,8 @@ async def scrape_all_subpages(
     skipped = 0
     if target_subpages:
         subpages, skipped = await _scrape_subpages(
-            target_subpages, base_referer, ctx_label, proxy=proxy,
+            target_subpages, base_referer, ctx_label,
+            proxy=proxy, proxy_provider=proxy_provider,
         )
     meta.subpages_time_ms = (time.perf_counter() - t_sub) * 1000
 
@@ -155,6 +163,7 @@ async def _scrape_subpages(
     referer: str = "",
     ctx_label: str = "",
     proxy: str = "",
+    proxy_provider: str = "",
 ) -> tuple:
     """
     Scrape subpaginas com stagger + semaforo por dominio + circuit breaker.
@@ -164,12 +173,20 @@ async def _scrape_subpages(
     fail_streak = 0
     abort = False
 
+    def _is_retryable_transport_error(err: str) -> bool:
+        e = (err or "").lower()
+        return any(k in e for k in [
+            "timeout", "timed out", "connection", "refused", "reset",
+            "http_429", "http_502", "http_503", "http_504", "server error",
+        ])
+
     async def scrape_one(url: str) -> ScrapedPage:
         normalized = normalize_url(url)
         try:
             text, docs, _ = await cffi_scrape_safe(
                 normalized, proxy=proxy or None,
                 timeout=SUBPAGE_TIMEOUT, referer=referer,
+                provider=proxy_provider or None,
             )
             transport_err = cffi_scrape_safe.last_error
             elapsed = cffi_scrape_safe.elapsed_ms
@@ -181,6 +198,22 @@ async def _scrape_subpages(
                 sem_wait_ms=sem_w,
                 http_time_ms=http_t,
             )
+
+            if not text and transport_err and MAX_RETRIES > 0 and _is_retryable_transport_error(transport_err):
+                text, docs, _ = await cffi_scrape_safe(
+                    normalized, proxy=proxy or None,
+                    timeout=RETRY_TIMEOUT, referer=referer,
+                    provider=proxy_provider or None,
+                )
+                transport_err = cffi_scrape_safe.last_error
+                elapsed = cffi_scrape_safe.elapsed_ms
+                sem_w = cffi_scrape_safe.sem_wait_ms
+                http_t = cffi_scrape_safe.http_time_ms
+                timing = dict(
+                    response_time_ms=elapsed,
+                    sem_wait_ms=sem_w,
+                    http_time_ms=http_t,
+                )
 
             if not text and transport_err:
                 return ScrapedPage(

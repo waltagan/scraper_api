@@ -76,6 +76,9 @@ async def fast_probe_and_scrape(
     url: str,
     timeout: int = REQUEST_TIMEOUT,
     proxy: Optional[str] = None,
+    proxy_provider: Optional[str] = None,
+    retry_timeout: Optional[int] = None,
+    max_retries: int = 0,
 ) -> Tuple[str, str, Set[str], Set[str], float]:
     """
     Probe rapido + scrape em um unico GET.
@@ -94,18 +97,48 @@ async def fast_probe_and_scrape(
 
     t0 = time.perf_counter()
 
+    def _is_retryable_error(err: Exception) -> bool:
+        msg = str(err).lower()
+        return any(k in msg for k in [
+            "timeout", "timed out", "connection", "refused", "reset",
+            "status 429", "status 502", "status 503", "status 504",
+        ])
+
+    async def _try_once(target_url: str, req_timeout: int):
+        return await cffi_scrape(
+            target_url,
+            proxy=proxy,
+            timeout=req_timeout,
+            provider=proxy_provider,
+        )
+
     try:
-        text, docs, links = await cffi_scrape(url, proxy=proxy, timeout=timeout)
+        text, docs, links = await _try_once(url, timeout)
         elapsed = (time.perf_counter() - t0) * 1000
         return url, text, docs, links, elapsed
     except Exception as first_error:
+        if max_retries > 0 and retry_timeout and _is_retryable_error(first_error):
+            try:
+                text, docs, links = await _try_once(url, retry_timeout)
+                elapsed = (time.perf_counter() - t0) * 1000
+                return url, text, docs, links, elapsed
+            except Exception as retried_error:
+                first_error = retried_error
+
         if _is_dns_error(first_error) and 'www.' not in url:
             www_url = url.replace('://', '://www.', 1)
             try:
-                text, docs, links = await cffi_scrape(www_url, proxy=proxy, timeout=timeout)
+                text, docs, links = await _try_once(www_url, timeout)
                 elapsed = (time.perf_counter() - t0) * 1000
                 return www_url, text, docs, links, elapsed
             except Exception as www_error:
+                if max_retries > 0 and retry_timeout and _is_retryable_error(www_error):
+                    try:
+                        text, docs, links = await _try_once(www_url, retry_timeout)
+                        elapsed = (time.perf_counter() - t0) * 1000
+                        return www_url, text, docs, links, elapsed
+                    except Exception as www_retry_error:
+                        www_error = www_retry_error
                 elapsed = (time.perf_counter() - t0) * 1000
                 error_type, msg = _classify_error(www_error)
                 raise URLNotReachable(msg, error_type=error_type, url=url)

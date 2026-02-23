@@ -16,6 +16,8 @@ _cfg = load_config("scraper/scraper_config.json") or {}
 
 REQUEST_TIMEOUT: int = _cfg.get("request_timeout", 15)
 SUBPAGE_TIMEOUT: int = _cfg.get("subpage_timeout", 12)
+RETRY_TIMEOUT: int = _cfg.get("retry_timeout", 30)
+MAX_RETRIES: int = _cfg.get("max_retries", 1)
 MAX_SUBPAGES: int = _cfg.get("max_subpages", 10)
 PER_DOMAIN_CONCURRENT: int = _cfg.get("per_domain_concurrent", 3)
 STAGGER_DELAY: float = _cfg.get("stagger_delay", 0.3)
@@ -24,15 +26,17 @@ FLUSH_SIZE: int = _cfg.get("flush_size", 500)
 MIN_CONTENT_LENGTH: int = _cfg.get("min_content_length", 100)
 MAX_CONCURRENT_711: int = _cfg.get("max_concurrent_711", 800)
 MAX_CONCURRENT_DECODO: int = _cfg.get("max_concurrent_decodo", 1500)
-MAX_CONCURRENT_REQUESTS: int = MAX_CONCURRENT_711 + MAX_CONCURRENT_DECODO
+MAX_CONCURRENT_EVOMI: int = _cfg.get("max_concurrent_evomi", 1200)
+MAX_CONCURRENT_PER_PROXY: int = _cfg.get("max_concurrent_per_proxy", 4)
+MAX_CONCURRENT_REQUESTS: int = MAX_CONCURRENT_711 + MAX_CONCURRENT_DECODO + MAX_CONCURRENT_EVOMI
 CHUNK_SIZE: int = _cfg.get("chunk_size", 5000)
 
 logger.info(
-    f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s sub_timeout={SUBPAGE_TIMEOUT}s "
+    f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s sub_timeout={SUBPAGE_TIMEOUT}s retry_timeout={RETRY_TIMEOUT}s retries={MAX_RETRIES} "
     f"subpages={MAX_SUBPAGES} domain_conc={PER_DOMAIN_CONCURRENT} "
     f"stagger={STAGGER_DELAY}s cb_threshold={CIRCUIT_BREAKER_THRESHOLD} "
     f"flush={FLUSH_SIZE} chunk={CHUNK_SIZE} "
-    f"concurrent: 711={MAX_CONCURRENT_711} decodo={MAX_CONCURRENT_DECODO} "
+    f"concurrent: 711={MAX_CONCURRENT_711} decodo={MAX_CONCURRENT_DECODO} evomi={MAX_CONCURRENT_EVOMI} per_proxy={MAX_CONCURRENT_PER_PROXY} "
     f"total={MAX_CONCURRENT_REQUESTS}"
 )
 
