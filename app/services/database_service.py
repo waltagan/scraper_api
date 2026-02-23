@@ -241,11 +241,6 @@ class DatabaseService:
                 # Preparar dados para batch insert
                 records = []
                 for chunk in chunks:
-                    # Extrair page_source (primeira página ou todas concatenadas)
-                    page_source = None
-                    if hasattr(chunk, 'pages_included') and chunk.pages_included:
-                        page_source = ','.join(chunk.pages_included[:5])  # Limitar a 5 URLs
-                    
                     records.append((
                         cnpj_basico,
                         discovery_id,
@@ -253,16 +248,15 @@ class DatabaseService:
                         chunk.index,
                         chunk.total_chunks,
                         chunk.content,
-                        chunk.tokens,
-                        page_source
+                        chunk.tokens
                     ))
                 
                 # Batch insert (muito mais eficiente) - SEMPRE com schema explícito
                 query_chunks = f"""
                     INSERT INTO "{SCHEMA}".scraped_chunks 
                         (cnpj_basico, discovery_id, website_url, chunk_index, 
-                         total_chunks, chunk_content, token_count, page_source)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                         total_chunks, chunk_content, token_count)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     """
                 logger.info(f"🔍 [SCHEMA={SCHEMA}] Salvando {len(records)} chunks")
                 await conn.executemany(
@@ -370,7 +364,7 @@ class DatabaseService:
         
         Cada record e uma tupla:
         (cnpj_basico, discovery_id, website_url, chunk_index, total_chunks, 
-         chunk_content, token_count, page_source, error, page_website, page_scraped)
+         chunk_content, token_count, error, page_website, page_scraped)
         """
         if not records:
             return 0
@@ -384,7 +378,7 @@ class DatabaseService:
                     columns=[
                         'cnpj_basico', 'discovery_id', 'website_url',
                         'chunk_index', 'total_chunks', 'chunk_content',
-                        'token_count', 'page_source', 'error',
+                        'token_count', 'error',
                         'page_website', 'page_scraped',
                     ],
                     schema_name=SCHEMA,

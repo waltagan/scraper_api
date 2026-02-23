@@ -662,19 +662,16 @@ class BatchScrapeProcessor:
         for result in to_flush:
             if result.success and result.chunks:
                 for chunk in result.chunks:
-                    page_source = None
-                    if hasattr(chunk, 'pages_included') and chunk.pages_included:
-                        page_source = ','.join(chunk.pages_included[:5])
                     records.append((
                         result.cnpj_basico, result.discovery_id,
                         result.website_url, chunk.index, chunk.total_chunks,
-                        chunk.content, chunk.tokens, page_source, None,
+                        chunk.content, chunk.tokens, None,
                         result.page_website, result.page_scraped,
                     ))
             else:
                 records.append((
                     result.cnpj_basico, result.discovery_id,
-                    result.website_url, 0, 0, None, 0, None, result.error,
+                    result.website_url, 0, 0, None, 0, result.error,
                     result.page_website, result.page_scraped,
                 ))
         try:
