@@ -75,6 +75,7 @@ def _is_dns_error(error: Exception) -> bool:
 async def fast_probe_and_scrape(
     url: str,
     timeout: int = REQUEST_TIMEOUT,
+    proxy: Optional[str] = None,
 ) -> Tuple[str, str, Set[str], Set[str], float]:
     """
     Probe rapido + scrape em um unico GET.
@@ -94,14 +95,14 @@ async def fast_probe_and_scrape(
     t0 = time.perf_counter()
 
     try:
-        text, docs, links = await cffi_scrape(url, timeout=timeout)
+        text, docs, links = await cffi_scrape(url, proxy=proxy, timeout=timeout)
         elapsed = (time.perf_counter() - t0) * 1000
         return url, text, docs, links, elapsed
     except Exception as first_error:
         if _is_dns_error(first_error) and 'www.' not in url:
             www_url = url.replace('://', '://www.', 1)
             try:
-                text, docs, links = await cffi_scrape(www_url, timeout=timeout)
+                text, docs, links = await cffi_scrape(www_url, proxy=proxy, timeout=timeout)
                 elapsed = (time.perf_counter() - t0) * 1000
                 return www_url, text, docs, links, elapsed
             except Exception as www_error:

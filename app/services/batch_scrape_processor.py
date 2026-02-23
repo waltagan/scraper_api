@@ -19,6 +19,7 @@ from app.services.scraper.models import ScrapeResult
 from app.core.chunking import process_content
 from app.services.database_service import get_db_service
 from app.services.scraper.constants import FLUSH_SIZE, MAX_SUBPAGES
+from app.services.scraper_manager.proxy_manager import proxy_pool
 
 logger = logging.getLogger(__name__)
 
@@ -383,12 +384,14 @@ class BatchScrapeProcessor:
         url = company['website_url']
         discovery_id = company.get('wd_id')
 
+        sticky_proxy = proxy_pool.get_sticky_proxy() or ""
+
         self._in_progress += 1
         self._peak_in_progress = max(self._peak_in_progress, self._in_progress)
         t0 = time.perf_counter()
 
         try:
-            result_obj = await self._do_scrape(cnpj, url, discovery_id)
+            result_obj = await self._do_scrape(cnpj, url, discovery_id, proxy=sticky_proxy)
         except Exception as e:
             result_obj = CompanyResult(
                 cnpj_basico=cnpj, discovery_id=discovery_id,
@@ -421,10 +424,11 @@ class BatchScrapeProcessor:
         if pending_flush is not None:
             await self._flush_records(pending_flush)
 
-    async def _do_scrape(self, cnpj: str, url: str, discovery_id: Optional[int]) -> CompanyResult:
+    async def _do_scrape(self, cnpj: str, url: str, discovery_id: Optional[int], proxy: str = "") -> CompanyResult:
         result = await scrape_all_subpages(
             url=url, max_subpages=MAX_SUBPAGES,
             ctx_label=f"[B{self.batch_id}]", request_id=cnpj,
+            proxy=proxy,
         )
         self._aggregate_scrape_meta(result)
         pages = result.pages

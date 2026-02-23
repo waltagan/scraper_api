@@ -29,6 +29,7 @@ async def scrape_all_subpages(
     max_subpages: int = MAX_SUBPAGES,
     ctx_label: str = "",
     request_id: str = "",
+    proxy: str = "",
 ) -> ScrapeResult:
     """
     Pipeline: GET unico (probe+main) -> select links -> scrape subpages.
@@ -39,7 +40,9 @@ async def scrape_all_subpages(
     # 1. GET UNICO (probe + main page fundidos)
     t0 = time.perf_counter()
     try:
-        best_url, text, docs, links, probe_time = await fast_probe_and_scrape(url)
+        best_url, text, docs, links, probe_time = await fast_probe_and_scrape(
+            url, proxy=proxy or None,
+        )
         url = best_url
         meta.probe_ok = True
         meta.probe_time_ms = probe_time
@@ -86,7 +89,7 @@ async def scrape_all_subpages(
     skipped = 0
     if target_subpages:
         subpages, skipped = await _scrape_subpages(
-            target_subpages, base_referer, ctx_label,
+            target_subpages, base_referer, ctx_label, proxy=proxy,
         )
     meta.subpages_time_ms = (time.perf_counter() - t_sub) * 1000
 
@@ -148,6 +151,7 @@ async def _scrape_subpages(
     urls: List[str],
     referer: str = "",
     ctx_label: str = "",
+    proxy: str = "",
 ) -> tuple:
     """
     Scrape subpaginas com stagger + semaforo por dominio + circuit breaker.
@@ -161,7 +165,8 @@ async def _scrape_subpages(
         normalized = normalize_url(url)
         try:
             text, docs, _ = await cffi_scrape_safe(
-                normalized, timeout=SUBPAGE_TIMEOUT, referer=referer,
+                normalized, proxy=proxy or None,
+                timeout=SUBPAGE_TIMEOUT, referer=referer,
             )
             transport_err = cffi_scrape_safe.last_error
             elapsed = cffi_scrape_safe.elapsed_ms
