@@ -247,6 +247,8 @@ class BatchScrapeProcessor:
         self.status = "idle"
         self._start_time: float = 0
         self._proxy_health: dict = {}
+        self._connection_samples: List[int] = []
+        self._sampler_task: Optional[asyncio.Task] = None
 
         self._processed = 0
         self._success_count = 0
@@ -337,6 +339,10 @@ class BatchScrapeProcessor:
         self._start_time = time.time()
 
         from app.services.scraper_manager.proxy_manager import proxy_pool
+        from app.services.scraper.http_client import reset_connection_stats
+
+        reset_connection_stats()
+        self._connection_samples = []
 
         proxy_count = await proxy_pool.preload()
         if proxy_count == 0:
@@ -362,8 +368,10 @@ class BatchScrapeProcessor:
         logger.info(f"[Batch {self.batch_id}] {self.total} empresas — asyncio.gather direto")
 
         try:
+            self._sampler_task = asyncio.create_task(self._sample_connections())
             tasks = [self._process_company(c) for c in all_companies]
             await asyncio.gather(*tasks)
+            self._sampler_task.cancel()
             await self._flush_buffer(force=True)
             self.status = "completed"
             elapsed = time.time() - self._start_time
@@ -378,6 +386,17 @@ class BatchScrapeProcessor:
             logger.error(f"[Batch {self.batch_id}] Erro fatal: {e}", exc_info=True)
             await self._flush_buffer(force=True)
             self.status = "error"
+
+    async def _sample_connections(self):
+        """Amostra conexões ativas a cada 1s para histograma de carga."""
+        from app.services.scraper.http_client import get_connection_stats
+        try:
+            while True:
+                stats = get_connection_stats()
+                self._connection_samples.append(stats["active"])
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
 
     async def _process_company(self, company: Dict[str, Any]):
         cnpj = company['cnpj_basico']
@@ -777,6 +796,13 @@ class BatchScrapeProcessor:
             stats["proxy"] = {"error": "unavailable"}
 
         try:
+            from app.services.scraper.http_client import get_connection_stats
+            stats["connections"] = get_connection_stats()
+            stats["connections"]["samples"] = self._conn_samples_summary()
+        except Exception:
+            stats["connections"] = {"error": "unavailable"}
+
+        try:
             from app.services.scraper.constants import (
                 REQUEST_TIMEOUT, SUBPAGE_TIMEOUT, MAX_SUBPAGES,
                 PER_DOMAIN_CONCURRENT, STAGGER_DELAY,
@@ -795,6 +821,23 @@ class BatchScrapeProcessor:
         except Exception:
             pass
         return stats
+
+    def _conn_samples_summary(self) -> dict:
+        samples = self._connection_samples
+        if not samples:
+            return {}
+        vals = sorted(samples)
+        n = len(vals)
+        return {
+            "count": n,
+            "min": vals[0],
+            "max": vals[-1],
+            "avg": round(sum(vals) / n, 1),
+            "p50": vals[int(n * 0.5)],
+            "p75": vals[int(n * 0.75)] if n > 3 else vals[-1],
+            "p90": vals[int(n * 0.9)] if n > 9 else vals[-1],
+            "p95": vals[int(n * 0.95)] if n > 19 else vals[-1],
+        }
 
     async def cancel(self):
         if self._task and not self._task.done():

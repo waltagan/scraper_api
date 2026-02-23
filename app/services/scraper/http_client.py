@@ -39,6 +39,10 @@ _sessions: List = []
 _semaphore: Optional[asyncio.Semaphore] = None
 _init_done = False
 
+_active_connections: int = 0
+_peak_connections: int = 0
+_total_requests: int = 0
+
 
 def _ensure_sessions():
     """Cria sessions compartilhadas e semáforo global (lazy, uma vez só)."""
@@ -81,6 +85,35 @@ def get_semaphore() -> asyncio.Semaphore:
 
 def _get_proxy() -> str:
     return _PROXY_URL
+
+
+def _track_request_start():
+    global _active_connections, _peak_connections, _total_requests
+    _active_connections += 1
+    _total_requests += 1
+    if _active_connections > _peak_connections:
+        _peak_connections = _active_connections
+
+
+def _track_request_end():
+    global _active_connections
+    _active_connections -= 1
+
+
+def get_connection_stats() -> dict:
+    return {
+        "active": _active_connections,
+        "peak": _peak_connections,
+        "total_requests": _total_requests,
+        "semaphore_capacity": _MAX_CONCURRENT_REQUESTS,
+    }
+
+
+def reset_connection_stats():
+    global _active_connections, _peak_connections, _total_requests
+    _active_connections = 0
+    _peak_connections = 0
+    _total_requests = 0
 
 
 def _detect_encoding(content: bytes, content_type: Optional[str] = None) -> str:
@@ -147,11 +180,15 @@ async def cffi_scrape(
     sem = get_semaphore()
 
     async with sem:
-        session = get_shared_session()
-        resp = await session.get(
-            url, headers=headers, proxy=proxy_url,
-            timeout=req_timeout, allow_redirects=True, max_redirects=5,
-        )
+        _track_request_start()
+        try:
+            session = get_shared_session()
+            resp = await session.get(
+                url, headers=headers, proxy=proxy_url,
+                timeout=req_timeout, allow_redirects=True, max_redirects=5,
+            )
+        finally:
+            _track_request_end()
 
     if resp.status_code != 200:
         raise Exception(f"Status {resp.status_code}")
@@ -186,11 +223,15 @@ async def cffi_scrape_safe(
         async with sem:
             t_http = _time.perf_counter()
             cffi_scrape_safe.sem_wait_ms = (t_http - t0) * 1000
-            session = get_shared_session()
-            resp = await session.get(
-                url, headers=headers, proxy=proxy_url,
-                timeout=req_timeout, allow_redirects=True, max_redirects=5,
-            )
+            _track_request_start()
+            try:
+                session = get_shared_session()
+                resp = await session.get(
+                    url, headers=headers, proxy=proxy_url,
+                    timeout=req_timeout, allow_redirects=True, max_redirects=5,
+                )
+            finally:
+                _track_request_end()
         cffi_scrape_safe.http_time_ms = (_time.perf_counter() - t_http) * 1000
         cffi_scrape_safe.elapsed_ms = (_time.perf_counter() - t0) * 1000
 
