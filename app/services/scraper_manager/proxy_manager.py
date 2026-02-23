@@ -1,11 +1,9 @@
 """
-Proxy Manager — modo direto + sticky sessions.
-Sticky sessions via 711Proxy: cada porta = IP de saída fixo (30min).
-Carrega portas automaticamente da API 711Proxy no startup;
-fallback para arquivo local se a API estiver indisponível.
+Proxy Manager — sticky sessions via API 711Proxy.
+Cada porta = IP de saída fixo (30min).
+Carrega portas automaticamente da API no startup de cada batch.
 """
 
-import json
 import os
 import asyncio
 import logging
@@ -17,10 +15,6 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 _GATEWAY_URL = os.getenv("PROXY_GATEWAY_URL", "")
-_STICKY_SESSIONS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-    "711_sesions.json",
-)
 _STICKY_API_URL = (
     "http://us.rotgbapi.711proxy.com:8089/gen"
     "?zone=custom&ptype=1&region=BR&count=900"
@@ -43,81 +37,59 @@ class ProxyPool:
     async def preload(self) -> int:
         self._gateway_url = os.getenv("PROXY_GATEWAY_URL", "")
         self._loaded = bool(self._gateway_url)
-        if self._loaded:
-            parsed = urlparse(self._gateway_url)
-            self._base_host = parsed.hostname or ""
-            self._base_auth = (
-                f"{parsed.username}:{parsed.password}" if parsed.username else ""
-            )
-            await self._load_sticky_sessions()
-            logger.info(
-                f"[ProxyPool] Gateway: {self._gateway_url[:50]}... | "
-                f"Sticky host: {self._sticky_host} | "
-                f"Sticky sessions: {len(self._sticky_ports)}"
-            )
-        else:
+        if not self._loaded:
             logger.warning("[ProxyPool] PROXY_GATEWAY_URL nao configurada.")
-        return 1 if self._loaded else 0
+            return 0
 
-    async def _load_sticky_sessions(self):
-        """Busca portas sticky da API 711Proxy; fallback para arquivo local."""
-        if await self._fetch_from_api():
-            return
-        self._load_from_file()
+        parsed = urlparse(self._gateway_url)
+        self._base_host = parsed.hostname or ""
+        self._base_auth = (
+            f"{parsed.username}:{parsed.password}" if parsed.username else ""
+        )
 
-    async def _fetch_from_api(self) -> bool:
+        await self._fetch_sticky_sessions()
+
+        logger.info(
+            f"[ProxyPool] Sticky host: {self._sticky_host} | "
+            f"Sticky sessions: {len(self._sticky_ports)}"
+        )
+        return 1
+
+    async def _fetch_sticky_sessions(self):
+        """Busca portas sticky da API 711Proxy."""
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(_STICKY_API_URL)
                 resp.raise_for_status()
                 data = resp.json()
 
-            entries = data.get("data", [])
-            if not entries:
-                logger.warning("[ProxyPool] API retornou 0 entries")
-                return False
-
-            self._sticky_ports = [e["port"] for e in entries if "port" in e]
-            hosts = {e["ip"] for e in entries if "ip" in e}
-            self._sticky_host = hosts.pop() if len(hosts) == 1 else ""
-
-            if not self._sticky_host:
-                logger.error(f"[ProxyPool] API retornou múltiplos hosts: {hosts}")
-                return False
-
-            # Salva cache local para fallback futuro
-            with open(_STICKY_SESSIONS_FILE, "w") as f:
-                json.dump(data, f)
-
-            logger.info(
-                f"[ProxyPool] API 711Proxy: {len(self._sticky_ports)} portas "
-                f"carregadas (host={self._sticky_host})"
-            )
-            return True
-        except Exception as e:
-            logger.warning(f"[ProxyPool] API 711Proxy falhou ({e}), usando cache local")
-            return False
-
-    def _load_from_file(self):
-        try:
-            if not os.path.exists(_STICKY_SESSIONS_FILE):
-                logger.warning(
-                    f"[ProxyPool] Cache local nao encontrado: {_STICKY_SESSIONS_FILE}"
+            if data.get("code") != 200:
+                logger.error(
+                    f"[ProxyPool] API 711Proxy erro: "
+                    f"code={data.get('code')}, msg={data.get('msg')}"
                 )
                 return
-            with open(_STICKY_SESSIONS_FILE, "r") as f:
-                data = json.load(f)
+
             entries = data.get("data", [])
+            if not entries:
+                logger.error("[ProxyPool] API 711Proxy retornou 0 entries")
+                return
+
             self._sticky_ports = [e["port"] for e in entries if "port" in e]
             hosts = {e["ip"] for e in entries if "ip" in e}
-            self._sticky_host = hosts.pop() if len(hosts) == 1 else self._base_host
 
+            if len(hosts) != 1:
+                logger.error(f"[ProxyPool] API retornou múltiplos hosts: {hosts}")
+                return
+
+            self._sticky_host = hosts.pop()
             logger.info(
-                f"[ProxyPool] Cache local: {len(self._sticky_ports)} portas "
-                f"(host={self._sticky_host})"
+                f"[ProxyPool] API 711Proxy OK: {len(self._sticky_ports)} portas "
+                f"(host={self._sticky_host}, "
+                f"ports={self._sticky_ports[0]}-{self._sticky_ports[-1]})"
             )
         except Exception as e:
-            logger.error(f"[ProxyPool] Falha ao ler cache local: {e}")
+            logger.error(f"[ProxyPool] API 711Proxy falhou: {e}")
 
     def get_sticky_proxy(self) -> Optional[str]:
         """Retorna proxy URL com porta sticky (round-robin). Mesma porta = mesmo IP.
