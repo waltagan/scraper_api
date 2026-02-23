@@ -15,6 +15,8 @@ class ScrapedPage:
     document_links: List[str] = field(default_factory=list)
     status_code: int = 200
     response_time_ms: float = 0.0
+    sem_wait_ms: float = 0.0
+    http_time_ms: float = 0.0
     error: Optional[str] = None
 
     @property

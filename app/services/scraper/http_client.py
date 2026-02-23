@@ -170,6 +170,8 @@ async def cffi_scrape_safe(
     """Versão safe com semáforo global — não propaga exceções."""
     cffi_scrape_safe.last_error = None
     cffi_scrape_safe.elapsed_ms = 0.0
+    cffi_scrape_safe.sem_wait_ms = 0.0
+    cffi_scrape_safe.http_time_ms = 0.0
     if not HAS_CURL_CFFI:
         cffi_scrape_safe.last_error = "no_curl_cffi"
         return "", set(), set()
@@ -182,11 +184,14 @@ async def cffi_scrape_safe(
         sem = get_semaphore()
 
         async with sem:
+            t_http = _time.perf_counter()
+            cffi_scrape_safe.sem_wait_ms = (t_http - t0) * 1000
             session = get_shared_session()
             resp = await session.get(
                 url, headers=headers, proxy=proxy_url,
                 timeout=req_timeout, allow_redirects=True, max_redirects=5,
             )
+        cffi_scrape_safe.http_time_ms = (_time.perf_counter() - t_http) * 1000
         cffi_scrape_safe.elapsed_ms = (_time.perf_counter() - t0) * 1000
 
         if resp.status_code != 200:
@@ -198,7 +203,12 @@ async def cffi_scrape_safe(
         return parse_html(text, url)
 
     except Exception as e:
-        cffi_scrape_safe.elapsed_ms = (_time.perf_counter() - t0) * 1000
+        now = _time.perf_counter()
+        cffi_scrape_safe.elapsed_ms = (now - t0) * 1000
+        if cffi_scrape_safe.sem_wait_ms > 0:
+            cffi_scrape_safe.http_time_ms = cffi_scrape_safe.elapsed_ms - cffi_scrape_safe.sem_wait_ms
+        else:
+            cffi_scrape_safe.http_time_ms = cffi_scrape_safe.elapsed_ms
         err_msg = str(e).lower()
         if "timeout" in err_msg or "timed out" in err_msg:
             cffi_scrape_safe.last_error = "proxy_timeout"
@@ -213,3 +223,5 @@ async def cffi_scrape_safe(
 
 cffi_scrape_safe.last_error = None
 cffi_scrape_safe.elapsed_ms = 0.0
+cffi_scrape_safe.sem_wait_ms = 0.0
+cffi_scrape_safe.http_time_ms = 0.0

@@ -265,6 +265,10 @@ class BatchScrapeProcessor:
         self._subpages_times: List[float] = []
         self._subpage_individual_ok: List[float] = []
         self._subpage_individual_fail: List[float] = []
+        self._subpage_sem_wait_ok: List[float] = []
+        self._subpage_sem_wait_fail: List[float] = []
+        self._subpage_http_ok: List[float] = []
+        self._subpage_http_fail: List[float] = []
 
     @property
     def processed(self) -> int:
@@ -496,8 +500,12 @@ class BatchScrapeProcessor:
                 if page.response_time_ms > 0:
                     if page.success:
                         bisect.insort(self._subpage_individual_ok, page.response_time_ms)
+                        bisect.insort(self._subpage_sem_wait_ok, page.sem_wait_ms)
+                        bisect.insort(self._subpage_http_ok, page.http_time_ms)
                     else:
                         bisect.insort(self._subpage_individual_fail, page.response_time_ms)
+                        bisect.insort(self._subpage_sem_wait_fail, page.sem_wait_ms)
+                        bisect.insort(self._subpage_http_fail, page.http_time_ms)
 
     async def _flush_buffer(self, force: bool = False):
         async with self._buffer_lock:
@@ -615,6 +623,22 @@ class BatchScrapeProcessor:
                     "count": len(self._subpage_individual_fail),
                     **_percentiles(self._subpage_individual_fail, [50, 75, 90, 95, 99]),
                 } if self._subpage_individual_fail else {},
+                "sem_wait_ok_ms": {
+                    "count": len(self._subpage_sem_wait_ok),
+                    **_percentiles(self._subpage_sem_wait_ok, [50, 75, 90, 95, 99]),
+                } if self._subpage_sem_wait_ok else {},
+                "sem_wait_fail_ms": {
+                    "count": len(self._subpage_sem_wait_fail),
+                    **_percentiles(self._subpage_sem_wait_fail, [50, 75, 90, 95, 99]),
+                } if self._subpage_sem_wait_fail else {},
+                "http_time_ok_ms": {
+                    "count": len(self._subpage_http_ok),
+                    **_percentiles(self._subpage_http_ok, [50, 75, 90, 95, 99]),
+                } if self._subpage_http_ok else {},
+                "http_time_fail_ms": {
+                    "count": len(self._subpage_http_fail),
+                    **_percentiles(self._subpage_http_fail, [50, 75, 90, 95, 99]),
+                } if self._subpage_http_fail else {},
             },
             "overall_funnel_pct": success_rate,
         }

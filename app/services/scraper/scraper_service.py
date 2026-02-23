@@ -165,43 +165,48 @@ async def _scrape_subpages(
             )
             transport_err = cffi_scrape_safe.last_error
             elapsed = cffi_scrape_safe.elapsed_ms
+            sem_w = cffi_scrape_safe.sem_wait_ms
+            http_t = cffi_scrape_safe.http_time_ms
+
+            timing = dict(
+                response_time_ms=elapsed,
+                sem_wait_ms=sem_w,
+                http_time_ms=http_t,
+            )
 
             if not text and transport_err:
                 return ScrapedPage(
                     url=normalized, content="",
-                    error=f"transport:{transport_err}",
-                    response_time_ms=elapsed,
+                    error=f"transport:{transport_err}", **timing,
                 )
 
             if not text:
                 return ScrapedPage(
                     url=normalized, content="", error="empty_response",
-                    response_time_ms=elapsed,
+                    **timing,
                 )
 
             if is_cloudflare_challenge(text):
                 return ScrapedPage(
                     url=normalized, content="", error="blocked:cloudflare",
-                    response_time_ms=elapsed,
+                    **timing,
                 )
 
             if is_soft_404(text):
                 return ScrapedPage(
                     url=normalized, content="", error="content:soft_404",
-                    response_time_ms=elapsed,
+                    **timing,
                 )
 
             if len(text) < MIN_CONTENT_LENGTH:
                 return ScrapedPage(
                     url=normalized, content="",
-                    error=f"content:thin_{len(text)}chars",
-                    response_time_ms=elapsed,
+                    error=f"content:thin_{len(text)}chars", **timing,
                 )
 
             return ScrapedPage(
                 url=normalized, content=text,
-                document_links=list(docs), status_code=200,
-                response_time_ms=elapsed,
+                document_links=list(docs), status_code=200, **timing,
             )
         except Exception as e:
             return ScrapedPage(
