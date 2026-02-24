@@ -22,7 +22,12 @@ async def v2_root():
             "scrape_batch": "POST /v2/scrape/batch",
             "scrape_batch_status": "GET /v2/scrape/batch/status",
             "scrape_batch_cancel": "POST /v2/scrape/batch/cancel",
-            "montagem_perfil": "POST /v2/montagem_perfil"
+            "montagem_perfil": "POST /v2/montagem_perfil",
+            "stress_test": "POST /v2/scrape/stress-test",
+            "ab_prepare": "POST /v2/scrape/ab-test/prepare",
+            "ab_run_stress": "POST /v2/scrape/ab-test/run-stress",
+            "ab_run_probe_only": "POST /v2/scrape/ab-test/run-probe-only",
+            "ab_run_both": "POST /v2/scrape/ab-test/run-both"
         },
         "docs": "/docs"
     }
