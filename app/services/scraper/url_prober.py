@@ -1,9 +1,10 @@
 """
-Prober de URLs — fast probe com fallback DNS.
+Prober de URLs — versão simplificada para comportamento próximo do stress test.
 
-Faz um unico GET com follow redirect. Se DNS falhar, tenta www.
-Retorna o conteudo da pagina junto com a URL resolvida, eliminando
-a necessidade de um GET separado para a main page.
+Fluxo simplificado:
+1) Um único GET com follow redirects
+2) Sem retry e sem fallback para www
+3) Aceita HTTP 2xx/3xx, depois o pipeline valida conteúdo
 """
 
 import logging
@@ -11,10 +12,18 @@ import time
 from typing import Tuple, Set, Optional
 from enum import Enum
 
-from .constants import REQUEST_TIMEOUT
-from .retry_control import consume_retry_token, sleep_retry_jitter
+try:
+    from curl_cffi.requests import AsyncSession
+    HAS_CURL_CFFI = True
+except ImportError:
+    HAS_CURL_CFFI = False
+    AsyncSession = None
+
+from .constants import REQUEST_TIMEOUT, build_headers
+from .html_parser import parse_html
 
 logger = logging.getLogger(__name__)
+_PROBE_SESSION: Optional["AsyncSession"] = None
 
 
 class ProbeErrorType(Enum):
@@ -53,24 +62,26 @@ class URLNotReachable(Exception):
 
 def _classify_error(error: Exception) -> Tuple[ProbeErrorType, str]:
     err = str(error).lower()
-    if any(x in err for x in ['resolve', 'nodename', 'getaddrinfo', 'dns', 'name or service']):
+    if any(x in err for x in ["resolve", "nodename", "getaddrinfo", "dns", "name or service"]):
         return ProbeErrorType.DNS_ERROR, "DNS nao resolve"
-    if any(x in err for x in ['connection refused', 'errno 111', 'errno 61']):
-        return ProbeErrorType.CONNECTION_REFUSED, "Conexao recusada"
-    if any(x in err for x in ['timeout', 'timed out']):
+    if any(x in err for x in ["connection refused", "errno 111", "errno 61", "connection reset", "broken pipe", "aborted"]):
+        return ProbeErrorType.CONNECTION_REFUSED, "Conexao recusada/interrompida"
+    if any(x in err for x in ["timeout", "timed out"]):
         return ProbeErrorType.CONNECTION_TIMEOUT, "Timeout"
-    if any(x in err for x in ['connection reset', 'broken pipe', 'connection aborted']):
-        return ProbeErrorType.CONNECTION_REFUSED, "Conexao interrompida"
-    if any(x in err for x in ['ssl', 'certificate', 'handshake']):
+    if any(x in err for x in ["ssl", "certificate", "handshake"]):
         return ProbeErrorType.SSL_ERROR, "Erro SSL/TLS"
-    if any(x in err for x in ['redirect', 'too many', '47']):
+    if any(x in err for x in ["redirect", "too many", "max redirects"]):
         return ProbeErrorType.TOO_MANY_REDIRECTS, "Loop de redirects"
     return ProbeErrorType.UNKNOWN, str(error)[:100]
 
 
-def _is_dns_error(error: Exception) -> bool:
-    err = str(error).lower()
-    return any(x in err for x in ['resolve', 'nodename', 'getaddrinfo', 'dns', 'name or service'])
+def _get_probe_session() -> "AsyncSession":
+    global _PROBE_SESSION
+    if _PROBE_SESSION is None:
+        if not HAS_CURL_CFFI:
+            raise RuntimeError("curl_cffi não está instalado")
+        _PROBE_SESSION = AsyncSession(impersonate="chrome131", verify=False, max_clients=6000)
+    return _PROBE_SESSION
 
 
 async def fast_probe_and_scrape(
@@ -82,84 +93,45 @@ async def fast_probe_and_scrape(
     max_retries: int = 0,
 ) -> Tuple[str, str, Set[str], Set[str], float]:
     """
-    Probe rapido + scrape em um unico GET.
-
-    Fluxo:
-    1. GET na URL original com follow redirect
-    2. Se DNS falhar e nao tem www., tenta com www.
-    3. Retorna (url_final, text, docs, links, tempo_ms)
-
-    Raises URLNotReachable se nenhuma variacao funcionar.
+    Probe + scrape em um único GET simples, sem retry/fallback.
+    Os parâmetros de retry são mantidos por compatibilidade da assinatura.
     """
-    from .http_client import cffi_scrape
+    del proxy_provider, retry_timeout, max_retries  # compatibilidade de assinatura
 
-    fast_probe_and_scrape.last_retries_used = 0
-    fast_probe_and_scrape.last_retries_dropped = 0
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
 
-    if not url.startswith(('http://', 'https://')):
-        url = f'https://{url}'
-
+    headers, _ = build_headers()
+    session = _get_probe_session()
     t0 = time.perf_counter()
 
-    def _is_retryable_error(err: Exception) -> bool:
-        msg = str(err).lower()
-        return any(k in msg for k in [
-            "timeout", "timed out", "connection", "refused", "reset",
-            "status 429", "status 502", "status 503", "status 504",
-        ])
-
-    async def _try_once(target_url: str, req_timeout: int):
-        return await cffi_scrape(
-            target_url,
-            proxy=proxy,
-            timeout=req_timeout,
-            provider=proxy_provider,
-        )
-
     try:
-        text, docs, links = await _try_once(url, timeout)
-        elapsed = (time.perf_counter() - t0) * 1000
-        return url, text, docs, links, elapsed
-    except Exception as first_error:
-        if max_retries > 0 and retry_timeout and _is_retryable_error(first_error):
-            if await consume_retry_token():
-                fast_probe_and_scrape.last_retries_used += 1
-                await sleep_retry_jitter()
-                try:
-                    text, docs, links = await _try_once(url, retry_timeout)
-                    elapsed = (time.perf_counter() - t0) * 1000
-                    return url, text, docs, links, elapsed
-                except Exception as retried_error:
-                    first_error = retried_error
-            else:
-                fast_probe_and_scrape.last_retries_dropped += 1
-
-        if _is_dns_error(first_error) and 'www.' not in url:
-            www_url = url.replace('://', '://www.', 1)
-            try:
-                text, docs, links = await _try_once(www_url, timeout)
-                elapsed = (time.perf_counter() - t0) * 1000
-                return www_url, text, docs, links, elapsed
-            except Exception as www_error:
-                if max_retries > 0 and retry_timeout and _is_retryable_error(www_error):
-                    if await consume_retry_token():
-                        fast_probe_and_scrape.last_retries_used += 1
-                        await sleep_retry_jitter()
-                        try:
-                            text, docs, links = await _try_once(www_url, retry_timeout)
-                            elapsed = (time.perf_counter() - t0) * 1000
-                            return www_url, text, docs, links, elapsed
-                        except Exception as www_retry_error:
-                            www_error = www_retry_error
-                    else:
-                        fast_probe_and_scrape.last_retries_dropped += 1
-                elapsed = (time.perf_counter() - t0) * 1000
-                error_type, msg = _classify_error(www_error)
-                raise URLNotReachable(msg, error_type=error_type, url=url)
-
-        elapsed = (time.perf_counter() - t0) * 1000
-        error_type, msg = _classify_error(first_error)
+        resp = await session.get(
+            url,
+            headers=headers,
+            proxy=proxy or None,
+            timeout=timeout,
+            allow_redirects=True,
+            max_redirects=5,
+        )
+    except Exception as e:
+        error_type, msg = _classify_error(e)
         raise URLNotReachable(msg, error_type=error_type, url=url)
+
+    status = int(getattr(resp, "status_code", 0) or 0)
+    if status < 200 or status >= 400:
+        if status == 403:
+            raise URLNotReachable("Acesso bloqueado", error_type=ProbeErrorType.BLOCKED, url=url)
+        if 500 <= status < 600:
+            raise URLNotReachable(f"Server error HTTP {status}", error_type=ProbeErrorType.SERVER_ERROR, url=url)
+        raise URLNotReachable(f"HTTP {status}", error_type=ProbeErrorType.HTTP_ERROR, url=url)
+
+    final_url = str(getattr(resp, "url", url))
+    content = resp.content or b""
+    text = content.decode("utf-8", errors="ignore")
+    parsed_text, docs, links = parse_html(text, final_url)
+    elapsed = (time.perf_counter() - t0) * 1000
+    return final_url, parsed_text, docs, links, elapsed
 
 
 # Mantido para compatibilidade com imports existentes
@@ -173,5 +145,3 @@ class URLProber:
 
 
 url_prober = URLProber()
-fast_probe_and_scrape.last_retries_used = 0
-fast_probe_and_scrape.last_retries_dropped = 0
