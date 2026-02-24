@@ -29,8 +29,10 @@ MAX_CONCURRENT_DECODO: int = _cfg.get("max_concurrent_decodo", 1500)
 MAX_CONCURRENT_EVOMI: int = _cfg.get("max_concurrent_evomi", 1200)
 MAX_CONCURRENT_PER_PROXY: int = _cfg.get("max_concurrent_per_proxy", 4)
 MAX_CONCURRENT_REQUESTS: int = MAX_CONCURRENT_711 + MAX_CONCURRENT_DECODO + MAX_CONCURRENT_EVOMI
-CHUNK_SIZE: int = _cfg.get("chunk_size", 5000)
-BATCH_MAX_WORKERS: int = _cfg.get("batch_max_workers", 120)
+STAGE_CONCURRENCY: int = MAX_CONCURRENT_REQUESTS
+# Compatibilidade com código legado
+CHUNK_SIZE: int = STAGE_CONCURRENCY
+BATCH_MAX_WORKERS: int = STAGE_CONCURRENCY
 PROBE_ONLY_MODE: bool = bool(_cfg.get("probe_only_mode", False))
 # Compat retroativa com código legado (retry_control/url_prober antigos em produção).
 RETRY_BUDGET_ENABLED: bool = bool(_cfg.get("retry_budget_enabled", True))
@@ -42,10 +44,8 @@ logger.info(
     f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s sub_timeout={SUBPAGE_TIMEOUT}s retry_timeout={RETRY_TIMEOUT}s retries={MAX_RETRIES} "
     f"subpages={MAX_SUBPAGES} domain_conc={PER_DOMAIN_CONCURRENT} "
     f"stagger={STAGGER_DELAY}s cb_threshold={CIRCUIT_BREAKER_THRESHOLD} "
-    f"flush={FLUSH_SIZE} chunk={CHUNK_SIZE} "
-    f"batch_workers={BATCH_MAX_WORKERS} "
+    f"flush={FLUSH_SIZE} stage_concurrency={STAGE_CONCURRENCY} "
     f"probe_only={PROBE_ONLY_MODE} "
-    f"retry_budget={RETRY_BUDGET_ENABLED} ratio={RETRY_BUDGET_RATIO} jitter={RETRY_JITTER_MIN_MS}-{RETRY_JITTER_MAX_MS}ms "
     f"concurrent: 711={MAX_CONCURRENT_711} decodo={MAX_CONCURRENT_DECODO} evomi={MAX_CONCURRENT_EVOMI} per_proxy={MAX_CONCURRENT_PER_PROXY} "
     f"total={MAX_CONCURRENT_REQUESTS}"
 )

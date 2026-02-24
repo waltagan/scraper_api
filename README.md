@@ -36,4 +36,6 @@ Documentação interativa: `/docs`
 
 ## Padrões no Scraper
 
-- Retry budget global + jitter para evitar retry storm em picos de erro transitório.
+- Pipeline em 2 etapas globais: probe+main em janelas de 3600 e subpages em ondas de 3600.
+- Timeouts fixos de 30s e sem retry para manter comportamento previsível próximo ao stress test.
+- Distribuição de providers em round-robin fixo (sem pesos) para simplificar operação.

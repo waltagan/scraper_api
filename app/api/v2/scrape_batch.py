@@ -33,12 +33,9 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
         )
 
     processor = BatchScrapeProcessor(
-        worker_count=request.worker_count,
         flush_size=request.flush_size,
         status_filter=request.status_filter,
         limit=request.limit,
-        chunk_size=request.chunk_size,
-        probe_only=request.probe_only,
     )
     set_active_batch(processor)
     await processor.initialize()
@@ -46,18 +43,17 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
 
     logger.info(
         f"Batch {processor.batch_id} iniciado: "
-        f"workers={processor.worker_count}, flush={request.flush_size}, "
-        f"limit={request.limit}, probe_only={request.probe_only}"
+        f"stage_concurrency={processor.stage_concurrency}, "
+        f"flush={request.flush_size}, limit={request.limit}"
     )
 
     return BatchScrapeResponse(
         success=True,
         batch_id=processor.batch_id,
         total_companies=processor.total,
-        worker_count=processor.worker_count,
+        stage_concurrency=processor.stage_concurrency,
         flush_size=request.flush_size,
-        instances=request.instances,
-        message=f"Batch {processor.batch_id} iniciado (sliding_window={processor.worker_count}).",
+        message=f"Batch {processor.batch_id} iniciado (modelo 2 etapas; slots={processor.stage_concurrency}).",
     )
 
 

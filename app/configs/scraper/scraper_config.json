@@ -1,8 +1,8 @@
 {
-  "request_timeout": 22,
-  "subpage_timeout": 22,
+  "request_timeout": 30,
+  "subpage_timeout": 30,
   "retry_timeout": 30,
-  "max_retries": 1,
+  "max_retries": 0,
   "max_subpages": 10,
   "per_domain_concurrent": 4,
   "stagger_delay": 0.5,
@@ -14,12 +14,5 @@
   "max_concurrent_evomi": 1200,
   "max_concurrent_per_proxy": 4,
   "probe_only_mode": false,
-  "evomi_proxy_file": "proxies_evomi.txt",
-  "provider_weights": {
-    "711proxy": 1,
-    "decodo": 1,
-    "evomi": 2
-  },
-  "chunk_size": 360,
-  "batch_max_workers": 120
+  "evomi_proxy_file": "proxies_evomi.txt"
 }

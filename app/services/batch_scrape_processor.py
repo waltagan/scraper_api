@@ -14,17 +14,20 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
+from urllib.parse import urlparse
 
-from app.services.scraper.scraper_service import scrape_all_subpages
-from app.services.scraper.models import ScrapeResult
+from app.services.scraper.scraper_service import (
+    scrape_all_subpages,
+    scrape_single_subpage_simple,
+)
+from app.services.scraper.models import ScrapeResult, ScrapedPage
 from app.core.chunking import process_content
 from app.services.database_service import get_db_service
 from app.services.scraper.constants import (
     FLUSH_SIZE,
     MAX_SUBPAGES,
-    CHUNK_SIZE,
+    MAX_CONCURRENT_REQUESTS,
     PROBE_ONLY_MODE,
-    BATCH_MAX_WORKERS,
 )
 from app.services.scraper_manager.proxy_manager import proxy_pool
 
@@ -236,12 +239,29 @@ class CompanyResult:
     page_scraped: Optional[str] = None
 
 
+@dataclass
+class _StageCompanyContext:
+    company: Dict[str, Any]
+    proxy: str
+    provider: str
+    scrape_result: ScrapeResult
+    subpages: List[ScrapedPage] = field(default_factory=list)
+    subpage_start: float = 0.0
+
+
+@dataclass
+class _SubpageJob:
+    ctx_index: int
+    url: str
+    referer: str
+
+
 class BatchScrapeProcessor:
     """Processador batch com chunking — processa CHUNK_SIZE empresas por vez."""
 
     def __init__(
         self,
-        worker_count: int = BATCH_MAX_WORKERS,
+        worker_count: int = MAX_CONCURRENT_REQUESTS,
         flush_size: int = FLUSH_SIZE,
         status_filter: Optional[List[str]] = None,
         limit: Optional[int] = None,
@@ -253,10 +273,11 @@ class BatchScrapeProcessor:
         self.flush_size = flush_size
         self.status_filter = status_filter or ['muito_alto', 'alto', 'medio']
         self.limit = limit
-        self.chunk_size = chunk_size or CHUNK_SIZE
-        self.probe_only = PROBE_ONLY_MODE if probe_only is None else bool(probe_only)
-        self.worker_count = max(1, int(worker_count))
-        self._worker_semaphore = asyncio.Semaphore(self.worker_count)
+        self.chunk_size = MAX_CONCURRENT_REQUESTS
+        self.probe_only = False if probe_only is None else bool(probe_only)
+        self.worker_count = MAX_CONCURRENT_REQUESTS
+        self.stage_concurrency = MAX_CONCURRENT_REQUESTS
+        self._worker_semaphore = asyncio.Semaphore(self.stage_concurrency)
 
         self._task: Optional[asyncio.Task] = None
         self.total = 0
@@ -384,39 +405,44 @@ class BatchScrapeProcessor:
             return
 
         self.total = len(all_companies)
-        cs = self.chunk_size
+        companies_sorted = self._prioritize_for_probe(all_companies)
+        cs = self.stage_concurrency
         total_chunks = (self.total + cs - 1) // cs
         logger.info(
             f"[Batch {self.batch_id}] {self.total} empresas em "
-            f"{total_chunks} chunks de {cs} (workers={self.worker_count})"
+            f"{total_chunks} janelas de {cs} (modelo 2 etapas)"
         )
 
         try:
             self._sampler_task = asyncio.create_task(self._sample_connections())
 
-            for chunk_start in range(0, len(all_companies), cs):
-                chunk = all_companies[chunk_start:chunk_start + cs]
+            for chunk_start in range(0, len(companies_sorted), cs):
+                chunk = companies_sorted[chunk_start:chunk_start + cs]
                 chunk_num = chunk_start // cs + 1
-                window = min(self.worker_count, len(chunk))
 
                 logger.info(
-                    f"[Batch {self.batch_id}] Chunk {chunk_num}/{total_chunks}: "
-                    f"{len(chunk)} empresas | sliding_window={window} "
+                    f"[Batch {self.batch_id}] Janela {chunk_num}/{total_chunks}: "
+                    f"{len(chunk)} empresas | slots={self.stage_concurrency} "
                     f"(progresso: {self._processed}/{self.total})"
                 )
 
-                await self._run_chunk_sliding_window(chunk)
+                contexts = await self._run_stage1_probe_main(chunk)
+                await self._run_stage2_subpages(contexts)
+                for ctx in contexts:
+                    result = self._finalize_context(ctx)
+                    await self._consume_company_result(result)
                 await self._flush_buffer(force=True)
 
-                if chunk_start + cs < len(all_companies):
+                if chunk_start + cs < len(companies_sorted):
                     await proxy_pool.preload()
                     logger.info(
-                        f"[Batch {self.batch_id}] Chunk {chunk_num} concluído. "
+                        f"[Batch {self.batch_id}] Janela {chunk_num} concluída. "
                         f"Sessões renovadas. "
                         f"{self._success_count} ok, {self._error_count} erros até agora."
                     )
 
-            self._sampler_task.cancel()
+            if self._sampler_task:
+                self._sampler_task.cancel()
             self.status = "completed"
             elapsed = time.time() - self._start_time
             logger.info(
@@ -430,6 +456,228 @@ class BatchScrapeProcessor:
             logger.error(f"[Batch {self.batch_id}] Erro fatal: {e}", exc_info=True)
             await self._flush_buffer(force=True)
             self.status = "error"
+
+    def _probe_priority_score(self, url: str) -> int:
+        try:
+            parsed = urlparse(url if "://" in url else f"https://{url}")
+            score = 0
+            host = (parsed.netloc or "").lower()
+            path = parsed.path or ""
+            if host.startswith("www."):
+                score += 10
+            if "." in host and len(host) > 3:
+                score += 8
+            if path in ("", "/"):
+                score += 5
+            if not parsed.query:
+                score += 3
+            return score
+        except Exception:
+            return 0
+
+    def _prioritize_for_probe(self, companies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return sorted(
+            companies,
+            key=lambda c: self._probe_priority_score(c.get("website_url", "")),
+            reverse=True,
+        )
+
+    async def _run_stage1_probe_main(self, companies: List[Dict[str, Any]]) -> List[_StageCompanyContext]:
+        async def run_one(company: Dict[str, Any]) -> _StageCompanyContext:
+            picked_proxy = proxy_pool.get_sticky_proxy_with_provider()
+            sticky_proxy = picked_proxy[0] if picked_proxy else ""
+            sticky_provider = picked_proxy[1] if picked_proxy else ""
+            scrape_result = await scrape_all_subpages(
+                url=company["website_url"],
+                max_subpages=MAX_SUBPAGES,
+                ctx_label=f"[B{self.batch_id}]",
+                request_id=company["cnpj_basico"],
+                proxy=sticky_proxy,
+                proxy_provider=sticky_provider,
+                probe_only=True,
+            )
+            return _StageCompanyContext(
+                company=company,
+                proxy=sticky_proxy,
+                provider=sticky_provider or "unknown",
+                scrape_result=scrape_result,
+            )
+
+        tasks = [run_one(c) for c in companies]
+        return await asyncio.gather(*tasks)
+
+    def _classify_stage2_error(self, error: str) -> str:
+        err = (error or "").lower()
+        if err.startswith("transport:"):
+            detail = err[len("transport:"):]
+            if "timeout" in detail:
+                return "sub:timeout"
+            if "http_403" in detail:
+                return "sub:http_403"
+            if "http_4" in detail:
+                return "sub:http_4xx"
+            if "http_5" in detail:
+                return "sub:http_5xx"
+            if "connection" in detail:
+                return "sub:connection"
+            if "ssl" in detail:
+                return "sub:ssl"
+            return "sub:transport_other"
+        if "blocked:cloudflare" in err:
+            return "sub:cloudflare"
+        if "content:soft_404" in err:
+            return "sub:soft_404"
+        if "content:thin" in err:
+            return "sub:thin_content"
+        if "empty_response" in err:
+            return "sub:empty_response"
+        return "sub:other"
+
+    async def _run_stage2_subpages(self, contexts: List[_StageCompanyContext]) -> None:
+        jobs: List[_SubpageJob] = []
+        for i, ctx in enumerate(contexts):
+            if not ctx.scrape_result.main_page_ok:
+                continue
+            main_url = ctx.company["website_url"]
+            ctx.subpage_start = time.perf_counter()
+            for link in ctx.scrape_result.target_links:
+                jobs.append(_SubpageJob(ctx_index=i, url=link, referer=main_url))
+
+        if not jobs:
+            return
+
+        async def run_one(job: _SubpageJob):
+            ctx = contexts[job.ctx_index]
+            page = await scrape_single_subpage_simple(
+                url=job.url,
+                referer=job.referer,
+                proxy=ctx.proxy,
+                proxy_provider=ctx.provider,
+            )
+            ctx.subpages.append(page)
+
+        for start in range(0, len(jobs), self.stage_concurrency):
+            wave = jobs[start:start + self.stage_concurrency]
+            await asyncio.gather(*[run_one(j) for j in wave])
+
+    def _finalize_context(self, ctx: _StageCompanyContext) -> CompanyResult:
+        result = ctx.scrape_result
+        if result.main_page_ok and result.pages:
+            main_page = result.pages[0]
+            pages = [main_page] + ctx.subpages
+            result.pages = pages
+            result.subpages_attempted = len(ctx.subpages)
+            result.subpages_ok = sum(1 for p in ctx.subpages if p.success)
+            result.subpages_skipped = 0
+            result.subpages_time_ms = (time.perf_counter() - ctx.subpage_start) * 1000 if ctx.subpage_start else 0.0
+            errs: Dict[str, int] = {}
+            for p in ctx.subpages:
+                if p.error:
+                    k = self._classify_stage2_error(p.error)
+                    errs[k] = errs.get(k, 0) + 1
+            result.subpage_errors = errs
+            result.total_time_ms = result.main_scrape_time_ms + result.subpages_time_ms
+
+        self._aggregate_scrape_meta(result)
+        proc_ms = result.total_time_ms or (result.main_scrape_time_ms + result.subpages_time_ms)
+        cnpj = ctx.company["cnpj_basico"]
+        discovery_id = ctx.company.get("wd_id")
+        url = ctx.company["website_url"]
+        pages = result.pages
+        total_pages = len(pages) if pages else 0
+        successful_pages = [p for p in (pages or []) if p.success]
+        pw = json.dumps({"num_links": len(result.all_links), "links": result.all_links})
+
+        if not successful_pages:
+            return CompanyResult(
+                cnpj_basico=cnpj,
+                discovery_id=discovery_id,
+                website_url=url,
+                error=_build_error_summary(result, "Nenhum conteudo obtido"),
+                total_pages_attempted=total_pages,
+                proxy_provider=ctx.provider,
+                page_website=pw,
+                processing_time_ms=proc_ms,
+            )
+
+        visited = [p.url for p in successful_pages]
+        ps = json.dumps({"num_links": len(visited), "links": visited})
+        aggregated = "\n\n".join(
+            f"--- PAGE START: {p.url} ---\n{p.content}\n--- PAGE END ---"
+            for p in successful_pages
+        )
+        if len(aggregated.strip()) < 100:
+            return CompanyResult(
+                cnpj_basico=cnpj,
+                discovery_id=discovery_id,
+                website_url=url,
+                error=_build_error_summary(result, f"Conteudo insuficiente ({len(aggregated)} chars)"),
+                pages_scraped=len(successful_pages),
+                total_pages_attempted=total_pages,
+                proxy_provider=ctx.provider,
+                page_website=pw,
+                page_scraped=ps,
+                processing_time_ms=proc_ms,
+            )
+
+        chunks = process_content(aggregated)
+        if not chunks:
+            return CompanyResult(
+                cnpj_basico=cnpj,
+                discovery_id=discovery_id,
+                website_url=url,
+                error=_build_error_summary(result, "Nenhum chunk gerado"),
+                pages_scraped=len(successful_pages),
+                total_pages_attempted=total_pages,
+                proxy_provider=ctx.provider,
+                page_website=pw,
+                page_scraped=ps,
+                processing_time_ms=proc_ms,
+            )
+
+        for chunk in chunks:
+            if not hasattr(chunk, "pages_included") or not chunk.pages_included:
+                chunk.pages_included = visited[:5]
+
+        return CompanyResult(
+            cnpj_basico=cnpj,
+            discovery_id=discovery_id,
+            website_url=url,
+            chunks=chunks,
+            success=True,
+            pages_scraped=len(successful_pages),
+            total_pages_attempted=total_pages,
+            proxy_provider=ctx.provider,
+            page_website=pw,
+            page_scraped=ps,
+            processing_time_ms=proc_ms,
+        )
+
+    async def _consume_company_result(self, result_obj: CompanyResult):
+        pending_flush = None
+        async with self._buffer_lock:
+            self._processed += 1
+            result_obj.processing_time_ms = result_obj.processing_time_ms or 0.0
+            self._buffer.append(result_obj)
+            bisect.insort(self._processing_times, result_obj.processing_time_ms)
+            if result_obj.pages_scraped > 0:
+                self._pages_per_company.append(result_obj.pages_scraped)
+            self._retries_total += result_obj.retries_used
+            self._register_provider_result(result_obj)
+
+            if result_obj.success:
+                self._success_count += 1
+            else:
+                self._error_count += 1
+                cat = _classify_error(result_obj.error or "")
+                self._error_categories[cat] = self._error_categories.get(cat, 0) + 1
+
+            if len(self._buffer) >= self.flush_size:
+                pending_flush = self._buffer
+                self._buffer = []
+
+        if pending_flush is not None:
+            await self._flush_records(pending_flush)
 
     async def _sample_connections(self):
         """Amostra conexões ativas a cada 1s para histograma de carga."""
@@ -952,7 +1200,7 @@ class BatchScrapeProcessor:
                 CIRCUIT_BREAKER_THRESHOLD, FLUSH_SIZE, MIN_CONTENT_LENGTH,
                 MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO, MAX_CONCURRENT_EVOMI,
                 MAX_CONCURRENT_PER_PROXY, RETRY_TIMEOUT, MAX_RETRIES, PROBE_ONLY_MODE,
-                BATCH_MAX_WORKERS,
+                MAX_CONCURRENT_REQUESTS,
             )
             stats["config"] = {
                 "request_timeout": REQUEST_TIMEOUT,
@@ -971,8 +1219,8 @@ class BatchScrapeProcessor:
                 "max_concurrent_decodo": MAX_CONCURRENT_DECODO,
                 "max_concurrent_evomi": MAX_CONCURRENT_EVOMI,
                 "max_concurrent_per_proxy": MAX_CONCURRENT_PER_PROXY,
-                "batch_max_workers_default": BATCH_MAX_WORKERS,
-                "batch_worker_count": self.worker_count,
+                "stage_concurrency": MAX_CONCURRENT_REQUESTS,
+                "batch_worker_count": self.stage_concurrency,
                 "chunk_size": self.chunk_size,
             }
         except Exception:

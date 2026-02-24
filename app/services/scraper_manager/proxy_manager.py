@@ -29,12 +29,6 @@ _EVOMI_FILE = os.path.normpath(
         _cfg.get("evomi_proxy_file", "proxies_evomi.txt"),
     )
 )
-_PROVIDER_WEIGHTS = _cfg.get(
-    "provider_weights",
-    {"711proxy": 1, "decodo": 1, "evomi": 1},
-)
-
-
 def _parse_evomi_line(line: str) -> Optional[str]:
     """
     Converte formatos Evomi para proxy URL padrão.
@@ -198,21 +192,16 @@ class ProxyPool:
 
     def _build_weighted_cycle(self):
         cycle: List[str] = []
-        providers = [
-            ("711proxy", bool(self._711_proxies)),
-            ("decodo", bool(self._decodo_proxies)),
-            ("evomi", bool(self._evomi_proxies)),
-        ]
-        for provider, available in providers:
-            if not available:
-                continue
-            w = int(_PROVIDER_WEIGHTS.get(provider, 1) or 0)
-            if w > 0:
-                cycle.extend([provider] * w)
+        if self._711_proxies:
+            cycle.append("711proxy")
+        if self._decodo_proxies:
+            cycle.append("decodo")
+        if self._evomi_proxies:
+            cycle.append("evomi")
         self._weighted_cycle = cycle
         self._weighted_index = 0
         if cycle:
-            logger.info(f"[ProxyPool] provider cycle: {cycle}")
+            logger.info(f"[ProxyPool] provider cycle (round_robin fixo): {cycle}")
 
     def get_sticky_proxy_with_provider(self) -> Optional[Tuple[str, str]]:
         """Retorna (proxy_url, provider) usando round-robin ponderado por provider."""
@@ -318,7 +307,7 @@ class ProxyPool:
             "711_proxies": len(self._711_proxies),
             "decodo_proxies": len(self._decodo_proxies),
             "evomi_proxies": len(self._evomi_proxies),
-            "provider_weights": _PROVIDER_WEIGHTS,
+            "provider_strategy": "round_robin_fixo",
             "evomi_source": self._evomi_meta,
             "total_proxies": len(self._711_proxies) + len(self._decodo_proxies) + len(self._evomi_proxies),
         }

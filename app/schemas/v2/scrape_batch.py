@@ -3,37 +3,23 @@ Schemas Pydantic para endpoint Batch Scrape v2.
 """
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
-from app.services.scraper.constants import BATCH_MAX_WORKERS
 
 
 class BatchScrapeRequest(BaseModel):
     """Request para iniciar batch scrape."""
     limit: Optional[int] = Field(None, description="Maximo de empresas a processar (None = todas pendentes)")
-    worker_count: int = Field(
-        BATCH_MAX_WORKERS,
-        ge=1,
-        le=20000,
-        description="Numero total de workers no sliding window.",
-    )
     flush_size: int = Field(1000, ge=10, le=5000, description="Tamanho do buffer antes de flush no DB")
-    instances: int = Field(10, ge=1, le=50, description="Numero de instancias paralelas de processamento")
     status_filter: List[str] = Field(
         default=['muito_alto', 'alto', 'medio'],
         description="Lista de discovery_status para filtrar"
     )
-    chunk_size: Optional[int] = Field(None, ge=100, le=10000, description="Empresas por chunk (None = usa config)")
-    probe_only: bool = Field(False, description="Se true, executa apenas probe+main page sem subpages")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "limit": 10000,
-                "worker_count": BATCH_MAX_WORKERS,
                 "flush_size": 1000,
-                "instances": 10,
-                "status_filter": ["muito_alto", "alto", "medio"],
-                "chunk_size": 1000,
-                "probe_only": False
+                "status_filter": ["muito_alto", "alto", "medio"]
             }
         }
     )
@@ -44,9 +30,8 @@ class BatchScrapeResponse(BaseModel):
     success: bool
     batch_id: str
     total_companies: int
-    worker_count: int
+    stage_concurrency: int
     flush_size: int
-    instances: int
     message: str
 
 
