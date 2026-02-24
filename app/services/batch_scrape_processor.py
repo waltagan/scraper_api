@@ -396,7 +396,16 @@ class BatchScrapeProcessor:
             self.status = "error"
             return
 
-        logger.info(f"[Batch {self.batch_id}] Proxies OK. Carregando empresas...")
+        isolated_providers = proxy_pool.get_available_providers()
+        if not isolated_providers:
+            logger.error(f"[Batch {self.batch_id}] Nenhum provider com proxies carregados! Abortando.")
+            self.status = "error"
+            return
+
+        logger.info(
+            f"[Batch {self.batch_id}] Proxies OK. Modo isolado por provider ativo: "
+            f"{', '.join(isolated_providers)}. Carregando empresas..."
+        )
         all_companies = await self._load_all_companies()
 
         if not all_companies:
@@ -419,14 +428,16 @@ class BatchScrapeProcessor:
             for chunk_start in range(0, len(companies_sorted), cs):
                 chunk = companies_sorted[chunk_start:chunk_start + cs]
                 chunk_num = chunk_start // cs + 1
+                isolated_provider = isolated_providers[(chunk_num - 1) % len(isolated_providers)]
 
                 logger.info(
                     f"[Batch {self.batch_id}] Janela {chunk_num}/{total_chunks}: "
                     f"{len(chunk)} empresas | slots={self.stage_concurrency} "
+                    f"| provider_isolado={isolated_provider} "
                     f"(progresso: {self._processed}/{self.total})"
                 )
 
-                contexts = await self._run_stage1_probe_main(chunk)
+                contexts = await self._run_stage1_probe_main(chunk, isolated_provider)
                 await self._run_stage2_subpages(contexts)
                 for ctx in contexts:
                     result = self._finalize_context(ctx)
@@ -482,11 +493,14 @@ class BatchScrapeProcessor:
             reverse=True,
         )
 
-    async def _run_stage1_probe_main(self, companies: List[Dict[str, Any]]) -> List[_StageCompanyContext]:
+    async def _run_stage1_probe_main(
+        self,
+        companies: List[Dict[str, Any]],
+        isolated_provider: str,
+    ) -> List[_StageCompanyContext]:
         async def run_one(company: Dict[str, Any]) -> _StageCompanyContext:
-            picked_proxy = proxy_pool.get_sticky_proxy_with_provider()
-            sticky_proxy = picked_proxy[0] if picked_proxy else ""
-            sticky_provider = picked_proxy[1] if picked_proxy else ""
+            sticky_proxy = proxy_pool.get_sticky_proxy_for_provider(isolated_provider) or ""
+            sticky_provider = isolated_provider if sticky_proxy else "unknown"
             scrape_result = await scrape_all_subpages(
                 url=company["website_url"],
                 max_subpages=MAX_SUBPAGES,

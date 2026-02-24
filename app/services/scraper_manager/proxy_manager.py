@@ -224,6 +224,26 @@ class ProxyPool:
             return None
         return picked[0]
 
+    def get_available_providers(self) -> List[str]:
+        providers: List[str] = []
+        if self._711_proxies:
+            providers.append("711proxy")
+        if self._decodo_proxies:
+            providers.append("decodo")
+        if self._evomi_proxies:
+            providers.append("evomi")
+        return providers
+
+    def get_sticky_proxy_for_provider(self, provider: str) -> Optional[str]:
+        p = (provider or "").lower().strip()
+        if p == "711proxy" and self._711_proxies:
+            return self._next_711()
+        if p == "decodo" and self._decodo_proxies:
+            return self._next_decodo()
+        if p == "evomi" and self._evomi_proxies:
+            return self._next_evomi()
+        return None
+
     def _next_711(self) -> str:
         proxy = self._711_proxies[self._711_index % len(self._711_proxies)]
         self._711_index += 1
@@ -307,7 +327,7 @@ class ProxyPool:
             "711_proxies": len(self._711_proxies),
             "decodo_proxies": len(self._decodo_proxies),
             "evomi_proxies": len(self._evomi_proxies),
-            "provider_strategy": "round_robin_fixo",
+            "provider_strategy": "round_robin_fixo_pool",
             "evomi_source": self._evomi_meta,
             "total_proxies": len(self._711_proxies) + len(self._decodo_proxies) + len(self._evomi_proxies),
         }
