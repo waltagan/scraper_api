@@ -15,16 +15,16 @@
   "max_concurrent_per_proxy": 4,
   "rate_limit_enabled": true,
   "rate_limit_providers": {
-    "711proxy": { "rate_per_sec": 75.0, "burst_capacity": 250 },
-    "decodo": { "rate_per_sec": 70.0, "burst_capacity": 230 },
-    "evomi": { "rate_per_sec": 90.0, "burst_capacity": 300 }
+    "711proxy": { "rate_per_sec": 35.0, "burst_capacity": 120 },
+    "decodo": { "rate_per_sec": 55.0, "burst_capacity": 180 },
+    "evomi": { "rate_per_sec": 120.0, "burst_capacity": 420 }
   },
   "probe_only_mode": false,
   "evomi_proxy_file": "proxies_evomi.txt",
   "provider_weights": {
     "711proxy": 1,
-    "decodo": 1,
-    "evomi": 1
+    "decodo": 2,
+    "evomi": 4
   },
   "chunk_size": 360
 }

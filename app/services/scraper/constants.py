@@ -34,9 +34,9 @@ PROBE_ONLY_MODE: bool = bool(_cfg.get("probe_only_mode", False))
 RATE_LIMIT_ENABLED: bool = bool(_cfg.get("rate_limit_enabled", True))
 _DEFAULT_RATE_LIMIT_PROVIDERS: Dict[str, Dict[str, Any]] = {
     # Parametros iniciais calibrados para reduzir rajada sem travar throughput.
-    "711proxy": {"rate_per_sec": 75.0, "burst_capacity": 250},
-    "decodo": {"rate_per_sec": 70.0, "burst_capacity": 230},
-    "evomi": {"rate_per_sec": 90.0, "burst_capacity": 300},
+    "711proxy": {"rate_per_sec": 35.0, "burst_capacity": 120},
+    "decodo": {"rate_per_sec": 55.0, "burst_capacity": 180},
+    "evomi": {"rate_per_sec": 120.0, "burst_capacity": 420},
 }
 RATE_LIMIT_PROVIDERS: Dict[str, Dict[str, Any]] = _cfg.get(
     "rate_limit_providers",
