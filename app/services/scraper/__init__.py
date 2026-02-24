@@ -32,6 +32,7 @@ except ImportError as e:
     async def scrape_all_subpages(
         url: str, max_subpages: int = 5, ctx_label: str = "",
         request_id: str = "", proxy: str = "", proxy_provider: str = "",
+        probe_only: bool = False,
     ):
         return ScrapeResult()
 

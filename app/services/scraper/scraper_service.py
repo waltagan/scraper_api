@@ -33,6 +33,7 @@ async def scrape_all_subpages(
     request_id: str = "",
     proxy: str = "",
     proxy_provider: str = "",
+    probe_only: Optional[bool] = None,
 ) -> ScrapeResult:
     """
     Pipeline: GET unico (probe+main) -> select links -> scrape subpages.
@@ -81,7 +82,8 @@ async def scrape_all_subpages(
 
     meta.main_page_ok = True
 
-    if PROBE_ONLY_MODE:
+    effective_probe_only = PROBE_ONLY_MODE if probe_only is None else bool(probe_only)
+    if effective_probe_only:
         meta.pages = [main_page]
         meta.subpages_attempted = 0
         meta.subpages_ok = 0

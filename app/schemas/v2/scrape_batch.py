@@ -16,6 +16,7 @@ class BatchScrapeRequest(BaseModel):
         description="Lista de discovery_status para filtrar"
     )
     chunk_size: Optional[int] = Field(None, ge=100, le=10000, description="Empresas por chunk (None = usa config)")
+    probe_only: bool = Field(False, description="Se true, executa apenas probe+main page sem subpages")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -25,7 +26,8 @@ class BatchScrapeRequest(BaseModel):
                 "flush_size": 1000,
                 "instances": 10,
                 "status_filter": ["muito_alto", "alto", "medio"],
-                "chunk_size": 1000
+                "chunk_size": 1000,
+                "probe_only": False
             }
         }
     )

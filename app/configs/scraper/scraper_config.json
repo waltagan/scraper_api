@@ -13,7 +13,7 @@
   "max_concurrent_decodo": 1200,
   "max_concurrent_evomi": 1200,
   "max_concurrent_per_proxy": 4,
-  "probe_only_mode": true,
+  "probe_only_mode": false,
   "evomi_proxy_file": "proxies_evomi.txt",
   "provider_weights": {
     "711proxy": 1,

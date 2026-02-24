@@ -241,12 +241,14 @@ class BatchScrapeProcessor:
         limit: Optional[int] = None,
         instances: int = 1,
         chunk_size: Optional[int] = None,
+        probe_only: Optional[bool] = None,
     ):
         self.batch_id = str(uuid.uuid4())[:8]
         self.flush_size = flush_size
         self.status_filter = status_filter or ['muito_alto', 'alto', 'medio']
         self.limit = limit
         self.chunk_size = chunk_size or CHUNK_SIZE
+        self.probe_only = PROBE_ONLY_MODE if probe_only is None else bool(probe_only)
 
         self._task: Optional[asyncio.Task] = None
         self.total = 0
@@ -490,7 +492,7 @@ class BatchScrapeProcessor:
         result = await scrape_all_subpages(
             url=url, max_subpages=MAX_SUBPAGES,
             ctx_label=f"[B{self.batch_id}]", request_id=cnpj,
-            proxy=proxy, proxy_provider=proxy_provider,
+            proxy=proxy, proxy_provider=proxy_provider, probe_only=self.probe_only,
         )
         self._aggregate_scrape_meta(result)
         pages = result.pages
@@ -914,7 +916,8 @@ class BatchScrapeProcessor:
                 "subpage_timeout": SUBPAGE_TIMEOUT,
                 "retry_timeout": RETRY_TIMEOUT,
                 "max_retries": MAX_RETRIES,
-                "probe_only_mode": PROBE_ONLY_MODE,
+                "probe_only_mode_default": PROBE_ONLY_MODE,
+                "probe_only_mode": self.probe_only,
                 "max_subpages": MAX_SUBPAGES,
                 "per_domain_concurrent": PER_DOMAIN_CONCURRENT,
                 "stagger_delay": STAGGER_DELAY,
