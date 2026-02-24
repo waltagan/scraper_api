@@ -13,10 +13,6 @@
   "max_concurrent_decodo": 1200,
   "max_concurrent_evomi": 1200,
   "max_concurrent_per_proxy": 4,
-  "retry_budget_enabled": true,
-  "retry_budget_ratio": 0.5,
-  "retry_jitter_min_ms": 200,
-  "retry_jitter_max_ms": 500,
   "probe_only_mode": false,
   "evomi_proxy_file": "proxies_evomi.txt",
   "provider_weights": {
@@ -24,5 +20,6 @@
     "decodo": 1,
     "evomi": 2
   },
-  "chunk_size": 360
+  "chunk_size": 360,
+  "batch_max_workers": 120
 }
