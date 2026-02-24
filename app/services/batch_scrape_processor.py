@@ -910,6 +910,7 @@ class BatchScrapeProcessor:
                 CIRCUIT_BREAKER_THRESHOLD, FLUSH_SIZE, MIN_CONTENT_LENGTH,
                 MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO, MAX_CONCURRENT_EVOMI,
                 MAX_CONCURRENT_PER_PROXY, RETRY_TIMEOUT, MAX_RETRIES, PROBE_ONLY_MODE,
+                RATE_LIMIT_ENABLED, RATE_LIMIT_PROVIDERS,
             )
             stats["config"] = {
                 "request_timeout": REQUEST_TIMEOUT,
@@ -918,6 +919,8 @@ class BatchScrapeProcessor:
                 "max_retries": MAX_RETRIES,
                 "probe_only_mode_default": PROBE_ONLY_MODE,
                 "probe_only_mode": self.probe_only,
+                "rate_limit_enabled": RATE_LIMIT_ENABLED,
+                "rate_limit_providers": RATE_LIMIT_PROVIDERS,
                 "max_subpages": MAX_SUBPAGES,
                 "per_domain_concurrent": PER_DOMAIN_CONCURRENT,
                 "stagger_delay": STAGGER_DELAY,

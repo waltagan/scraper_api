@@ -33,3 +33,7 @@ Todos os endpoints retornam imediatamente e processam em background.
 A API está configurada para deploy no Railway via Dockerfile ou Procfile.
 
 Documentação interativa: `/docs`
+
+## Padrões no Scraper
+
+- Controle de rajada por provider com token bucket (`rate_per_sec` + `burst_capacity`).

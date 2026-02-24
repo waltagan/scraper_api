@@ -9,7 +9,7 @@ import re
 import os
 import random
 import time as _time
-from typing import Tuple, Set, Optional, List
+from typing import Tuple, Set, Optional, List, Dict
 
 try:
     from curl_cffi.requests import AsyncSession
@@ -22,6 +22,7 @@ from .constants import (
     REQUEST_TIMEOUT, MAX_CONCURRENT_REQUESTS,
     MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO, MAX_CONCURRENT_EVOMI,
     MAX_CONCURRENT_PER_PROXY,
+    RATE_LIMIT_ENABLED, RATE_LIMIT_PROVIDERS,
     build_headers, BROWSER_PROFILES,
 )
 from .html_parser import parse_html
@@ -48,6 +49,47 @@ _init_done = False
 _active_connections: int = 0
 _peak_connections: int = 0
 _total_requests: int = 0
+_rate_buckets: Dict[str, "AsyncTokenBucket"] = {}
+_rate_wait_ms_by_provider: Dict[str, float] = {}
+_rate_wait_count_by_provider: Dict[str, int] = {}
+_rate_blocked_count_by_provider: Dict[str, int] = {}
+
+
+class AsyncTokenBucket:
+    """Token bucket simples para suavizar rajadas por provider."""
+
+    def __init__(self, rate_per_sec: float, burst_capacity: int):
+        self.rate_per_sec = max(float(rate_per_sec), 0.0)
+        self.burst_capacity = max(int(burst_capacity), 1)
+        self._tokens = float(self.burst_capacity)
+        self._last_refill = _time.perf_counter()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> tuple[float, bool]:
+        if self.rate_per_sec <= 0:
+            return 0.0, False
+
+        total_wait = 0.0
+        blocked = False
+        while True:
+            async with self._lock:
+                now = _time.perf_counter()
+                elapsed = now - self._last_refill
+                if elapsed > 0:
+                    self._tokens = min(
+                        float(self.burst_capacity),
+                        self._tokens + elapsed * self.rate_per_sec,
+                    )
+                    self._last_refill = now
+
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return total_wait * 1000.0, blocked
+
+                wait_s = (1.0 - self._tokens) / self.rate_per_sec
+                blocked = True
+            total_wait += wait_s
+            await asyncio.sleep(wait_s)
 
 
 def _ensure_sessions():
@@ -67,14 +109,46 @@ def _ensure_sessions():
     _sem_711 = asyncio.Semaphore(MAX_CONCURRENT_711)
     _sem_decodo = asyncio.Semaphore(MAX_CONCURRENT_DECODO)
     _sem_evomi = asyncio.Semaphore(MAX_CONCURRENT_EVOMI)
+    _init_rate_limiters()
 
     logger.info(
         f"[http_client] {len(_sessions)} sessions | "
         f"sem_711={MAX_CONCURRENT_711} sem_decodo={MAX_CONCURRENT_DECODO} sem_evomi={MAX_CONCURRENT_EVOMI} "
+        f"rate_limit={RATE_LIMIT_ENABLED} "
         f"sem_proxy={MAX_CONCURRENT_PER_PROXY} "
         f"total={MAX_CONCURRENT_REQUESTS}"
     )
     _init_done = True
+
+
+def _init_rate_limiters():
+    _rate_buckets.clear()
+    _rate_wait_ms_by_provider.clear()
+    _rate_wait_count_by_provider.clear()
+    _rate_blocked_count_by_provider.clear()
+
+    for provider in ("711proxy", "decodo", "evomi"):
+        cfg = RATE_LIMIT_PROVIDERS.get(provider, {})
+        rate = float(cfg.get("rate_per_sec", 0.0))
+        burst = int(cfg.get("burst_capacity", 1))
+        _rate_buckets[provider] = AsyncTokenBucket(rate_per_sec=rate, burst_capacity=burst)
+        _rate_wait_ms_by_provider[provider] = 0.0
+        _rate_wait_count_by_provider[provider] = 0
+        _rate_blocked_count_by_provider[provider] = 0
+
+
+async def _acquire_rate_limit(provider: str) -> float:
+    if not RATE_LIMIT_ENABLED:
+        return 0.0
+    bucket = _rate_buckets.get(provider)
+    if not bucket:
+        return 0.0
+    wait_ms, blocked = await bucket.acquire()
+    _rate_wait_ms_by_provider[provider] = _rate_wait_ms_by_provider.get(provider, 0.0) + wait_ms
+    _rate_wait_count_by_provider[provider] = _rate_wait_count_by_provider.get(provider, 0) + 1
+    if blocked:
+        _rate_blocked_count_by_provider[provider] = _rate_blocked_count_by_provider.get(provider, 0) + 1
+    return wait_ms
 
 
 def get_shared_session() -> "AsyncSession":
@@ -136,13 +210,31 @@ def _track_request_end():
 
 
 def get_connection_stats() -> dict:
+    rate_stats = {}
+    for provider in ("711proxy", "decodo", "evomi"):
+        wait_count = _rate_wait_count_by_provider.get(provider, 0)
+        wait_total = _rate_wait_ms_by_provider.get(provider, 0.0)
+        rate_cfg = RATE_LIMIT_PROVIDERS.get(provider, {})
+        rate_stats[provider] = {
+            "rate_per_sec": float(rate_cfg.get("rate_per_sec", 0.0)),
+            "burst_capacity": int(rate_cfg.get("burst_capacity", 0)),
+            "wait_count": wait_count,
+            "blocked_count": _rate_blocked_count_by_provider.get(provider, 0),
+            "wait_ms_total": round(wait_total, 1),
+            "wait_ms_avg": round(wait_total / wait_count, 1) if wait_count > 0 else 0.0,
+        }
     return {
         "active": _active_connections,
         "peak": _peak_connections,
         "total_requests": _total_requests,
         "capacity_711": MAX_CONCURRENT_711,
         "capacity_decodo": MAX_CONCURRENT_DECODO,
+        "capacity_evomi": MAX_CONCURRENT_EVOMI,
         "capacity_total": MAX_CONCURRENT_REQUESTS,
+        "rate_limit": {
+            "enabled": RATE_LIMIT_ENABLED,
+            "providers": rate_stats,
+        },
     }
 
 
@@ -151,6 +243,10 @@ def reset_connection_stats():
     _active_connections = 0
     _peak_connections = 0
     _total_requests = 0
+    for provider in ("711proxy", "decodo", "evomi"):
+        _rate_wait_ms_by_provider[provider] = 0.0
+        _rate_wait_count_by_provider[provider] = 0
+        _rate_blocked_count_by_provider[provider] = 0
 
 
 def _detect_encoding(content: bytes, content_type: Optional[str] = None) -> str:
@@ -215,6 +311,8 @@ async def cffi_scrape(
     headers, _ = build_headers()
     proxy_url = proxy or _get_proxy()
     req_timeout = timeout or REQUEST_TIMEOUT
+    resolved_provider = _infer_provider(proxy_url, provider)
+    await _acquire_rate_limit(resolved_provider)
     sem_provider = get_provider_semaphore(proxy_url, provider)
     sem_proxy = get_proxy_semaphore(proxy_url)
 
@@ -250,6 +348,7 @@ async def cffi_scrape_safe(
     cffi_scrape_safe.elapsed_ms = 0.0
     cffi_scrape_safe.sem_wait_ms = 0.0
     cffi_scrape_safe.http_time_ms = 0.0
+    cffi_scrape_safe.rate_wait_ms = 0.0
     if not HAS_CURL_CFFI:
         cffi_scrape_safe.last_error = "no_curl_cffi"
         return "", set(), set()
@@ -259,6 +358,8 @@ async def cffi_scrape_safe(
         headers, _ = build_headers(referer=referer)
         proxy_url = proxy or _get_proxy()
         req_timeout = timeout or REQUEST_TIMEOUT
+        resolved_provider = _infer_provider(proxy_url, provider)
+        cffi_scrape_safe.rate_wait_ms = await _acquire_rate_limit(resolved_provider)
         sem_provider = get_provider_semaphore(proxy_url, provider)
         sem_proxy = get_proxy_semaphore(proxy_url)
 
@@ -309,3 +410,4 @@ cffi_scrape_safe.last_error = None
 cffi_scrape_safe.elapsed_ms = 0.0
 cffi_scrape_safe.sem_wait_ms = 0.0
 cffi_scrape_safe.http_time_ms = 0.0
+cffi_scrape_safe.rate_wait_ms = 0.0

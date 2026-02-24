@@ -5,7 +5,7 @@ Pipeline simplificado: GET unico (probe+main) -> subpages (max 5).
 
 import logging
 import random
-from typing import Optional
+from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 
 from app.configs.config_loader import load_config
@@ -31,6 +31,17 @@ MAX_CONCURRENT_PER_PROXY: int = _cfg.get("max_concurrent_per_proxy", 4)
 MAX_CONCURRENT_REQUESTS: int = MAX_CONCURRENT_711 + MAX_CONCURRENT_DECODO + MAX_CONCURRENT_EVOMI
 CHUNK_SIZE: int = _cfg.get("chunk_size", 5000)
 PROBE_ONLY_MODE: bool = bool(_cfg.get("probe_only_mode", False))
+RATE_LIMIT_ENABLED: bool = bool(_cfg.get("rate_limit_enabled", True))
+_DEFAULT_RATE_LIMIT_PROVIDERS: Dict[str, Dict[str, Any]] = {
+    # Parametros iniciais calibrados para reduzir rajada sem travar throughput.
+    "711proxy": {"rate_per_sec": 75.0, "burst_capacity": 250},
+    "decodo": {"rate_per_sec": 70.0, "burst_capacity": 230},
+    "evomi": {"rate_per_sec": 90.0, "burst_capacity": 300},
+}
+RATE_LIMIT_PROVIDERS: Dict[str, Dict[str, Any]] = _cfg.get(
+    "rate_limit_providers",
+    _DEFAULT_RATE_LIMIT_PROVIDERS,
+)
 
 logger.info(
     f"[ScraperConfig] timeout={REQUEST_TIMEOUT}s sub_timeout={SUBPAGE_TIMEOUT}s retry_timeout={RETRY_TIMEOUT}s retries={MAX_RETRIES} "
@@ -38,6 +49,7 @@ logger.info(
     f"stagger={STAGGER_DELAY}s cb_threshold={CIRCUIT_BREAKER_THRESHOLD} "
     f"flush={FLUSH_SIZE} chunk={CHUNK_SIZE} "
     f"probe_only={PROBE_ONLY_MODE} "
+    f"rate_limit={RATE_LIMIT_ENABLED} "
     f"concurrent: 711={MAX_CONCURRENT_711} decodo={MAX_CONCURRENT_DECODO} evomi={MAX_CONCURRENT_EVOMI} per_proxy={MAX_CONCURRENT_PER_PROXY} "
     f"total={MAX_CONCURRENT_REQUESTS}"
 )
