@@ -97,6 +97,10 @@ class BatchStatusResponse(BaseModel):
     )
     pages_per_company_avg: float = Field(0, description="Media de paginas extraidas por empresa")
     total_retries: int = Field(0, description="Total de retries realizados")
+    retry_budget: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Estado do retry budget global (total/used/remaining/dropped + jitter)"
+    )
     failure_diagnosis: Dict[str, Any] = Field(
         default_factory=dict,
         description="Diagnóstico de falhas separado por categoria: site_offline, proxy_infra, blocked, content_issue"

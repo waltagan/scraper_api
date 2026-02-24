@@ -36,4 +36,4 @@ Documentação interativa: `/docs`
 
 ## Padrões no Scraper
 
-- Controle de rajada por provider com token bucket (`rate_per_sec` + `burst_capacity`).
+- Retry budget global + jitter para evitar retry storm em picos de erro transitório.

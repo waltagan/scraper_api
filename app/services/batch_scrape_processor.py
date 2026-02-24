@@ -17,6 +17,11 @@ from typing import List, Optional, Dict, Any
 
 from app.services.scraper.scraper_service import scrape_all_subpages
 from app.services.scraper.models import ScrapeResult
+from app.services.scraper.retry_control import (
+    configure_for_batch as configure_retry_budget,
+    disable_for_batch as disable_retry_budget,
+    snapshot as snapshot_retry_budget,
+)
 from app.core.chunking import process_content
 from app.services.database_service import get_db_service
 from app.services.scraper.constants import FLUSH_SIZE, MAX_SUBPAGES, CHUNK_SIZE
@@ -376,6 +381,7 @@ class BatchScrapeProcessor:
             return
 
         self.total = len(all_companies)
+        await configure_retry_budget(self.total)
         cs = self.chunk_size
         total_chunks = (self.total + cs - 1) // cs
         logger.info(
@@ -421,6 +427,8 @@ class BatchScrapeProcessor:
             logger.error(f"[Batch {self.batch_id}] Erro fatal: {e}", exc_info=True)
             await self._flush_buffer(force=True)
             self.status = "error"
+        finally:
+            await disable_retry_budget()
 
     async def _sample_connections(self):
         """Amostra conexões ativas a cada 1s para histograma de carga."""
@@ -511,6 +519,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, error_msg),
                 total_pages_attempted=total_pages,
+                retries_used=result.retries_used,
                 proxy_provider=proxy_provider or "unknown",
                 page_website=pw,
             )
@@ -529,6 +538,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, f"Conteudo insuficiente ({len(aggregated)} chars)"),
                 pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+                retries_used=result.retries_used,
                 proxy_provider=proxy_provider or "unknown",
                 page_website=pw, page_scraped=ps,
             )
@@ -539,6 +549,7 @@ class BatchScrapeProcessor:
                 cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
                 error=_build_error_summary(result, "Nenhum chunk gerado"),
                 pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+                retries_used=result.retries_used,
                 proxy_provider=proxy_provider or "unknown",
                 page_website=pw, page_scraped=ps,
             )
@@ -551,6 +562,7 @@ class BatchScrapeProcessor:
             cnpj_basico=cnpj, discovery_id=discovery_id, website_url=url,
             chunks=chunks, success=True,
             pages_scraped=len(successful_pages), total_pages_attempted=total_pages,
+            retries_used=result.retries_used,
             proxy_provider=proxy_provider or "unknown",
             page_website=pw, page_scraped=ps,
         )
@@ -830,6 +842,7 @@ class BatchScrapeProcessor:
         inst_elapsed = elapsed
         inst_tp = (processed / inst_elapsed * 60) if inst_elapsed > 0 else 0
 
+        retry_budget = snapshot_retry_budget()
         return {
             "batch_id": self.batch_id,
             "status": self.status,
@@ -850,6 +863,7 @@ class BatchScrapeProcessor:
             "error_breakdown": dict(sorted(self._error_categories.items(), key=lambda x: -x[1])),
             "pages_per_company_avg": avg_pages,
             "total_retries": self._retries_total,
+            "retry_budget": retry_budget,
             "failure_diagnosis": diagnosis,
             "provider_stats": provider_stats,
             "stage_funnel": stage_funnel,
@@ -910,7 +924,7 @@ class BatchScrapeProcessor:
                 CIRCUIT_BREAKER_THRESHOLD, FLUSH_SIZE, MIN_CONTENT_LENGTH,
                 MAX_CONCURRENT_711, MAX_CONCURRENT_DECODO, MAX_CONCURRENT_EVOMI,
                 MAX_CONCURRENT_PER_PROXY, RETRY_TIMEOUT, MAX_RETRIES, PROBE_ONLY_MODE,
-                RATE_LIMIT_ENABLED, RATE_LIMIT_PROVIDERS,
+                RETRY_BUDGET_ENABLED, RETRY_BUDGET_RATIO, RETRY_JITTER_MIN_MS, RETRY_JITTER_MAX_MS,
             )
             stats["config"] = {
                 "request_timeout": REQUEST_TIMEOUT,
@@ -919,8 +933,10 @@ class BatchScrapeProcessor:
                 "max_retries": MAX_RETRIES,
                 "probe_only_mode_default": PROBE_ONLY_MODE,
                 "probe_only_mode": self.probe_only,
-                "rate_limit_enabled": RATE_LIMIT_ENABLED,
-                "rate_limit_providers": RATE_LIMIT_PROVIDERS,
+                "retry_budget_enabled": RETRY_BUDGET_ENABLED,
+                "retry_budget_ratio": RETRY_BUDGET_RATIO,
+                "retry_jitter_min_ms": RETRY_JITTER_MIN_MS,
+                "retry_jitter_max_ms": RETRY_JITTER_MAX_MS,
                 "max_subpages": MAX_SUBPAGES,
                 "per_domain_concurrent": PER_DOMAIN_CONCURRENT,
                 "stagger_delay": STAGGER_DELAY,

@@ -12,6 +12,7 @@ from typing import Tuple, Set, Optional
 from enum import Enum
 
 from .constants import REQUEST_TIMEOUT
+from .retry_control import consume_retry_token, sleep_retry_jitter
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,9 @@ async def fast_probe_and_scrape(
     """
     from .http_client import cffi_scrape
 
+    fast_probe_and_scrape.last_retries_used = 0
+    fast_probe_and_scrape.last_retries_dropped = 0
+
     if not url.startswith(('http://', 'https://')):
         url = f'https://{url}'
 
@@ -118,12 +122,17 @@ async def fast_probe_and_scrape(
         return url, text, docs, links, elapsed
     except Exception as first_error:
         if max_retries > 0 and retry_timeout and _is_retryable_error(first_error):
-            try:
-                text, docs, links = await _try_once(url, retry_timeout)
-                elapsed = (time.perf_counter() - t0) * 1000
-                return url, text, docs, links, elapsed
-            except Exception as retried_error:
-                first_error = retried_error
+            if await consume_retry_token():
+                fast_probe_and_scrape.last_retries_used += 1
+                await sleep_retry_jitter()
+                try:
+                    text, docs, links = await _try_once(url, retry_timeout)
+                    elapsed = (time.perf_counter() - t0) * 1000
+                    return url, text, docs, links, elapsed
+                except Exception as retried_error:
+                    first_error = retried_error
+            else:
+                fast_probe_and_scrape.last_retries_dropped += 1
 
         if _is_dns_error(first_error) and 'www.' not in url:
             www_url = url.replace('://', '://www.', 1)
@@ -133,12 +142,17 @@ async def fast_probe_and_scrape(
                 return www_url, text, docs, links, elapsed
             except Exception as www_error:
                 if max_retries > 0 and retry_timeout and _is_retryable_error(www_error):
-                    try:
-                        text, docs, links = await _try_once(www_url, retry_timeout)
-                        elapsed = (time.perf_counter() - t0) * 1000
-                        return www_url, text, docs, links, elapsed
-                    except Exception as www_retry_error:
-                        www_error = www_retry_error
+                    if await consume_retry_token():
+                        fast_probe_and_scrape.last_retries_used += 1
+                        await sleep_retry_jitter()
+                        try:
+                            text, docs, links = await _try_once(www_url, retry_timeout)
+                            elapsed = (time.perf_counter() - t0) * 1000
+                            return www_url, text, docs, links, elapsed
+                        except Exception as www_retry_error:
+                            www_error = www_retry_error
+                    else:
+                        fast_probe_and_scrape.last_retries_dropped += 1
                 elapsed = (time.perf_counter() - t0) * 1000
                 error_type, msg = _classify_error(www_error)
                 raise URLNotReachable(msg, error_type=error_type, url=url)
@@ -159,3 +173,5 @@ class URLProber:
 
 
 url_prober = URLProber()
+fast_probe_and_scrape.last_retries_used = 0
+fast_probe_and_scrape.last_retries_dropped = 0

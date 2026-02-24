@@ -22,6 +22,7 @@ from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
 from .link_selector import filter_non_html_links, prioritize_links
 from .url_prober import fast_probe_and_scrape, URLNotReachable
 from .http_client import cffi_scrape_safe
+from .retry_control import consume_retry_token, sleep_retry_jitter
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ async def scrape_all_subpages(
         url = best_url
         meta.probe_ok = True
         meta.probe_time_ms = probe_time
+        meta.retries_used += int(getattr(fast_probe_and_scrape, "last_retries_used", 0))
     except URLNotReachable as e:
         meta.probe_time_ms = (time.perf_counter() - t0) * 1000
         logger.error(f"{ctx_label} URL inacessivel: {url} - {e.get_log_message()}")
@@ -113,10 +115,11 @@ async def scrape_all_subpages(
     subpages: List[ScrapedPage] = []
     skipped = 0
     if target_subpages:
-        subpages, skipped = await _scrape_subpages(
+        subpages, skipped, subpage_retries_used = await _scrape_subpages(
             target_subpages, base_referer, ctx_label,
             proxy=proxy, proxy_provider=proxy_provider,
         )
+        meta.retries_used += subpage_retries_used
     meta.subpages_time_ms = (time.perf_counter() - t_sub) * 1000
 
     # 4. CONSOLIDAR
@@ -182,11 +185,12 @@ async def _scrape_subpages(
 ) -> tuple:
     """
     Scrape subpaginas com stagger + semaforo por dominio + circuit breaker.
-    Retorna (list[ScrapedPage], skipped_count).
+    Retorna (list[ScrapedPage], skipped_count, retries_used).
     """
     domain_sem = asyncio.Semaphore(PER_DOMAIN_CONCURRENT)
     fail_streak = 0
     abort = False
+    retries_used = 0
 
     def _is_retryable_transport_error(err: str) -> bool:
         e = (err or "").lower()
@@ -214,21 +218,25 @@ async def _scrape_subpages(
                 http_time_ms=http_t,
             )
 
+            nonlocal retries_used
             if not text and transport_err and MAX_RETRIES > 0 and _is_retryable_transport_error(transport_err):
-                text, docs, _ = await cffi_scrape_safe(
-                    normalized, proxy=proxy or None,
-                    timeout=RETRY_TIMEOUT, referer=referer,
-                    provider=proxy_provider or None,
-                )
-                transport_err = cffi_scrape_safe.last_error
-                elapsed = cffi_scrape_safe.elapsed_ms
-                sem_w = cffi_scrape_safe.sem_wait_ms
-                http_t = cffi_scrape_safe.http_time_ms
-                timing = dict(
-                    response_time_ms=elapsed,
-                    sem_wait_ms=sem_w,
-                    http_time_ms=http_t,
-                )
+                if await consume_retry_token():
+                    retries_used += 1
+                    await sleep_retry_jitter()
+                    text, docs, _ = await cffi_scrape_safe(
+                        normalized, proxy=proxy or None,
+                        timeout=RETRY_TIMEOUT, referer=referer,
+                        provider=proxy_provider or None,
+                    )
+                    transport_err = cffi_scrape_safe.last_error
+                    elapsed = cffi_scrape_safe.elapsed_ms
+                    sem_w = cffi_scrape_safe.sem_wait_ms
+                    http_t = cffi_scrape_safe.http_time_ms
+                    timing = dict(
+                        response_time_ms=elapsed,
+                        sem_wait_ms=sem_w,
+                        http_time_ms=http_t,
+                    )
 
             if not text and transport_err:
                 return ScrapedPage(
@@ -298,7 +306,7 @@ async def _scrape_subpages(
 
     pages = [r for r in raw if r is not None]
     skipped = sum(1 for r in raw if r is None)
-    return pages, skipped
+    return pages, skipped, retries_used
 
 
 def _get_fail_reason(page: Optional[ScrapedPage]) -> str:
