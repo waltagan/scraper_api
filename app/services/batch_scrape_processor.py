@@ -397,14 +397,15 @@ class BatchScrapeProcessor:
             for chunk_start in range(0, len(all_companies), cs):
                 chunk = all_companies[chunk_start:chunk_start + cs]
                 chunk_num = chunk_start // cs + 1
+                window = min(self.worker_count, len(chunk))
 
                 logger.info(
                     f"[Batch {self.batch_id}] Chunk {chunk_num}/{total_chunks}: "
-                    f"{len(chunk)} empresas (progresso: {self._processed}/{self.total})"
+                    f"{len(chunk)} empresas | sliding_window={window} "
+                    f"(progresso: {self._processed}/{self.total})"
                 )
 
-                tasks = [self._process_company_limited(c) for c in chunk]
-                await asyncio.gather(*tasks)
+                await self._run_chunk_sliding_window(chunk)
                 await self._flush_buffer(force=True)
 
                 if chunk_start + cs < len(all_companies):
@@ -496,6 +497,35 @@ class BatchScrapeProcessor:
     async def _process_company_limited(self, company: Dict[str, Any]):
         async with self._worker_semaphore:
             await self._process_company(company)
+
+    async def _run_chunk_sliding_window(self, chunk: List[Dict[str, Any]]) -> None:
+        """Executa chunk em janela deslizante para manter workers sempre ocupados."""
+        if not chunk:
+            return
+
+        max_in_flight = min(self.worker_count, len(chunk))
+        iterator = iter(chunk)
+        in_flight: set[asyncio.Task] = set()
+
+        for _ in range(max_in_flight):
+            company = next(iterator, None)
+            if company is None:
+                break
+            in_flight.add(asyncio.create_task(self._process_company_limited(company)))
+
+        while in_flight:
+            done, pending = await asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
+            in_flight = set(pending)
+
+            for task in done:
+                try:
+                    await task
+                except Exception:
+                    logger.exception(f"[Batch {self.batch_id}] erro inesperado na sliding window")
+
+                next_company = next(iterator, None)
+                if next_company is not None:
+                    in_flight.add(asyncio.create_task(self._process_company_limited(next_company)))
 
     async def _do_scrape(
         self, cnpj: str, url: str, discovery_id: Optional[int],

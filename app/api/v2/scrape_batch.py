@@ -33,6 +33,7 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
         )
 
     processor = BatchScrapeProcessor(
+        worker_count=request.worker_count,
         flush_size=request.flush_size,
         status_filter=request.status_filter,
         limit=request.limit,
@@ -45,17 +46,18 @@ async def start_batch_scrape(request: BatchScrapeRequest) -> BatchScrapeResponse
 
     logger.info(
         f"Batch {processor.batch_id} iniciado: "
-        f"flush={request.flush_size}, limit={request.limit}, probe_only={request.probe_only}"
+        f"workers={processor.worker_count}, flush={request.flush_size}, "
+        f"limit={request.limit}, probe_only={request.probe_only}"
     )
 
     return BatchScrapeResponse(
         success=True,
         batch_id=processor.batch_id,
         total_companies=processor.total,
-        worker_count=request.worker_count,
+        worker_count=processor.worker_count,
         flush_size=request.flush_size,
         instances=request.instances,
-        message=f"Batch {processor.batch_id} iniciado (semaforo global 2000).",
+        message=f"Batch {processor.batch_id} iniciado (sliding_window={processor.worker_count}).",
     )
 
 

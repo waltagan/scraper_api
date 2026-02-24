@@ -3,12 +3,18 @@ Schemas Pydantic para endpoint Batch Scrape v2.
 """
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
+from app.services.scraper.constants import BATCH_MAX_WORKERS
 
 
 class BatchScrapeRequest(BaseModel):
     """Request para iniciar batch scrape."""
     limit: Optional[int] = Field(None, description="Maximo de empresas a processar (None = todas pendentes)")
-    worker_count: int = Field(2000, ge=1, le=20000, description="Numero total de workers (divididos entre instancias)")
+    worker_count: int = Field(
+        BATCH_MAX_WORKERS,
+        ge=1,
+        le=20000,
+        description="Numero total de workers no sliding window.",
+    )
     flush_size: int = Field(1000, ge=10, le=5000, description="Tamanho do buffer antes de flush no DB")
     instances: int = Field(10, ge=1, le=50, description="Numero de instancias paralelas de processamento")
     status_filter: List[str] = Field(
@@ -22,7 +28,7 @@ class BatchScrapeRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "limit": 10000,
-                "worker_count": 2000,
+                "worker_count": BATCH_MAX_WORKERS,
                 "flush_size": 1000,
                 "instances": 10,
                 "status_filter": ["muito_alto", "alto", "medio"],
@@ -97,10 +103,6 @@ class BatchStatusResponse(BaseModel):
     )
     pages_per_company_avg: float = Field(0, description="Media de paginas extraidas por empresa")
     total_retries: int = Field(0, description="Total de retries realizados")
-    retry_budget: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Estado do retry budget global (total/used/remaining/dropped + jitter)"
-    )
     failure_diagnosis: Dict[str, Any] = Field(
         default_factory=dict,
         description="Diagnóstico de falhas separado por categoria: site_offline, proxy_infra, blocked, content_issue"
