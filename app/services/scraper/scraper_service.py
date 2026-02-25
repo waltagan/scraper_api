@@ -40,6 +40,12 @@ _MAIN_PAGE_HEADERS = {
     "Connection": "keep-alive",
     "Referer": "https://www.google.com/",
 }
+_MAIN_PAGE_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+]
 
 
 async def scrape_all_subpages(
@@ -456,25 +462,23 @@ async def scrape_main_page_raw_with_session(
     target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
     error = ""
     try:
-        resp = await asyncio.wait_for(
-            session.get(
-                target_url,
-                headers=_MAIN_PAGE_HEADERS,
-                proxy=(proxy or None),
-                timeout=timeout,
-                allow_redirects=True,
-                max_redirects=5,
-            ),
-            timeout=timeout + 5,
+        headers = dict(_MAIN_PAGE_HEADERS)
+        headers["User-Agent"] = random.choice(_MAIN_PAGE_USER_AGENTS)
+        resp = await session.get(
+            target_url,
+            headers=headers,
+            proxy=(proxy or None),
+            timeout=timeout,
+            allow_redirects=True,
+            max_redirects=5,
         )
         status_code = int(getattr(resp, "status_code", 0) or 0)
         final_url = str(getattr(resp, "url", target_url))
         raw_html = (resp.content or b"").decode("utf-8", errors="ignore")
 
-        if status_code < 200 or status_code >= 400:
-            error = f"http_status_{status_code}"
-        elif len(raw_html.strip()) < 100:
-            error = f"thin_content_{len(raw_html.strip())}"
+        # Igual ao stress test: sucesso somente com HTTP 200.
+        if status_code != 200:
+            error = f"http_{status_code}"
 
         return final_url, status_code, raw_html, error
     except Exception as exc:
