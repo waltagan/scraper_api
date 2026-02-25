@@ -472,84 +472,126 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
             finally:
                 queue.task_done()
 
-    writer_tasks = [
-        asyncio.create_task(writer_loop(i + 1))
-        for i in range(writer_count)
-    ]
+    writer_tasks = [asyncio.create_task(writer_loop(i + 1)) for i in range(writer_count)]
+    writer_errors: List[Exception] = []
+    producer_error: Exception | None = None
 
-    while produced < requested_total:
-        remaining = requested_total - produced
-        fetch_limit = min(5000, remaining)
-        companies = await db_service.get_pending_scrape_main_step1_companies(
-            limit=fetch_limit,
-            after_id=after_id,
-        )
-        if not companies:
-            break
-
-        after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
-
-        async def run_provider_slice(
-            provider: str,
-            company_slice: List[Dict[str, Any]],
-            proxy_urls: List[str],
-        ) -> List[Dict[str, Any]]:
-            tasks = [
-                _run_unified_one(
-                    cnpj_basico=company["cnpj_basico"],
-                    website_url=company["website_url"],
-                    timeout_seconds=timeout_seconds,
-                    proxy_url=proxy_urls[i % len(proxy_urls)],
-                    proxy_provider=provider,
-                )
-                for i, company in enumerate(company_slice)
-            ]
-            return await asyncio.gather(*tasks, return_exceptions=False)
-
-        for chunk in _chunk_list(companies, batch_size):
-            provider_capacity = 1200 * len(active_providers)
-            for start_idx in range(0, len(chunk), provider_capacity):
-                provider_window = chunk[start_idx:start_idx + provider_capacity]
-                allocation = _allocate_provider_slices(
-                    total_items=len(provider_window),
-                    providers=active_providers,
-                    per_provider_cap=1200,
-                )
-                cursor = 0
-                jobs = []
-                for provider in active_providers:
-                    take = allocation.get(provider, 0)
-                    company_slice = provider_window[cursor:cursor + take]
-                    cursor += take
-                    if not company_slice:
-                        continue
-                    jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
-
-                if jobs:
-                    provider_results = await asyncio.gather(*jobs, return_exceptions=False)
-                    for results in provider_results:
-                        for result in results:
-                            if produced >= requested_total:
-                                break
-                            await queue.put(result)
-                            produced += 1
-
-                if produced >= requested_total:
-                    break
-            if produced >= requested_total:
+    try:
+        while produced < requested_total:
+            remaining = requested_total - produced
+            fetch_limit = min(5000, remaining)
+            companies = await db_service.get_pending_scrape_main_step1_companies(
+                limit=fetch_limit,
+                after_id=after_id,
+            )
+            if not companies:
                 break
 
-    for _ in range(writer_count):
-        await queue.put(sentinel)
-    await queue.join()
+            after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
 
-    writer_results = await asyncio.gather(*writer_tasks, return_exceptions=True)
-    writer_errors = [err for err in writer_results if isinstance(err, Exception)]
-    if writer_errors:
-        raise RuntimeError(
-            f"[BATCH-UNIFIED] {len(writer_errors)} writer(s) falharam. "
-            "Verifique logs para detalhes."
+            async def run_one_safe(company: Dict[str, Any], provider: str, proxy_url: str) -> Dict[str, Any]:
+                try:
+                    return await _run_unified_one(
+                        cnpj_basico=company["cnpj_basico"],
+                        website_url=company["website_url"],
+                        timeout_seconds=timeout_seconds,
+                        proxy_url=proxy_url,
+                        proxy_provider=provider,
+                    )
+                except Exception as exc:
+                    website_url = company.get("website_url") or ""
+                    return {
+                        "cnpj_basico": company["cnpj_basico"],
+                        "website_url": website_url,
+                        "error_step1": f"step1:exception:{type(exc).__name__}:{str(exc)[:300]} | provider={provider}",
+                        "subpage_links": None,
+                        "num_subpages": 0,
+                        "error_step2": None,
+                        "mainpage_processada": None,
+                        "error_step3": None,
+                    }
+
+            async def run_provider_slice(
+                provider: str,
+                company_slice: List[Dict[str, Any]],
+                proxy_urls: List[str],
+            ) -> List[Dict[str, Any]]:
+                tasks = [
+                    run_one_safe(company, provider, proxy_urls[i % len(proxy_urls)])
+                    for i, company in enumerate(company_slice)
+                ]
+                return await asyncio.gather(*tasks, return_exceptions=False)
+
+            for chunk in _chunk_list(companies, batch_size):
+                provider_capacity = 1200 * len(active_providers)
+                for start_idx in range(0, len(chunk), provider_capacity):
+                    provider_window = chunk[start_idx:start_idx + provider_capacity]
+                    allocation = _allocate_provider_slices(
+                        total_items=len(provider_window),
+                        providers=active_providers,
+                        per_provider_cap=1200,
+                    )
+                    cursor = 0
+                    jobs = []
+                    for provider in active_providers:
+                        take = allocation.get(provider, 0)
+                        company_slice = provider_window[cursor:cursor + take]
+                        cursor += take
+                        if not company_slice:
+                            continue
+                        jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
+
+                    if jobs:
+                        provider_results = await asyncio.gather(*jobs, return_exceptions=False)
+                        for results in provider_results:
+                            for result in results:
+                                if produced >= requested_total:
+                                    break
+                                await queue.put(result)
+                                produced += 1
+
+                    logger.info(
+                        "[BATCH-UNIFIED] progresso producer: produced=%s persisted=%s queue=%s/%s",
+                        produced,
+                        persisted,
+                        queue.qsize(),
+                        queue_maxsize,
+                    )
+
+                    if produced >= requested_total:
+                        break
+                if produced >= requested_total:
+                    break
+    except Exception as exc:
+        producer_error = exc
+        logger.error(
+            "[BATCH-UNIFIED] Falha no producer: produced=%s persisted=%s queue=%s erro=%s",
+            produced,
+            persisted,
+            queue.qsize(),
+            exc,
+            exc_info=True,
         )
+    finally:
+        for _ in range(writer_count):
+            await queue.put(sentinel)
+        await queue.join()
+
+        writer_results = await asyncio.gather(*writer_tasks, return_exceptions=True)
+        writer_errors = [err for err in writer_results if isinstance(err, Exception)]
+        if writer_errors:
+            logger.error(
+                "[BATCH-UNIFIED] Writers com erro: %s",
+                [f"{type(e).__name__}:{str(e)[:200]}" for e in writer_errors],
+            )
+
+        if producer_error:
+            raise producer_error
+        if writer_errors:
+            raise RuntimeError(
+                f"[BATCH-UNIFIED] {len(writer_errors)} writer(s) falharam. "
+                "Verifique logs para detalhes."
+            )
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
     logger.info(
