@@ -1,8 +1,7 @@
 """
 Schemas Pydantic para endpoint Scrape v2.
 """
-from pydantic import BaseModel, Field, ConfigDict, HttpUrl
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ScrapeRequest(BaseModel):
@@ -51,6 +50,63 @@ class ScrapeResponse(BaseModel):
                 "cnpj_basico": "12345678",
                 "website_url": "https://www.empresa.com.br",
                 "status": "accepted"
+            }
+        }
+    )
+
+
+class ScrapeMainPageRequest(BaseModel):
+    """Request schema para etapa 1: scrape da main page."""
+    cnpj_basico: str = Field(
+        ...,
+        description="CNPJ básico da empresa (8 primeiros dígitos)",
+        min_length=8,
+        max_length=8,
+    )
+    website_url: str = Field(..., description="URL do site oficial para scrape da main page")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "cnpj_basico": "12345678",
+                "website_url": "https://www.empresa.com.br",
+            }
+        }
+    )
+
+
+class ScrapeMainPageProcessRequest(BaseModel):
+    """Request schema para etapas 2 e 3, baseadas no raw_content já salvo."""
+    cnpj_basico: str = Field(
+        ...,
+        description="CNPJ básico da empresa (8 primeiros dígitos)",
+        min_length=8,
+        max_length=8,
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "cnpj_basico": "12345678",
+            }
+        }
+    )
+
+
+class ScrapeMainPageResponse(BaseModel):
+    """Response padrão dos novos endpoints de scrape_main."""
+    success: bool = Field(..., description="Indica se a requisição foi aceita")
+    message: str = Field(..., description="Mensagem de confirmação")
+    cnpj_basico: str = Field(..., description="CNPJ básico da empresa")
+    status: str = Field(default="accepted", description="Status da requisição")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "message": "Requisição aceita. Processamento em background.",
+                "cnpj_basico": "12345678",
+                "status": "accepted",
             }
         }
     )

@@ -50,6 +50,38 @@ POST /v2/montagem_perfil
 }
 ```
 
+#### 5. `/v2/scrape/main-page` - Etapa 1 (Main Page Raw)
+```json
+POST /v2/scrape/main-page
+{
+  "cnpj_basico": "12345678",
+  "website_url": "https://example.com"
+}
+```
+
+#### 6. `/v2/scrape/main-page/subpage-links` - Etapa 2 (Extrair Links)
+```json
+POST /v2/scrape/main-page/subpage-links
+{
+  "cnpj_basico": "12345678"
+}
+```
+
+#### 7. `/v2/scrape/main-page/process-text` - Etapa 3 (Processar Texto)
+```json
+POST /v2/scrape/main-page/process-text
+{
+  "cnpj_basico": "12345678"
+}
+```
+
+## Novo fluxo em 3 etapas
+
+- Etapa 1 salva `raw_content` (sucesso) ou `error` (falha) em `busca_fornecedor.scrape_main`.
+- Etapa 2 lê `raw_content`, extrai links de subpágina e salva em `subpage_links`.
+- Etapa 3 lê `raw_content`, extrai texto limpo e salva em `mainpage_processada`.
+- Chave de atualização: upsert por `cnpj_basico`.
+
 ## Respostas
 
 Todos os endpoints POST retornam imediatamente com:

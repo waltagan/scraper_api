@@ -9,7 +9,7 @@ import asyncio
 import random
 import time
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .models import ScrapedPage, ScrapeResult
 from .constants import (
@@ -18,12 +18,28 @@ from .constants import (
     RETRY_TIMEOUT, MAX_RETRIES, PROBE_ONLY_MODE,
     smart_referer,
 )
-from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url
+from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, parse_html, extract_links
 from .link_selector import filter_non_html_links, prioritize_links
 from .url_prober import fast_probe_and_scrape, URLNotReachable
 from .http_client import cffi_scrape_safe
 
 logger = logging.getLogger(__name__)
+
+try:
+    from curl_cffi.requests import AsyncSession
+    HAS_CURL_CFFI = True
+except ImportError:
+    HAS_CURL_CFFI = False
+    AsyncSession = None
+
+_MAIN_PAGE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Referer": "https://www.google.com/",
+}
 
 
 async def scrape_all_subpages(
@@ -401,3 +417,65 @@ async def scrape_single_subpage_simple(
         status_code=200,
         **timing,
     )
+
+
+async def scrape_main_page_raw(
+    url: str,
+    timeout: int = REQUEST_TIMEOUT,
+    proxy: str = "",
+) -> Tuple[str, int, str, str]:
+    """
+    Faz um GET único da main page (estilo stress test) e retorna:
+    (final_url, status_code, raw_html, error).
+    """
+    if not HAS_CURL_CFFI:
+        return url, 0, "", "curl_cffi_not_available"
+
+    target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
+    session = AsyncSession(impersonate="chrome131", verify=False, max_clients=200)
+    error = ""
+
+    try:
+        resp = await asyncio.wait_for(
+            session.get(
+                target_url,
+                headers=_MAIN_PAGE_HEADERS,
+                proxy=(proxy or None),
+                timeout=timeout,
+                allow_redirects=True,
+                max_redirects=5,
+            ),
+            timeout=timeout + 5,
+        )
+        status_code = int(getattr(resp, "status_code", 0) or 0)
+        final_url = str(getattr(resp, "url", target_url))
+        raw_html = (resp.content or b"").decode("utf-8", errors="ignore")
+
+        if status_code < 200 or status_code >= 400:
+            error = f"http_status_{status_code}"
+        elif len(raw_html.strip()) < 100:
+            error = f"thin_content_{len(raw_html.strip())}"
+
+        return final_url, status_code, raw_html, error
+    except Exception as exc:
+        return target_url, 0, "", f"{type(exc).__name__}: {str(exc)[:200]}"
+    finally:
+        await session.close()
+
+
+def extract_subpage_links_from_raw(raw_content: str, base_url: str) -> List[str]:
+    """
+    Extrai e prioriza links de subpágina a partir do HTML bruto salvo.
+    """
+    _docs, internal_links = extract_links(raw_content or "", base_url)
+    filtered = filter_non_html_links(internal_links)
+    prioritized = prioritize_links(filtered, base_url)
+    return prioritized
+
+
+def extract_mainpage_text_from_raw(raw_content: str, base_url: str) -> str:
+    """
+    Extrai texto limpo da main page a partir do HTML bruto salvo.
+    """
+    text, _docs, _links = parse_html(raw_content or "", base_url)
+    return text or ""

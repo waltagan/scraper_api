@@ -24,7 +24,12 @@ from .url_prober import (
 )
 
 try:
-    from .scraper_service import scrape_all_subpages
+    from .scraper_service import (
+        scrape_all_subpages,
+        scrape_main_page_raw,
+        extract_subpage_links_from_raw,
+        extract_mainpage_text_from_raw,
+    )
 except ImportError as e:
     import logging
     logging.getLogger(__name__).warning(f"curl_cffi nao disponivel: {e}")
@@ -36,9 +41,21 @@ except ImportError as e:
     ):
         return ScrapeResult()
 
+    async def scrape_main_page_raw(url: str, timeout: int = 30, proxy: str = ""):
+        return url, 0, "", "curl_cffi_not_available"
+
+    def extract_subpage_links_from_raw(raw_content: str, base_url: str):
+        return []
+
+    def extract_mainpage_text_from_raw(raw_content: str, base_url: str):
+        return ""
+
 
 __all__ = [
     'scrape_all_subpages',
+    'scrape_main_page_raw',
+    'extract_subpage_links_from_raw',
+    'extract_mainpage_text_from_raw',
     'fast_probe_and_scrape',
     'parse_html',
     'is_cloudflare_challenge',

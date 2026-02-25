@@ -5,18 +5,129 @@ Processamento em background - retorna imediatamente apos aceitar requisicao.
 import logging
 import time
 import asyncio
+import json
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Query
-from app.schemas.v2.scrape import ScrapeRequest, ScrapeResponse
-from app.services.scraper import scrape_all_subpages
-from app.services.scraper.models import ScrapedPage
-from app.services.database_service import DatabaseService, get_db_service
+from app.schemas.v2.scrape import (
+    ScrapeRequest,
+    ScrapeResponse,
+    ScrapeMainPageRequest,
+    ScrapeMainPageProcessRequest,
+    ScrapeMainPageResponse,
+)
+from app.services.scraper import (
+    scrape_all_subpages,
+    scrape_main_page_raw,
+    extract_subpage_links_from_raw,
+    extract_mainpage_text_from_raw,
+)
+from app.services.database_service import get_db_service
 from app.core.chunking import process_content
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 db_service = get_db_service()
+
+
+async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
+    """Etapa 1: scrape da main page e persistência de raw_content/error."""
+    try:
+        await db_service.upsert_scrape_main_base(
+            cnpj_basico=request.cnpj_basico,
+            website_url=request.website_url,
+        )
+
+        final_url, status_code, raw_content, error = await scrape_main_page_raw(request.website_url)
+
+        if error:
+            detail = f"step1:{error} | status={status_code} | final_url={final_url}"
+            await db_service.save_scrape_main_error(
+                cnpj_basico=request.cnpj_basico,
+                error=detail,
+                website_url=final_url or request.website_url,
+            )
+            logger.warning(f"[BACKGROUND] scrape_main_page erro cnpj={request.cnpj_basico} detail={detail}")
+            return
+
+        await db_service.save_scrape_main_raw_content(
+            cnpj_basico=request.cnpj_basico,
+            raw_content=raw_content,
+            website_url=final_url or request.website_url,
+        )
+        logger.info(
+            f"[BACKGROUND] scrape_main_page concluido: cnpj={request.cnpj_basico}, "
+            f"status={status_code}, raw_len={len(raw_content)}"
+        )
+    except Exception as e:
+        logger.error(f"[BACKGROUND] Erro etapa1 scrape_main_page: {e}", exc_info=True)
+        try:
+            await db_service.save_scrape_main_error(
+                cnpj_basico=request.cnpj_basico,
+                error=f"step1:exception:{type(e).__name__}:{str(e)[:300]}",
+                website_url=request.website_url,
+            )
+        except Exception:
+            logger.error("[BACKGROUND] Falha adicional ao persistir erro da etapa1", exc_info=True)
+
+
+async def _process_extract_subpage_links_background(request: ScrapeMainPageProcessRequest):
+    """Etapa 2: lê raw_content e salva links de subpágina."""
+    try:
+        record = await db_service.get_scrape_main(request.cnpj_basico)
+        if not record:
+            raise ValueError("registro scrape_main não encontrado para o CNPJ informado")
+
+        raw_content = (record.get("raw_content") or "").strip()
+        website_url = (record.get("website_url") or "").strip()
+        if not raw_content:
+            raise ValueError("raw_content vazio; execute a etapa 1 antes da etapa 2")
+        if not website_url:
+            raise ValueError("website_url ausente no registro scrape_main")
+
+        links = extract_subpage_links_from_raw(raw_content, website_url)
+        serialized_links = json.dumps(links, ensure_ascii=False)
+        await db_service.save_scrape_main_subpage_links(request.cnpj_basico, serialized_links)
+        logger.info(
+            f"[BACKGROUND] extrair_subpage_links concluido: cnpj={request.cnpj_basico}, links={len(links)}"
+        )
+    except Exception as e:
+        logger.error(f"[BACKGROUND] Erro etapa2 extrair_subpage_links: {e}", exc_info=True)
+        await db_service.save_scrape_main_error(
+            cnpj_basico=request.cnpj_basico,
+            error=f"step2:exception:{type(e).__name__}:{str(e)[:300]}",
+        )
+
+
+async def _process_mainpage_text_background(request: ScrapeMainPageProcessRequest):
+    """Etapa 3: lê raw_content e salva texto processado da main page."""
+    try:
+        record = await db_service.get_scrape_main(request.cnpj_basico)
+        if not record:
+            raise ValueError("registro scrape_main não encontrado para o CNPJ informado")
+
+        raw_content = (record.get("raw_content") or "").strip()
+        website_url = (record.get("website_url") or "").strip()
+        if not raw_content:
+            raise ValueError("raw_content vazio; execute a etapa 1 antes da etapa 3")
+        if not website_url:
+            raise ValueError("website_url ausente no registro scrape_main")
+
+        processed_text = extract_mainpage_text_from_raw(raw_content, website_url)
+        if not processed_text.strip():
+            raise ValueError("não foi possível extrair texto útil de raw_content")
+
+        await db_service.save_scrape_main_processed_text(request.cnpj_basico, processed_text)
+        logger.info(
+            f"[BACKGROUND] processar_mainpage_texto concluido: cnpj={request.cnpj_basico}, "
+            f"text_len={len(processed_text)}"
+        )
+    except Exception as e:
+        logger.error(f"[BACKGROUND] Erro etapa3 processar_mainpage_texto: {e}", exc_info=True)
+        await db_service.save_scrape_main_error(
+            cnpj_basico=request.cnpj_basico,
+            error=f"step3:exception:{type(e).__name__}:{str(e)[:300]}",
+        )
 
 
 async def _process_scrape_background(request: ScrapeRequest):
@@ -101,6 +212,65 @@ async def scrape_website(request: ScrapeRequest) -> ScrapeResponse:
         )
     except Exception as e:
         logger.error(f"Erro ao aceitar requisicao Scrape: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar requisicao: {str(e)}")
+
+
+@router.post("/scrape/main-page", response_model=ScrapeMainPageResponse)
+async def scrape_main_page(request: ScrapeMainPageRequest) -> ScrapeMainPageResponse:
+    """
+    Etapa 1: faz scrape da main page e salva raw_content/error em scrape_main.
+    """
+    try:
+        logger.info(
+            f"Requisicao scrape_main_page recebida: cnpj={request.cnpj_basico}, url={request.website_url}"
+        )
+        asyncio.create_task(_process_scrape_main_page_background(request))
+        return ScrapeMainPageResponse(
+            success=True,
+            message=f"Etapa 1 aceita para CNPJ {request.cnpj_basico}.",
+            cnpj_basico=request.cnpj_basico,
+            status="accepted",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar requisicao da etapa 1: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar requisicao: {str(e)}")
+
+
+@router.post("/scrape/main-page/subpage-links", response_model=ScrapeMainPageResponse)
+async def extract_subpage_links(request: ScrapeMainPageProcessRequest) -> ScrapeMainPageResponse:
+    """
+    Etapa 2: lê raw_content e salva subpage_links em scrape_main.
+    """
+    try:
+        logger.info(f"Requisicao etapa 2 recebida: cnpj={request.cnpj_basico}")
+        asyncio.create_task(_process_extract_subpage_links_background(request))
+        return ScrapeMainPageResponse(
+            success=True,
+            message=f"Etapa 2 aceita para CNPJ {request.cnpj_basico}.",
+            cnpj_basico=request.cnpj_basico,
+            status="accepted",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar requisicao da etapa 2: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar requisicao: {str(e)}")
+
+
+@router.post("/scrape/main-page/process-text", response_model=ScrapeMainPageResponse)
+async def process_mainpage_text(request: ScrapeMainPageProcessRequest) -> ScrapeMainPageResponse:
+    """
+    Etapa 3: lê raw_content e salva mainpage_processada em scrape_main.
+    """
+    try:
+        logger.info(f"Requisicao etapa 3 recebida: cnpj={request.cnpj_basico}")
+        asyncio.create_task(_process_mainpage_text_background(request))
+        return ScrapeMainPageResponse(
+            success=True,
+            message=f"Etapa 3 aceita para CNPJ {request.cnpj_basico}.",
+            cnpj_basico=request.cnpj_basico,
+            status="accepted",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar requisicao da etapa 3: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erro ao aceitar requisicao: {str(e)}")
 
 

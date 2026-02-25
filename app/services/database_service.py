@@ -290,6 +290,109 @@ class DatabaseService:
                 cnpj_basico
             )
             return [dict(row) for row in rows]
+
+    # ========== SCRAPE MAIN (NOVO FLUXO EM 3 ETAPAS) ==========
+
+    async def upsert_scrape_main_base(self, cnpj_basico: str, website_url: str) -> None:
+        """
+        Cria/atualiza registro base de scrape_main por cnpj_basico.
+        Upsert com chave única em cnpj_basico.
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                INSERT INTO "{SCHEMA}".scrape_main (cnpj_basico, website_url)
+                VALUES ($1, $2)
+                ON CONFLICT (cnpj_basico)
+                DO UPDATE SET website_url = EXCLUDED.website_url
+                """
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPSERT scrape_main base")
+            await conn.execute(query, cnpj_basico, website_url)
+
+    async def save_scrape_main_raw_content(
+        self,
+        cnpj_basico: str,
+        raw_content: str,
+        website_url: Optional[str] = None,
+    ) -> None:
+        """
+        Salva o raw_content da main page e limpa error da etapa 1.
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                UPDATE "{SCHEMA}".scrape_main
+                SET raw_content = $2,
+                    website_url = COALESCE($3, website_url),
+                    error = NULL
+                WHERE cnpj_basico = $1
+                """
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.raw_content")
+            await conn.execute(query, cnpj_basico, raw_content, website_url)
+
+    async def save_scrape_main_error(
+        self,
+        cnpj_basico: str,
+        error: str,
+        website_url: Optional[str] = None,
+    ) -> None:
+        """
+        Salva erro da etapa 1 (scrape main page).
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                UPDATE "{SCHEMA}".scrape_main
+                SET error = $2,
+                    website_url = COALESCE($3, website_url)
+                WHERE cnpj_basico = $1
+                """
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.error")
+            await conn.execute(query, cnpj_basico, error, website_url)
+
+    async def get_scrape_main(self, cnpj_basico: str) -> Optional[Dict[str, Any]]:
+        """
+        Busca registro de scrape_main por cnpj_basico.
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                SELECT cnpj_basico, website_url, raw_content, subpage_links, mainpage_processada, error
+                FROM "{SCHEMA}".scrape_main
+                WHERE cnpj_basico = $1
+                LIMIT 1
+                """
+            logger.debug(f"🔍 [SCHEMA={SCHEMA}] SELECT scrape_main")
+            row = await conn.fetchrow(query, cnpj_basico)
+            return dict(row) if row else None
+
+    async def save_scrape_main_subpage_links(self, cnpj_basico: str, subpage_links: str) -> None:
+        """
+        Salva links extraídos da subpágina no scrape_main.
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                UPDATE "{SCHEMA}".scrape_main
+                SET subpage_links = $2
+                WHERE cnpj_basico = $1
+                """
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.subpage_links")
+            await conn.execute(query, cnpj_basico, subpage_links)
+
+    async def save_scrape_main_processed_text(self, cnpj_basico: str, mainpage_processada: str) -> None:
+        """
+        Salva texto processado da main page no scrape_main.
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                UPDATE "{SCHEMA}".scrape_main
+                SET mainpage_processada = $2
+                WHERE cnpj_basico = $1
+                """
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.mainpage_processada")
+            await conn.execute(query, cnpj_basico, mainpage_processada)
     
     # ========== BATCH SCRAPE ==========
     
