@@ -88,8 +88,7 @@ def _classify_error(error: Exception) -> Tuple[ProbeErrorType, str]:
 def _new_probe_session() -> "AsyncSession":
     if not HAS_CURL_CFFI:
         raise RuntimeError("curl_cffi não está instalado")
-    # Sessão dedicada por request para evitar estado degradado acumulado entre batches.
-    return AsyncSession(impersonate="chrome131", verify=False, max_clients=1)
+    return AsyncSession(impersonate="chrome131", verify=False, max_clients=3000)
 
 
 async def fast_probe_and_scrape(
@@ -99,6 +98,7 @@ async def fast_probe_and_scrape(
     proxy_provider: Optional[str] = None,
     retry_timeout: Optional[int] = None,
     max_retries: int = 0,
+    session: Optional["AsyncSession"] = None,
 ) -> Tuple[str, str, Set[str], Set[str], float]:
     """
     Probe + scrape em um único GET simples, sem retry/fallback.
@@ -112,12 +112,13 @@ async def fast_probe_and_scrape(
     t0 = time.perf_counter()
 
     effective_proxy = (_GATEWAY_PROXY or proxy or "").strip() or None
-    session = _new_probe_session()
+    owns_session = session is None
+    active_session = session or _new_probe_session()
 
     try:
         try:
             resp = await asyncio.wait_for(
-                session.get(
+                active_session.get(
                     url,
                     headers=_PROBE_HEADERS,
                     proxy=effective_proxy,
@@ -145,7 +146,8 @@ async def fast_probe_and_scrape(
         error_type, msg = _classify_error(e)
         raise URLNotReachable(msg, error_type=error_type, url=url)
     finally:
-        await session.close()
+        if owns_session:
+            await active_session.close()
 
     status = int(getattr(resp, "status_code", 0) or 0)
     if status < 200 or status >= 400:

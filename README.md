@@ -39,4 +39,4 @@ Documentação interativa: `/docs`
 - Pipeline em 2 etapas globais: probe+main em janelas de 3600 e subpages em ondas de 3600.
 - Timeouts fixos de 30s e sem retry para manter comportamento previsível próximo ao stress test.
 - Distribuição de providers em round-robin fixo (sem pesos) no pool, com execução isolada por provider no batch (uma janela por vez, sem mistura simultânea).
-- Probe simplificado para GET único (sem fallback/retry), usando proxy gateway único, headers fixos, sessão dedicada por request e timeout hard (`asyncio.wait_for`) alinhado ao comportamento do stress test.
+- Probe simplificado para GET único (sem fallback/retry), usando proxy gateway único, headers fixos, sessão compartilhada por execução e timeout hard (`asyncio.wait_for`) alinhado ao comportamento do stress test.

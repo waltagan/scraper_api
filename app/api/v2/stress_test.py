@@ -238,6 +238,7 @@ async def _run_stress_direct(urls: List[str], concurrent: int, timeout_seconds: 
 
 async def _run_probe_only(urls: List[str], concurrent: int, timeout_seconds: int) -> Dict[str, Any]:
     from app.services.scraper.url_prober import fast_probe_and_scrape, URLNotReachable
+    from curl_cffi.requests import AsyncSession
 
     concurrent = min(concurrent, len(urls))
     sem = asyncio.Semaphore(concurrent)
@@ -245,6 +246,7 @@ async def _run_probe_only(urls: List[str], concurrent: int, timeout_seconds: int
     total = len(urls)
     t_start = time.perf_counter()
     empty_content_sample: List[Dict[str, Any]] = []
+    session = AsyncSession(impersonate="chrome131", verify=False, max_clients=concurrent + 100)
 
     async def run_one(url: str):
         async with sem:
@@ -257,6 +259,7 @@ async def _run_probe_only(urls: List[str], concurrent: int, timeout_seconds: int
                     proxy_provider=None,
                     retry_timeout=None,
                     max_retries=0,
+                    session=session,
                 )
                 probe_meta = dict(getattr(fast_probe_and_scrape, "last_meta", {}) or {})
                 lat = (time.perf_counter() - t0) * 1000
@@ -315,6 +318,7 @@ async def _run_probe_only(urls: List[str], concurrent: int, timeout_seconds: int
 
     results = await asyncio.gather(*[run_one(u) for u in urls])
     total_time = time.perf_counter() - t_start
+    await session.close()
     summary = _build_test_summary(results, total_time, "probe_only")
     summary["content_rejections"] = {
         "threshold": 100,
