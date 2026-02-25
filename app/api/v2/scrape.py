@@ -91,6 +91,7 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
     - processa em lotes concorrentes (batch_size)
     - persiste em lote a cada save_every
     """
+    started_at = time.perf_counter()
     requested_total = request.total_samples
     batch_size = request.batch_size
     save_every = request.save_every
@@ -209,7 +210,13 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
         processed += saved
         logger.info("[BATCH-STEP1] flush final: %s/%s", processed, requested_total)
 
-    logger.info("[BATCH-STEP1] Concluído: processados=%s solicitados=%s", processed, requested_total)
+    elapsed_s = round(time.perf_counter() - started_at, 2)
+    logger.info(
+        "[BATCH-STEP1] Concluído: processados=%s solicitados=%s elapsed_s=%s",
+        processed,
+        requested_total,
+        elapsed_s,
+    )
 
 
 async def _process_extract_subpage_links_background(request: ScrapeMainPageProcessRequest):
