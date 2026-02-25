@@ -7,9 +7,8 @@ API para construção automática de perfis de empresas B2B brasileiras.
 - `POST /v2/serper` - Busca no Google
 - `POST /v2/encontrar_site` - Identifica site oficial
 - `POST /v2/scrape` - Extrai conteúdo do site
-- `POST /v2/scrape/main-page` - Etapa 1: captura `raw_content` da main page em `scrape_main`
-- `POST /v2/scrape/main-page/subpage-links` - Etapa 2: extrai links de subpáginas de `raw_content`
-- `POST /v2/scrape/main-page/process-text` - Etapa 3: extrai texto processado de `raw_content`
+- `POST /v2/scrape/main-page/unified` - Executa etapas 1/2/3 em um único fluxo
+- `POST /v2/scrape/main-page/unified/batch` - Processamento em lote no fluxo unificado
 - `POST /v2/montagem_perfil` - Gera perfil estruturado
 
 Todos os endpoints retornam imediatamente e processam em background.
@@ -43,6 +42,5 @@ Documentação interativa: `/docs`
 - Timeouts fixos de 30s e sem retry para manter comportamento previsível próximo ao stress test.
 - Distribuição de providers em round-robin fixo (sem pesos) no pool, com execução isolada por provider no batch (uma janela por vez, sem mistura simultânea).
 - Probe simplificado para GET único (sem fallback/retry), usando proxy gateway único, headers fixos, sessão compartilhada por execução e timeout hard (`asyncio.wait_for`) alinhado ao comportamento do stress test.
-- Fluxo incremental em 3 chamadas para `scrape_main`: (1) salvar `raw_content`/`error`, (2) salvar `subpage_links`, (3) salvar `mainpage_processada`.
-- Persistência do novo fluxo com upsert por `cnpj_basico` na tabela `scrape_main`.
-- No batch unificado, processamento e persistência são desacoplados com fila em memória (`asyncio.Queue`) e writers dedicados, com flush por tamanho e retry de gravação configuráveis por endpoint.
+- Fluxo unificado em uma chamada: scrape da main page + extração de links + extração de texto processado.
+- Persistência com upsert por `cnpj_basico` na tabela `scrape_main`, sem armazenar `raw_content`.

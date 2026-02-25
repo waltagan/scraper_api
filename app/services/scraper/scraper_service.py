@@ -40,12 +40,6 @@ _MAIN_PAGE_HEADERS = {
     "Connection": "keep-alive",
     "Referer": "https://www.google.com/",
 }
-_MAIN_PAGE_USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
-]
 
 
 async def scrape_all_subpages(
@@ -437,52 +431,36 @@ async def scrape_main_page_raw(
     if not HAS_CURL_CFFI:
         return url, 0, "", "curl_cffi_not_available"
 
-    session = AsyncSession(impersonate="chrome131", verify=False, max_clients=200)
-    try:
-        return await scrape_main_page_raw_with_session(
-            session=session,
-            url=url,
-            timeout=timeout,
-            proxy=proxy,
-        )
-    finally:
-        await session.close()
-
-
-async def scrape_main_page_raw_with_session(
-    session: "AsyncSession",
-    url: str,
-    timeout: int = REQUEST_TIMEOUT,
-    proxy: str = "",
-) -> Tuple[str, int, str, str]:
-    """
-    Igual ao stress test: usa sessão HTTP reutilizada para múltiplas URLs.
-    PROIBIDO alterar este padrão para criar sessão por requisição.
-    """
     target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
+    session = AsyncSession(impersonate="chrome131", verify=False, max_clients=200)
     error = ""
+
     try:
-        headers = dict(_MAIN_PAGE_HEADERS)
-        headers["User-Agent"] = random.choice(_MAIN_PAGE_USER_AGENTS)
-        resp = await session.get(
-            target_url,
-            headers=headers,
-            proxy=(proxy or None),
-            timeout=timeout,
-            allow_redirects=True,
-            max_redirects=5,
+        resp = await asyncio.wait_for(
+            session.get(
+                target_url,
+                headers=_MAIN_PAGE_HEADERS,
+                proxy=(proxy or None),
+                timeout=timeout,
+                allow_redirects=True,
+                max_redirects=5,
+            ),
+            timeout=timeout + 5,
         )
         status_code = int(getattr(resp, "status_code", 0) or 0)
         final_url = str(getattr(resp, "url", target_url))
         raw_html = (resp.content or b"").decode("utf-8", errors="ignore")
 
-        # Igual ao stress test: sucesso somente com HTTP 200.
-        if status_code != 200:
-            error = f"http_{status_code}"
+        if status_code < 200 or status_code >= 400:
+            error = f"http_status_{status_code}"
+        elif len(raw_html.strip()) < 100:
+            error = f"thin_content_{len(raw_html.strip())}"
 
         return final_url, status_code, raw_html, error
     except Exception as exc:
         return target_url, 0, "", f"{type(exc).__name__}: {str(exc)[:200]}"
+    finally:
+        await session.close()
 
 
 def extract_subpage_links_from_raw(raw_content: str, base_url: str) -> List[str]:

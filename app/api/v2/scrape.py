@@ -16,14 +16,12 @@ from app.schemas.v2.scrape import (
     ScrapeMainPageProcessRequest,
     ScrapeMainPageResponse,
     ScrapeMainPageBatchRequest,
-    ScrapeMainUnifiedBatchRequest,
     ScrapeMainBatchRequest,
     ScrapeMainBatchResponse,
 )
 from app.services.scraper import (
     scrape_all_subpages,
     scrape_main_page_raw,
-    scrape_main_page_raw_with_session,
     extract_subpage_links_from_raw,
     extract_mainpage_text_from_raw,
 )
@@ -35,13 +33,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 db_service = get_db_service()
-
-try:
-    from curl_cffi.requests import AsyncSession
-    HAS_CURL_CFFI = True
-except ImportError:
-    AsyncSession = None
-    HAS_CURL_CFFI = False
 
 
 def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
@@ -130,27 +121,15 @@ async def _run_unified_one(
     timeout_seconds: int,
     proxy_url: str = "",
     proxy_provider: str = "",
-    session: Any = None,
 ) -> Dict[str, Any]:
     """
     Executa etapas 1/2/3 em memória, sem persistir raw_content.
     """
-    overall_t0 = time.perf_counter()
-    step1_t0 = time.perf_counter()
-    if session is not None:
-        final_url, status_code, raw_content, step1_error = await scrape_main_page_raw_with_session(
-            session=session,
-            url=website_url,
-            timeout=timeout_seconds,
-            proxy=proxy_url,
-        )
-    else:
-        final_url, status_code, raw_content, step1_error = await scrape_main_page_raw(
-            website_url,
-            timeout=timeout_seconds,
-            proxy=proxy_url,
-        )
-    step1_ms = (time.perf_counter() - step1_t0) * 1000.0
+    final_url, status_code, raw_content, step1_error = await scrape_main_page_raw(
+        website_url,
+        timeout=timeout_seconds,
+        proxy=proxy_url,
+    )
 
     result: Dict[str, Any] = {
         "cnpj_basico": cnpj_basico,
@@ -161,10 +140,6 @@ async def _run_unified_one(
         "error_step2": None,
         "mainpage_processada": None,
         "error_step3": None,
-        "timing_step1_ms": round(step1_ms, 2),
-        "timing_step2_ms": 0.0,
-        "timing_step3_ms": 0.0,
-        "timing_total_ms": 0.0,
     }
 
     if step1_error:
@@ -172,14 +147,12 @@ async def _run_unified_one(
             f"step1:{step1_error} | status={status_code} | final_url={final_url}"
             + (f" | provider={proxy_provider}" if proxy_provider else "")
         )
-        result["timing_total_ms"] = round((time.perf_counter() - overall_t0) * 1000.0, 2)
         return result
 
     # Etapa 1 concluída sem erro (sem salvar raw_content)
     result["error_step1"] = None
 
     # Etapa 2
-    step2_t0 = time.perf_counter()
     try:
         links = extract_subpage_links_from_raw(raw_content or "", final_url or website_url)
         result["subpage_links"] = json.dumps(links, ensure_ascii=False)
@@ -187,11 +160,8 @@ async def _run_unified_one(
         result["error_step2"] = None
     except Exception as exc:
         result["error_step2"] = f"step2:exception:{type(exc).__name__}:{str(exc)[:300]}"
-    finally:
-        result["timing_step2_ms"] = round((time.perf_counter() - step2_t0) * 1000.0, 2)
 
     # Etapa 3
-    step3_t0 = time.perf_counter()
     try:
         processed_text = extract_mainpage_text_from_raw(raw_content or "", final_url or website_url)
         if not processed_text.strip():
@@ -200,10 +170,7 @@ async def _run_unified_one(
         result["error_step3"] = None
     except Exception as exc:
         result["error_step3"] = f"step3:exception:{type(exc).__name__}:{str(exc)[:300]}"
-    finally:
-        result["timing_step3_ms"] = round((time.perf_counter() - step3_t0) * 1000.0, 2)
 
-    result["timing_total_ms"] = round((time.perf_counter() - overall_t0) * 1000.0, 2)
     return result
 
 
@@ -393,7 +360,7 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
     )
 
 
-async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
+async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
     """
     Batch unificado:
     - lê website_discovery ausente em scrape_main
@@ -403,44 +370,16 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
     started_at = time.perf_counter()
     requested_total = request.total_samples
     batch_size = request.batch_size
+    save_every = request.save_every
     timeout_seconds = request.timeout_seconds
-    writer_count = request.writer_count
-    flush_size = request.flush_size
-    queue_maxsize = request.queue_maxsize
-    retry_attempts = request.retry_attempts
-    retry_base_delay_ms = request.retry_base_delay_ms
-    retry_max_delay_ms = request.retry_max_delay_ms
 
-    produced = 0
-    persisted = 0
+    processed = 0
     after_id = 0
-    queue: asyncio.Queue = asyncio.Queue(maxsize=queue_maxsize)
-    sentinel = object()
-    persist_lock = asyncio.Lock()
-
-    # Métricas de funil (tempos em ms)
-    db_load_total_ms = 0.0
-    db_load_calls = 0
-    proxy_wall_total_ms = 0.0
-    proxy_waves = 0
-    step1_total_ms = 0.0
-    step1_max_ms = 0.0
-    step2_total_ms = 0.0
-    step3_total_ms = 0.0
-    processing_total_ms = 0.0
-    processing_items = 0
-    save_total_ms = 0.0
-    save_flushes = 0
+    pending_results: List[Dict[str, Any]] = []
 
     logger.info(
-        "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s timeout=%ss writers=%s flush_size=%s queue_maxsize=%s retry=%s",
-        requested_total,
-        batch_size,
-        timeout_seconds,
-        writer_count,
-        flush_size,
-        queue_maxsize,
-        retry_attempts,
+        "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss",
+        requested_total, batch_size, save_every, timeout_seconds,
     )
 
     await proxy_pool.preload()
@@ -456,258 +395,83 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
         logger.error("[BATCH-UNIFIED] Nenhum proxy carregado para execução")
         return
 
-    async def flush_with_retry(records: List[Dict[str, Any]], worker_id: int) -> int:
-        nonlocal persisted, save_total_ms, save_flushes
-        if not records:
-            return 0
+    while processed < requested_total:
+        remaining = requested_total - processed
+        fetch_limit = min(5000, remaining)
+        companies = await db_service.get_pending_scrape_main_step1_companies(
+            limit=fetch_limit,
+            after_id=after_id,
+        )
+        if not companies:
+            break
 
-        attempt = 0
-        while True:
-            attempt += 1
-            try:
-                save_t0 = time.perf_counter()
-                saved = await db_service.save_scrape_main_unified_batch(records)
-                save_ms = (time.perf_counter() - save_t0) * 1000.0
-                async with persist_lock:
-                    persisted += saved
-                    checkpoint = persisted
-                    save_total_ms += save_ms
-                    save_flushes += 1
-                logger.info(
-                    "[BATCH-UNIFIED][writer=%s] checkpoint: %s/%s (flush=%s save_ms=%.1f)",
-                    worker_id,
-                    checkpoint,
-                    requested_total,
-                    saved,
-                    save_ms,
+        after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
+
+        async def run_provider_slice(
+            provider: str,
+            company_slice: List[Dict[str, Any]],
+            proxy_urls: List[str],
+        ) -> List[Dict[str, Any]]:
+            tasks = [
+                _run_unified_one(
+                    cnpj_basico=company["cnpj_basico"],
+                    website_url=company["website_url"],
+                    timeout_seconds=timeout_seconds,
+                    proxy_url=proxy_urls[i % len(proxy_urls)],
+                    proxy_provider=provider,
                 )
-                return saved
-            except Exception as exc:
-                if attempt >= retry_attempts:
-                    logger.error(
-                        "[BATCH-UNIFIED][writer=%s] Falha após %s tentativas: %s",
-                        worker_id,
-                        attempt,
-                        exc,
-                        exc_info=True,
-                    )
-                    raise
-                delay_s = min(
-                    (retry_base_delay_ms / 1000.0) * (2 ** (attempt - 1)),
-                    retry_max_delay_ms / 1000.0,
+                for i, company in enumerate(company_slice)
+            ]
+            return await asyncio.gather(*tasks, return_exceptions=False)
+
+        for chunk in _chunk_list(companies, batch_size):
+            provider_capacity = 1200 * len(active_providers)
+            for start_idx in range(0, len(chunk), provider_capacity):
+                provider_window = chunk[start_idx:start_idx + provider_capacity]
+                allocation = _allocate_provider_slices(
+                    total_items=len(provider_window),
+                    providers=active_providers,
+                    per_provider_cap=1200,
                 )
-                logger.warning(
-                    "[BATCH-UNIFIED][writer=%s] Falha ao gravar (tentativa %s/%s). Retry em %.2fs. erro=%s",
-                    worker_id,
-                    attempt,
-                    retry_attempts,
-                    delay_s,
-                    exc,
-                )
-                await asyncio.sleep(delay_s)
+                cursor = 0
+                jobs = []
+                for provider in active_providers:
+                    take = allocation.get(provider, 0)
+                    company_slice = provider_window[cursor:cursor + take]
+                    cursor += take
+                    if not company_slice:
+                        continue
+                    jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
 
-    async def writer_loop(worker_id: int) -> None:
-        buffer: List[Dict[str, Any]] = []
-        while True:
-            item = await queue.get()
-            try:
-                if item is sentinel:
-                    if buffer:
-                        await flush_with_retry(buffer, worker_id)
-                        buffer = []
-                    return
-                buffer.append(item)
-                if len(buffer) >= flush_size:
-                    await flush_with_retry(buffer, worker_id)
-                    buffer = []
-            finally:
-                queue.task_done()
+                if jobs:
+                    provider_results = await asyncio.gather(*jobs, return_exceptions=False)
+                    for results in provider_results:
+                        pending_results.extend(results)
 
-    writer_tasks = [asyncio.create_task(writer_loop(i + 1)) for i in range(writer_count)]
-    writer_errors: List[Exception] = []
-    producer_error: Exception | None = None
+                while len(pending_results) >= save_every:
+                    flush = pending_results[:save_every]
+                    pending_results = pending_results[save_every:]
+                    saved = await db_service.save_scrape_main_unified_batch(flush)
+                    processed += saved
+                    logger.info("[BATCH-UNIFIED] checkpoint: %s/%s", processed, requested_total)
+                    if processed >= requested_total:
+                        break
 
-    try:
-        while produced < requested_total:
-            remaining = requested_total - produced
-            fetch_limit = min(5000, remaining)
-            db_t0 = time.perf_counter()
-            companies = await db_service.get_pending_scrape_main_step1_companies(
-                limit=fetch_limit,
-                after_id=after_id,
-            )
-            db_ms = (time.perf_counter() - db_t0) * 1000.0
-            db_load_total_ms += db_ms
-            db_load_calls += 1
-            logger.info(
-                "[BATCH-UNIFIED][FUNIL] carregar_db: rows=%s fetch_ms=%.1f total_fetch_ms=%.1f calls=%s",
-                len(companies),
-                db_ms,
-                db_load_total_ms,
-                db_load_calls,
-            )
-            if not companies:
+                if processed >= requested_total:
+                    break
+            if processed >= requested_total:
                 break
 
-            after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
-
-            async def run_provider_slice(
-                provider: str,
-                company_slice: List[Dict[str, Any]],
-                proxy_urls: List[str],
-            ) -> List[Dict[str, Any]]:
-                # PROIBIDO alterar: sessão HTTP deve ser reutilizada por slice/provider
-                # para manter comportamento/performance alinhados ao stress_test_unified.py.
-                session = None
-                if HAS_CURL_CFFI and AsyncSession is not None:
-                    session = AsyncSession(
-                        impersonate="chrome131",
-                        verify=False,
-                        max_clients=len(company_slice) + 100,
-                    )
-                try:
-                    tasks = [
-                        _run_unified_one(
-                            cnpj_basico=company["cnpj_basico"],
-                            website_url=company["website_url"],
-                            timeout_seconds=timeout_seconds,
-                            proxy_url=proxy_urls[i % len(proxy_urls)],
-                            proxy_provider=provider,
-                            session=session,
-                        )
-                        for i, company in enumerate(company_slice)
-                    ]
-                    return await asyncio.gather(*tasks, return_exceptions=False)
-                finally:
-                    if session is not None:
-                        await session.close()
-
-            for chunk in _chunk_list(companies, batch_size):
-                provider_capacity = 1200 * len(active_providers)
-                for start_idx in range(0, len(chunk), provider_capacity):
-                    provider_window = chunk[start_idx:start_idx + provider_capacity]
-                    allocation = _allocate_provider_slices(
-                        total_items=len(provider_window),
-                        providers=active_providers,
-                        per_provider_cap=1200,
-                    )
-                    cursor = 0
-                    jobs = []
-                    for provider in active_providers:
-                        take = allocation.get(provider, 0)
-                        company_slice = provider_window[cursor:cursor + take]
-                        cursor += take
-                        if not company_slice:
-                            continue
-                        jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
-
-                    if jobs:
-                        proxy_wave_t0 = time.perf_counter()
-                        provider_results = await asyncio.gather(*jobs, return_exceptions=False)
-                        proxy_wave_ms = (time.perf_counter() - proxy_wave_t0) * 1000.0
-                        proxy_wall_total_ms += proxy_wave_ms
-                        proxy_waves += 1
-                        for results in provider_results:
-                            for result in results:
-                                if produced >= requested_total:
-                                    break
-                                s1 = float(result.get("timing_step1_ms") or 0.0)
-                                s2 = float(result.get("timing_step2_ms") or 0.0)
-                                s3 = float(result.get("timing_step3_ms") or 0.0)
-                                step1_total_ms += s1
-                                step1_max_ms = max(step1_max_ms, s1)
-                                step2_total_ms += s2
-                                step3_total_ms += s3
-                                processing_total_ms += (s2 + s3)
-                                processing_items += 1
-                                await queue.put(result)
-                                produced += 1
-
-                    logger.info(
-                        "[BATCH-UNIFIED] progresso producer: produced=%s persisted=%s queue=%s/%s proxy_wave_ms=%.1f",
-                        produced,
-                        persisted,
-                        queue.qsize(),
-                        queue_maxsize,
-                        proxy_wave_ms if jobs else 0.0,
-                    )
-
-                    if produced >= requested_total:
-                        break
-                if produced >= requested_total:
-                    break
-    except Exception as exc:
-        producer_error = exc
-        logger.error(
-            "[BATCH-UNIFIED] Falha no producer: produced=%s persisted=%s queue=%s erro=%s",
-            produced,
-            persisted,
-            queue.qsize(),
-            exc,
-            exc_info=True,
-        )
-    finally:
-        for _ in range(writer_count):
-            await queue.put(sentinel)
-        await queue.join()
-
-        writer_results = await asyncio.gather(*writer_tasks, return_exceptions=True)
-        writer_errors = [err for err in writer_results if isinstance(err, Exception)]
-        if writer_errors:
-            logger.error(
-                "[BATCH-UNIFIED] Writers com erro: %s",
-                [f"{type(e).__name__}:{str(e)[:200]}" for e in writer_errors],
-            )
-
-        if producer_error:
-            raise producer_error
-        if writer_errors:
-            raise RuntimeError(
-                f"[BATCH-UNIFIED] {len(writer_errors)} writer(s) falharam. "
-                "Verifique logs para detalhes."
-            )
+    if pending_results and processed < requested_total:
+        max_to_save = min(len(pending_results), requested_total - processed)
+        saved = await db_service.save_scrape_main_unified_batch(pending_results[:max_to_save])
+        processed += saved
+        logger.info("[BATCH-UNIFIED] flush final: %s/%s", processed, requested_total)
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
-    avg_db_fetch_ms = (db_load_total_ms / db_load_calls) if db_load_calls else 0.0
-    avg_step1_ms = (step1_total_ms / processing_items) if processing_items else 0.0
-    avg_processing_ms = (processing_total_ms / processing_items) if processing_items else 0.0
-    avg_save_flush_ms = (save_total_ms / save_flushes) if save_flushes else 0.0
-
     logger.info(
-        "[BATCH-UNIFIED][FUNIL] carregar_db_total_ms=%.1f calls=%s avg_fetch_ms=%.1f",
-        db_load_total_ms,
-        db_load_calls,
-        avg_db_fetch_ms,
-    )
-    logger.info(
-        "[BATCH-UNIFIED][FUNIL] chamadas_proxy_wall_total_ms=%.1f waves=%s avg_step1_ms=%.1f max_step1_ms=%.1f timeout_config_s=%s",
-        proxy_wall_total_ms,
-        proxy_waves,
-        avg_step1_ms,
-        step1_max_ms,
-        timeout_seconds,
-    )
-    logger.info(
-        "[BATCH-UNIFIED][FUNIL] processamento_lotes_total_ms=%.1f items=%s avg_processamento_ms=%.1f (step2_total_ms=%.1f step3_total_ms=%.1f)",
-        processing_total_ms,
-        processing_items,
-        avg_processing_ms,
-        step2_total_ms,
-        step3_total_ms,
-    )
-    logger.info(
-        "[BATCH-UNIFIED][FUNIL] salvamento_total_ms=%.1f flushes=%s avg_flush_ms=%.1f persistidos=%s",
-        save_total_ms,
-        save_flushes,
-        avg_save_flush_ms,
-        persisted,
-    )
-    logger.info(
-        "[BATCH-UNIFIED] Concluído: produzidos=%s persistidos=%s solicitados=%s elapsed_s=%s",
-        produced,
-        persisted,
-        requested_total,
-        elapsed_s,
+        "[BATCH-UNIFIED] Concluído: processados=%s solicitados=%s elapsed_s=%s",
+        processed, requested_total, elapsed_s,
     )
 
 
@@ -1178,7 +942,7 @@ async def scrape_main_page_batch(request: ScrapeMainPageBatchRequest) -> ScrapeM
 
 
 @router.post("/scrape/main-page/unified/batch", response_model=ScrapeMainBatchResponse)
-async def scrape_main_page_unified_batch(request: ScrapeMainUnifiedBatchRequest) -> ScrapeMainBatchResponse:
+async def scrape_main_page_unified_batch(request: ScrapeMainPageBatchRequest) -> ScrapeMainBatchResponse:
     """
     Endpoint batch unificado:
     - source: website_discovery ausente em scrape_main
@@ -1193,7 +957,7 @@ async def scrape_main_page_unified_batch(request: ScrapeMainUnifiedBatchRequest)
             stage="unified",
             total_samples=request.total_samples,
             batch_size=request.batch_size,
-            save_every=request.flush_size,
+            save_every=request.save_every,
             message="Batch unificado aceito para processamento em background.",
         )
     except Exception as e:
