@@ -9,6 +9,8 @@ Fluxo simplificado:
 
 import logging
 import time
+import os
+import asyncio
 from typing import Tuple, Set, Optional
 from enum import Enum
 
@@ -19,11 +21,19 @@ except ImportError:
     HAS_CURL_CFFI = False
     AsyncSession = None
 
-from .constants import REQUEST_TIMEOUT, build_headers
+from .constants import REQUEST_TIMEOUT
 from .html_parser import parse_html
 
 logger = logging.getLogger(__name__)
-_PROBE_SESSION: Optional["AsyncSession"] = None
+_GATEWAY_PROXY = os.getenv("PROXY_GATEWAY_URL", "")
+_PROBE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+    "Accept-Language": "pt-BR,pt;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Referer": "https://www.google.com/",
+}
 
 
 class ProbeErrorType(Enum):
@@ -75,13 +85,11 @@ def _classify_error(error: Exception) -> Tuple[ProbeErrorType, str]:
     return ProbeErrorType.UNKNOWN, str(error)[:100]
 
 
-def _get_probe_session() -> "AsyncSession":
-    global _PROBE_SESSION
-    if _PROBE_SESSION is None:
-        if not HAS_CURL_CFFI:
-            raise RuntimeError("curl_cffi não está instalado")
-        _PROBE_SESSION = AsyncSession(impersonate="chrome131", verify=False, max_clients=6000)
-    return _PROBE_SESSION
+def _new_probe_session() -> "AsyncSession":
+    if not HAS_CURL_CFFI:
+        raise RuntimeError("curl_cffi não está instalado")
+    # Sessão dedicada por request para evitar estado degradado acumulado entre batches.
+    return AsyncSession(impersonate="chrome131", verify=False, max_clients=1)
 
 
 async def fast_probe_and_scrape(
@@ -101,25 +109,52 @@ async def fast_probe_and_scrape(
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
 
-    headers, _ = build_headers()
-    session = _get_probe_session()
     t0 = time.perf_counter()
 
+    effective_proxy = (_GATEWAY_PROXY or proxy or "").strip() or None
+    session = _new_probe_session()
+
     try:
-        resp = await session.get(
-            url,
-            headers=headers,
-            proxy=proxy or None,
-            timeout=timeout,
-            allow_redirects=True,
-            max_redirects=5,
-        )
+        try:
+            resp = await asyncio.wait_for(
+                session.get(
+                    url,
+                    headers=_PROBE_HEADERS,
+                    proxy=effective_proxy,
+                    timeout=timeout,
+                    allow_redirects=True,
+                    max_redirects=5,
+                ),
+                timeout=timeout + 5,
+            )
+        except asyncio.TimeoutError:
+            fast_probe_and_scrape.last_meta = {
+                "final_url": url,
+                "status_code": 0,
+                "raw_content_len": 0,
+                "parsed_text_len": 0,
+            }
+            raise URLNotReachable("Timeout", error_type=ProbeErrorType.CONNECTION_TIMEOUT, url=url)
     except Exception as e:
+        fast_probe_and_scrape.last_meta = {
+            "final_url": url,
+            "status_code": 0,
+            "raw_content_len": 0,
+            "parsed_text_len": 0,
+        }
         error_type, msg = _classify_error(e)
         raise URLNotReachable(msg, error_type=error_type, url=url)
+    finally:
+        await session.close()
 
     status = int(getattr(resp, "status_code", 0) or 0)
     if status < 200 or status >= 400:
+        fast_probe_and_scrape.last_meta = {
+            "final_url": str(getattr(resp, "url", url)),
+            "status_code": status,
+            "raw_content_len": len(resp.content or b""),
+            "parsed_text_len": 0,
+        }
         if status == 403:
             raise URLNotReachable("Acesso bloqueado", error_type=ProbeErrorType.BLOCKED, url=url)
         if 500 <= status < 600:
@@ -130,6 +165,12 @@ async def fast_probe_and_scrape(
     content = resp.content or b""
     text = content.decode("utf-8", errors="ignore")
     parsed_text, docs, links = parse_html(text, final_url)
+    fast_probe_and_scrape.last_meta = {
+        "final_url": final_url,
+        "status_code": status,
+        "raw_content_len": len(content),
+        "parsed_text_len": len(parsed_text or ""),
+    }
     elapsed = (time.perf_counter() - t0) * 1000
     return final_url, parsed_text, docs, links, elapsed
 
@@ -145,3 +186,4 @@ class URLProber:
 
 
 url_prober = URLProber()
+fast_probe_and_scrape.last_meta = {}

@@ -238,40 +238,70 @@ async def _run_stress_direct(urls: List[str], concurrent: int, timeout_seconds: 
 
 async def _run_probe_only(urls: List[str], concurrent: int, timeout_seconds: int) -> Dict[str, Any]:
     from app.services.scraper.url_prober import fast_probe_and_scrape, URLNotReachable
-    from app.services.scraper_manager.proxy_manager import proxy_pool
 
     concurrent = min(concurrent, len(urls))
     sem = asyncio.Semaphore(concurrent)
     counter = {"done": 0, "ok": 0}
     total = len(urls)
     t_start = time.perf_counter()
-    await proxy_pool.preload()
+    empty_content_sample: List[Dict[str, Any]] = []
 
     async def run_one(url: str):
         async with sem:
-            picked = proxy_pool.get_sticky_proxy_with_provider()
-            proxy = picked[0] if picked else ""
-            provider = picked[1] if picked else ""
             t0 = time.perf_counter()
             try:
                 _best_url, text, _docs, _links, _probe_time = await fast_probe_and_scrape(
                     url,
                     timeout=timeout_seconds,
-                    proxy=proxy or None,
-                    proxy_provider=provider or None,
+                    proxy=PROXY or None,
+                    proxy_provider=None,
                     retry_timeout=None,
                     max_retries=0,
                 )
+                probe_meta = dict(getattr(fast_probe_and_scrape, "last_meta", {}) or {})
                 lat = (time.perf_counter() - t0) * 1000
                 ok = bool(text) and len(text) > 100
                 err = None if ok else "empty_content"
-                result = {"ok": ok, "status": 200 if ok else 0, "lat_ms": lat, "error": err}
+                status_code = int(probe_meta.get("status_code") or 0)
+                parsed_len = int(probe_meta.get("parsed_text_len") or len(text or ""))
+                raw_len = int(probe_meta.get("raw_content_len") or 0)
+                final_url = probe_meta.get("final_url") or url
+                if not ok and err == "empty_content" and len(empty_content_sample) < 30:
+                    empty_content_sample.append(
+                        {
+                            "url": url,
+                            "final_url": final_url,
+                            "status_code": status_code,
+                            "raw_content_len": raw_len,
+                            "parsed_text_len": parsed_len,
+                            "lat_ms": round(lat, 1),
+                        }
+                    )
+                result = {
+                    "ok": ok,
+                    "status": status_code or (200 if ok else 0),
+                    "lat_ms": lat,
+                    "error": err,
+                    "url": url,
+                }
             except URLNotReachable as e:
                 lat = (time.perf_counter() - t0) * 1000
-                result = {"ok": False, "status": 0, "lat_ms": lat, "error": f"probe_{e.error_type.value if e.error_type else 'unknown'}"}
+                result = {
+                    "ok": False,
+                    "status": 0,
+                    "lat_ms": lat,
+                    "error": f"probe_{e.error_type.value if e.error_type else 'unknown'}",
+                    "url": url,
+                }
             except Exception as e:
                 lat = (time.perf_counter() - t0) * 1000
-                result = {"ok": False, "status": 0, "lat_ms": lat, "error": f"{_classify_probe_exception(e)}:{type(e).__name__}"}
+                result = {
+                    "ok": False,
+                    "status": 0,
+                    "lat_ms": lat,
+                    "error": f"{_classify_probe_exception(e)}:{type(e).__name__}",
+                    "url": url,
+                }
 
             counter["done"] += 1
             if result["ok"]:
@@ -286,6 +316,11 @@ async def _run_probe_only(urls: List[str], concurrent: int, timeout_seconds: int
     results = await asyncio.gather(*[run_one(u) for u in urls])
     total_time = time.perf_counter() - t_start
     summary = _build_test_summary(results, total_time, "probe_only")
+    summary["content_rejections"] = {
+        "threshold": 100,
+        "empty_content_total": sum(1 for r in results if r.get("error") == "empty_content"),
+        "empty_content_sample": empty_content_sample,
+    }
     summary["concurrent"] = concurrent
     summary["timeout_seconds"] = timeout_seconds
     return summary
