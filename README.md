@@ -45,3 +45,4 @@ Documentação interativa: `/docs`
 - Probe simplificado para GET único (sem fallback/retry), usando proxy gateway único, headers fixos, sessão compartilhada por execução e timeout hard (`asyncio.wait_for`) alinhado ao comportamento do stress test.
 - Fluxo incremental em 3 chamadas para `scrape_main`: (1) salvar `raw_content`/`error`, (2) salvar `subpage_links`, (3) salvar `mainpage_processada`.
 - Persistência do novo fluxo com upsert por `cnpj_basico` na tabela `scrape_main`.
+- No batch unificado, processamento e persistência são desacoplados com fila em memória (`asyncio.Queue`) e writers dedicados, com flush por tamanho e retry de gravação configuráveis por endpoint.

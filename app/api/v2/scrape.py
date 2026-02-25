@@ -16,6 +16,7 @@ from app.schemas.v2.scrape import (
     ScrapeMainPageProcessRequest,
     ScrapeMainPageResponse,
     ScrapeMainPageBatchRequest,
+    ScrapeMainUnifiedBatchRequest,
     ScrapeMainBatchRequest,
     ScrapeMainBatchResponse,
 )
@@ -360,7 +361,7 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
     )
 
 
-async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
+async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
     """
     Batch unificado:
     - lê website_discovery ausente em scrape_main
@@ -370,16 +371,30 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
     started_at = time.perf_counter()
     requested_total = request.total_samples
     batch_size = request.batch_size
-    save_every = request.save_every
     timeout_seconds = request.timeout_seconds
+    writer_count = request.writer_count
+    flush_size = request.flush_size
+    queue_maxsize = request.queue_maxsize
+    retry_attempts = request.retry_attempts
+    retry_base_delay_ms = request.retry_base_delay_ms
+    retry_max_delay_ms = request.retry_max_delay_ms
 
-    processed = 0
+    produced = 0
+    persisted = 0
     after_id = 0
-    pending_results: List[Dict[str, Any]] = []
+    queue: asyncio.Queue = asyncio.Queue(maxsize=queue_maxsize)
+    sentinel = object()
+    persist_lock = asyncio.Lock()
 
     logger.info(
-        "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss",
-        requested_total, batch_size, save_every, timeout_seconds,
+        "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s timeout=%ss writers=%s flush_size=%s queue_maxsize=%s retry=%s",
+        requested_total,
+        batch_size,
+        timeout_seconds,
+        writer_count,
+        flush_size,
+        queue_maxsize,
+        retry_attempts,
     )
 
     await proxy_pool.preload()
@@ -395,8 +410,75 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
         logger.error("[BATCH-UNIFIED] Nenhum proxy carregado para execução")
         return
 
-    while processed < requested_total:
-        remaining = requested_total - processed
+    async def flush_with_retry(records: List[Dict[str, Any]], worker_id: int) -> int:
+        nonlocal persisted
+        if not records:
+            return 0
+
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                saved = await db_service.save_scrape_main_unified_batch(records)
+                async with persist_lock:
+                    persisted += saved
+                    checkpoint = persisted
+                logger.info(
+                    "[BATCH-UNIFIED][writer=%s] checkpoint: %s/%s (flush=%s)",
+                    worker_id,
+                    checkpoint,
+                    requested_total,
+                    saved,
+                )
+                return saved
+            except Exception as exc:
+                if attempt >= retry_attempts:
+                    logger.error(
+                        "[BATCH-UNIFIED][writer=%s] Falha após %s tentativas: %s",
+                        worker_id,
+                        attempt,
+                        exc,
+                        exc_info=True,
+                    )
+                    raise
+                delay_s = min(
+                    (retry_base_delay_ms / 1000.0) * (2 ** (attempt - 1)),
+                    retry_max_delay_ms / 1000.0,
+                )
+                logger.warning(
+                    "[BATCH-UNIFIED][writer=%s] Falha ao gravar (tentativa %s/%s). Retry em %.2fs. erro=%s",
+                    worker_id,
+                    attempt,
+                    retry_attempts,
+                    delay_s,
+                    exc,
+                )
+                await asyncio.sleep(delay_s)
+
+    async def writer_loop(worker_id: int) -> None:
+        buffer: List[Dict[str, Any]] = []
+        while True:
+            item = await queue.get()
+            try:
+                if item is sentinel:
+                    if buffer:
+                        await flush_with_retry(buffer, worker_id)
+                        buffer = []
+                    return
+                buffer.append(item)
+                if len(buffer) >= flush_size:
+                    await flush_with_retry(buffer, worker_id)
+                    buffer = []
+            finally:
+                queue.task_done()
+
+    writer_tasks = [
+        asyncio.create_task(writer_loop(i + 1))
+        for i in range(writer_count)
+    ]
+
+    while produced < requested_total:
+        remaining = requested_total - produced
         fetch_limit = min(5000, remaining)
         companies = await db_service.get_pending_scrape_main_step1_companies(
             limit=fetch_limit,
@@ -446,32 +528,36 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
                 if jobs:
                     provider_results = await asyncio.gather(*jobs, return_exceptions=False)
                     for results in provider_results:
-                        pending_results.extend(results)
+                        for result in results:
+                            if produced >= requested_total:
+                                break
+                            await queue.put(result)
+                            produced += 1
 
-                while len(pending_results) >= save_every:
-                    flush = pending_results[:save_every]
-                    pending_results = pending_results[save_every:]
-                    saved = await db_service.save_scrape_main_unified_batch(flush)
-                    processed += saved
-                    logger.info("[BATCH-UNIFIED] checkpoint: %s/%s", processed, requested_total)
-                    if processed >= requested_total:
-                        break
-
-                if processed >= requested_total:
+                if produced >= requested_total:
                     break
-            if processed >= requested_total:
+            if produced >= requested_total:
                 break
 
-    if pending_results and processed < requested_total:
-        max_to_save = min(len(pending_results), requested_total - processed)
-        saved = await db_service.save_scrape_main_unified_batch(pending_results[:max_to_save])
-        processed += saved
-        logger.info("[BATCH-UNIFIED] flush final: %s/%s", processed, requested_total)
+    for _ in range(writer_count):
+        await queue.put(sentinel)
+    await queue.join()
+
+    writer_results = await asyncio.gather(*writer_tasks, return_exceptions=True)
+    writer_errors = [err for err in writer_results if isinstance(err, Exception)]
+    if writer_errors:
+        raise RuntimeError(
+            f"[BATCH-UNIFIED] {len(writer_errors)} writer(s) falharam. "
+            "Verifique logs para detalhes."
+        )
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
     logger.info(
-        "[BATCH-UNIFIED] Concluído: processados=%s solicitados=%s elapsed_s=%s",
-        processed, requested_total, elapsed_s,
+        "[BATCH-UNIFIED] Concluído: produzidos=%s persistidos=%s solicitados=%s elapsed_s=%s",
+        produced,
+        persisted,
+        requested_total,
+        elapsed_s,
     )
 
 
@@ -942,7 +1028,7 @@ async def scrape_main_page_batch(request: ScrapeMainPageBatchRequest) -> ScrapeM
 
 
 @router.post("/scrape/main-page/unified/batch", response_model=ScrapeMainBatchResponse)
-async def scrape_main_page_unified_batch(request: ScrapeMainPageBatchRequest) -> ScrapeMainBatchResponse:
+async def scrape_main_page_unified_batch(request: ScrapeMainUnifiedBatchRequest) -> ScrapeMainBatchResponse:
     """
     Endpoint batch unificado:
     - source: website_discovery ausente em scrape_main
@@ -957,7 +1043,7 @@ async def scrape_main_page_unified_batch(request: ScrapeMainPageBatchRequest) ->
             stage="unified",
             total_samples=request.total_samples,
             batch_size=request.batch_size,
-            save_every=request.save_every,
+            save_every=request.flush_size,
             message="Batch unificado aceito para processamento em background.",
         )
     except Exception as e:

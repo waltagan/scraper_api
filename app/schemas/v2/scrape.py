@@ -181,3 +181,70 @@ class ScrapeMainBatchResponse(BaseModel):
     save_every: int = Field(..., description="Checkpoint de persistência")
     message: str = Field(..., description="Mensagem de aceite")
 
+
+class ScrapeMainUnifiedBatchRequest(BaseModel):
+    """Request para processamento em lote no endpoint unificado (etapas 1/2/3)."""
+    total_samples: int = Field(100000, ge=1, description="Total de registros a processar")
+    batch_size: int = Field(
+        3000,
+        ge=1,
+        le=3600,
+        description="Tamanho do lote concorrente de processamento (máximo 3600)",
+    )
+    timeout_seconds: int = Field(
+        30,
+        ge=5,
+        le=120,
+        description="Timeout por URL na etapa de scrape da main page",
+    )
+    writer_count: int = Field(
+        10,
+        ge=1,
+        le=30,
+        description="Quantidade de workers dedicados à gravação no banco",
+    )
+    flush_size: int = Field(
+        100,
+        ge=1,
+        description="Quantidade de resultados por gravação em lote no banco",
+    )
+    queue_maxsize: int = Field(
+        12000,
+        ge=100,
+        description="Tamanho máximo da fila de resultados em memória",
+    )
+    retry_attempts: int = Field(
+        5,
+        ge=1,
+        le=20,
+        description="Número de tentativas de regravação em caso de falha temporária",
+    )
+    retry_base_delay_ms: int = Field(
+        500,
+        ge=50,
+        le=10000,
+        description="Atraso base do retry em milissegundos (backoff exponencial)",
+    )
+    retry_max_delay_ms: int = Field(
+        8000,
+        ge=100,
+        le=30000,
+        description="Atraso máximo do retry em milissegundos",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "total_samples": 3000000,
+                "batch_size": 3000,
+                "timeout_seconds": 30,
+                "writer_count": 10,
+                "flush_size": 100,
+                "queue_maxsize": 12000,
+                "retry_attempts": 5,
+                "retry_base_delay_ms": 500,
+                "retry_max_delay_ms": 8000,
+            }
+        }
+    )
+
