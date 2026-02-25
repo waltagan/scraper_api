@@ -15,6 +15,17 @@ logger = logging.getLogger(__name__)
 SCHEMA = "busca_fornecedor"
 
 
+def _sanitize_text_for_postgres(value: Optional[str]) -> Optional[str]:
+    """
+    Remove bytes nulos que o PostgreSQL não aceita em colunas TEXT.
+    """
+    if value is None:
+        return None
+    if "\x00" not in value:
+        return value
+    return value.replace("\x00", "")
+
+
 class DatabaseService:
     """Serviço de CRUD assíncrono para todas as tabelas."""
     
@@ -318,7 +329,9 @@ class DatabaseService:
         """
         Salva o raw_content da main page e limpa error da etapa 1.
         """
-        num_char_raw_main = len(raw_content or "")
+        sanitized_raw_content = _sanitize_text_for_postgres(raw_content or "") or ""
+        sanitized_website_url = _sanitize_text_for_postgres(website_url)
+        num_char_raw_main = len(sanitized_raw_content)
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
@@ -330,7 +343,13 @@ class DatabaseService:
                 WHERE cnpj_basico = $1
                 """
             logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.raw_content")
-            await conn.execute(query, cnpj_basico, raw_content, website_url, num_char_raw_main)
+            await conn.execute(
+                query,
+                cnpj_basico,
+                sanitized_raw_content,
+                sanitized_website_url,
+                num_char_raw_main,
+            )
 
     async def save_scrape_main_error(
         self,
@@ -351,6 +370,8 @@ class DatabaseService:
         if not target_column:
             raise ValueError(f"Etapa inválida para save_scrape_main_error: {step}")
 
+        sanitized_error = _sanitize_text_for_postgres(error or "") or ""
+        sanitized_website_url = _sanitize_text_for_postgres(website_url)
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
@@ -360,7 +381,7 @@ class DatabaseService:
                 WHERE cnpj_basico = $1
                 """
             logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.{target_column}")
-            await conn.execute(query, cnpj_basico, error, website_url)
+            await conn.execute(query, cnpj_basico, sanitized_error, sanitized_website_url)
 
     async def get_scrape_main(self, cnpj_basico: str) -> Optional[Dict[str, Any]]:
         """
@@ -389,6 +410,7 @@ class DatabaseService:
         """
         Salva links extraídos da subpágina no scrape_main.
         """
+        sanitized_links = _sanitize_text_for_postgres(subpage_links or "") or ""
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
@@ -399,13 +421,14 @@ class DatabaseService:
                 WHERE cnpj_basico = $1
                 """
             logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.subpage_links")
-            await conn.execute(query, cnpj_basico, subpage_links, num_subpages)
+            await conn.execute(query, cnpj_basico, sanitized_links, num_subpages)
 
     async def save_scrape_main_processed_text(self, cnpj_basico: str, mainpage_processada: str) -> None:
         """
         Salva texto processado da main page no scrape_main.
         """
-        num_char_main_processada = len(mainpage_processada or "")
+        sanitized_text = _sanitize_text_for_postgres(mainpage_processada or "") or ""
+        num_char_main_processada = len(sanitized_text)
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
@@ -416,7 +439,7 @@ class DatabaseService:
                 WHERE cnpj_basico = $1
                 """
             logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.mainpage_processada")
-            await conn.execute(query, cnpj_basico, mainpage_processada, num_char_main_processada)
+            await conn.execute(query, cnpj_basico, sanitized_text, num_char_main_processada)
 
     async def get_pending_scrape_main_step1_companies(
         self,
@@ -506,16 +529,21 @@ class DatabaseService:
         if not records:
             return 0
 
-        payload = [
-            (
-                r["cnpj_basico"],
-                r["website_url"],
-                r.get("raw_content") or None,
-                int(r.get("num_char_raw_main") or 0),
-                r.get("error_step1"),
+        payload = []
+        for r in records:
+            website_url = _sanitize_text_for_postgres(r["website_url"])
+            raw_content = _sanitize_text_for_postgres(r.get("raw_content"))
+            error_step1 = _sanitize_text_for_postgres(r.get("error_step1"))
+            num_char_raw_main = len(raw_content or "")
+            payload.append(
+                (
+                    r["cnpj_basico"],
+                    website_url,
+                    raw_content,
+                    num_char_raw_main,
+                    error_step1,
+                )
             )
-            for r in records
-        ]
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -549,7 +577,7 @@ class DatabaseService:
                     payload_ok = [
                         (
                             r["cnpj_basico"],
-                            r["subpage_links"],
+                            _sanitize_text_for_postgres(r["subpage_links"]) or "",
                             int(r["num_subpages"]),
                         )
                         for r in success_records
@@ -568,7 +596,7 @@ class DatabaseService:
                     payload_err = [
                         (
                             r["cnpj_basico"],
-                            r["error_step2"],
+                            _sanitize_text_for_postgres(r["error_step2"]) or "",
                         )
                         for r in error_records
                     ]
@@ -597,8 +625,8 @@ class DatabaseService:
                     payload_ok = [
                         (
                             r["cnpj_basico"],
-                            r["mainpage_processada"],
-                            int(r["num_char_main_processada"]),
+                            _sanitize_text_for_postgres(r["mainpage_processada"]) or "",
+                            len(_sanitize_text_for_postgres(r["mainpage_processada"]) or ""),
                         )
                         for r in success_records
                     ]
@@ -616,7 +644,7 @@ class DatabaseService:
                     payload_err = [
                         (
                             r["cnpj_basico"],
-                            r["error_step3"],
+                            _sanitize_text_for_postgres(r["error_step3"]) or "",
                         )
                         for r in error_records
                     ]
