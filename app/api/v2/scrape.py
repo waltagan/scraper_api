@@ -102,7 +102,7 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
     pending_results: List[Dict[str, Any]] = []
 
     logger.info(
-        "[BATCH-STEP1] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss",
+        "[BATCH-STEP1] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss | mode=provider_isolated",
         requested_total, batch_size, save_every, timeout_seconds,
     )
 
