@@ -124,7 +124,7 @@ class ScrapeMainPageBatchRequest(BaseModel):
     save_every: int = Field(
         1000,
         ge=1,
-        description="Quantidade processada antes de persistir checkpoint em lote",
+        description="Mantido por compatibilidade (batch unificado salva somente no final)",
     )
     timeout_seconds: int = Field(
         30,
