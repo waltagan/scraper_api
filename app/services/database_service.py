@@ -318,36 +318,48 @@ class DatabaseService:
         """
         Salva o raw_content da main page e limpa error da etapa 1.
         """
+        num_char_raw_main = len(raw_content or "")
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
                 UPDATE "{SCHEMA}".scrape_main
                 SET raw_content = $2,
                     website_url = COALESCE($3, website_url),
-                    error = NULL
+                    num_char_raw_main = $4,
+                    error_step1 = NULL
                 WHERE cnpj_basico = $1
                 """
             logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.raw_content")
-            await conn.execute(query, cnpj_basico, raw_content, website_url)
+            await conn.execute(query, cnpj_basico, raw_content, website_url, num_char_raw_main)
 
     async def save_scrape_main_error(
         self,
         cnpj_basico: str,
         error: str,
+        step: int = 1,
         website_url: Optional[str] = None,
     ) -> None:
         """
-        Salva erro da etapa 1 (scrape main page).
+        Salva erro por etapa no scrape_main.
         """
+        step_to_column = {
+            1: "error_step1",
+            2: "error_step2",
+            3: "error_step3",
+        }
+        target_column = step_to_column.get(step)
+        if not target_column:
+            raise ValueError(f"Etapa inválida para save_scrape_main_error: {step}")
+
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
                 UPDATE "{SCHEMA}".scrape_main
-                SET error = $2,
+                SET {target_column} = $2,
                     website_url = COALESCE($3, website_url)
                 WHERE cnpj_basico = $1
                 """
-            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.error")
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.{target_column}")
             await conn.execute(query, cnpj_basico, error, website_url)
 
     async def get_scrape_main(self, cnpj_basico: str) -> Optional[Dict[str, Any]]:
@@ -357,7 +369,9 @@ class DatabaseService:
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
-                SELECT cnpj_basico, website_url, raw_content, subpage_links, mainpage_processada, error
+                SELECT cnpj_basico, website_url, raw_content, subpage_links, mainpage_processada,
+                       num_char_raw_main, num_char_main_processada,
+                       error_step1, error_step2, error_step3
                 FROM "{SCHEMA}".scrape_main
                 WHERE cnpj_basico = $1
                 LIMIT 1
@@ -366,7 +380,12 @@ class DatabaseService:
             row = await conn.fetchrow(query, cnpj_basico)
             return dict(row) if row else None
 
-    async def save_scrape_main_subpage_links(self, cnpj_basico: str, subpage_links: str) -> None:
+    async def save_scrape_main_subpage_links(
+        self,
+        cnpj_basico: str,
+        subpage_links: str,
+        num_subpages: int,
+    ) -> None:
         """
         Salva links extraídos da subpágina no scrape_main.
         """
@@ -374,25 +393,241 @@ class DatabaseService:
         async with pool.acquire() as conn:
             query = f"""
                 UPDATE "{SCHEMA}".scrape_main
-                SET subpage_links = $2
+                SET subpage_links = $2,
+                    num_subpages = $3,
+                    error_step2 = NULL
                 WHERE cnpj_basico = $1
                 """
             logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.subpage_links")
-            await conn.execute(query, cnpj_basico, subpage_links)
+            await conn.execute(query, cnpj_basico, subpage_links, num_subpages)
 
     async def save_scrape_main_processed_text(self, cnpj_basico: str, mainpage_processada: str) -> None:
         """
         Salva texto processado da main page no scrape_main.
         """
+        num_char_main_processada = len(mainpage_processada or "")
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
                 UPDATE "{SCHEMA}".scrape_main
-                SET mainpage_processada = $2
+                SET mainpage_processada = $2,
+                    num_char_main_processada = $3,
+                    error_step3 = NULL
                 WHERE cnpj_basico = $1
                 """
             logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.mainpage_processada")
-            await conn.execute(query, cnpj_basico, mainpage_processada)
+            await conn.execute(query, cnpj_basico, mainpage_processada, num_char_main_processada)
+
+    async def get_pending_scrape_main_step1_companies(
+        self,
+        limit: int = 5000,
+        after_id: int = 0,
+        status_filter: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Carrega empresas de website_discovery ainda ausentes em scrape_main.
+        Reaproveita a lógica do batch antigo: cursor por id + NOT EXISTS.
+        """
+        if not status_filter:
+            status_filter = ["muito_alto", "alto", "medio"]
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            placeholders = ", ".join(f"${i+1}" for i in range(len(status_filter)))
+            n = len(status_filter)
+            query = f"""
+                SELECT wd.id as wd_id, wd.cnpj_basico, wd.website_url
+                FROM "{SCHEMA}".website_discovery wd
+                WHERE wd.discovery_status IN ({placeholders})
+                  AND wd.website_url IS NOT NULL
+                  AND wd.website_url <> ''
+                  AND wd.id > ${n + 1}
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM "{SCHEMA}".scrape_main sm
+                    WHERE sm.cnpj_basico = wd.cnpj_basico
+                  )
+                ORDER BY wd.id
+                LIMIT ${n + 2}
+                """
+            rows = await conn.fetch(query, *status_filter, after_id, limit)
+            return [dict(row) for row in rows]
+
+    async def get_pending_scrape_main_step2(
+        self,
+        limit: int = 5000,
+        after_id: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Carrega registros aptos para etapa 2 (raw_content disponível e links ainda não processados).
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                SELECT id, cnpj_basico, website_url, raw_content
+                FROM "{SCHEMA}".scrape_main
+                WHERE id > $1
+                  AND raw_content IS NOT NULL
+                  AND LENGTH(TRIM(raw_content)) > 0
+                  AND (subpage_links IS NULL OR TRIM(subpage_links) = '')
+                ORDER BY id
+                LIMIT $2
+                """
+            rows = await conn.fetch(query, after_id, limit)
+            return [dict(row) for row in rows]
+
+    async def get_pending_scrape_main_step3(
+        self,
+        limit: int = 5000,
+        after_id: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Carrega registros aptos para etapa 3 (raw_content disponível e texto processado vazio).
+        """
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                SELECT id, cnpj_basico, website_url, raw_content
+                FROM "{SCHEMA}".scrape_main
+                WHERE id > $1
+                  AND raw_content IS NOT NULL
+                  AND LENGTH(TRIM(raw_content)) > 0
+                  AND (mainpage_processada IS NULL OR TRIM(mainpage_processada) = '')
+                ORDER BY id
+                LIMIT $2
+                """
+            rows = await conn.fetch(query, after_id, limit)
+            return [dict(row) for row in rows]
+
+    async def save_scrape_main_step1_batch(self, records: List[Dict[str, Any]]) -> int:
+        """
+        Persiste resultados da etapa 1 em batch com upsert por cnpj_basico.
+        """
+        if not records:
+            return 0
+
+        payload = [
+            (
+                r["cnpj_basico"],
+                r["website_url"],
+                r.get("raw_content") or None,
+                int(r.get("num_char_raw_main") or 0),
+                r.get("error_step1"),
+            )
+            for r in records
+        ]
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                INSERT INTO "{SCHEMA}".scrape_main
+                    (cnpj_basico, website_url, raw_content, num_char_raw_main, error_step1)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (cnpj_basico)
+                DO UPDATE SET
+                    website_url = EXCLUDED.website_url,
+                    raw_content = EXCLUDED.raw_content,
+                    num_char_raw_main = EXCLUDED.num_char_raw_main,
+                    error_step1 = EXCLUDED.error_step1
+                """
+            await conn.executemany(query, payload)
+            return len(payload)
+
+    async def save_scrape_main_step2_batch(
+        self,
+        success_records: List[Dict[str, Any]],
+        error_records: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Persiste etapa 2 em batch (sucessos + erros).
+        """
+        total = 0
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                if success_records:
+                    payload_ok = [
+                        (
+                            r["cnpj_basico"],
+                            r["subpage_links"],
+                            int(r["num_subpages"]),
+                        )
+                        for r in success_records
+                    ]
+                    query_ok = f"""
+                        UPDATE "{SCHEMA}".scrape_main
+                        SET subpage_links = $2,
+                            num_subpages = $3,
+                            error_step2 = NULL
+                        WHERE cnpj_basico = $1
+                        """
+                    await conn.executemany(query_ok, payload_ok)
+                    total += len(payload_ok)
+
+                if error_records:
+                    payload_err = [
+                        (
+                            r["cnpj_basico"],
+                            r["error_step2"],
+                        )
+                        for r in error_records
+                    ]
+                    query_err = f"""
+                        UPDATE "{SCHEMA}".scrape_main
+                        SET error_step2 = $2
+                        WHERE cnpj_basico = $1
+                        """
+                    await conn.executemany(query_err, payload_err)
+                    total += len(payload_err)
+        return total
+
+    async def save_scrape_main_step3_batch(
+        self,
+        success_records: List[Dict[str, Any]],
+        error_records: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Persiste etapa 3 em batch (sucessos + erros).
+        """
+        total = 0
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                if success_records:
+                    payload_ok = [
+                        (
+                            r["cnpj_basico"],
+                            r["mainpage_processada"],
+                            int(r["num_char_main_processada"]),
+                        )
+                        for r in success_records
+                    ]
+                    query_ok = f"""
+                        UPDATE "{SCHEMA}".scrape_main
+                        SET mainpage_processada = $2,
+                            num_char_main_processada = $3,
+                            error_step3 = NULL
+                        WHERE cnpj_basico = $1
+                        """
+                    await conn.executemany(query_ok, payload_ok)
+                    total += len(payload_ok)
+
+                if error_records:
+                    payload_err = [
+                        (
+                            r["cnpj_basico"],
+                            r["error_step3"],
+                        )
+                        for r in error_records
+                    ]
+                    query_err = f"""
+                        UPDATE "{SCHEMA}".scrape_main
+                        SET error_step3 = $2
+                        WHERE cnpj_basico = $1
+                        """
+                    await conn.executemany(query_err, payload_err)
+                    total += len(payload_err)
+        return total
     
     # ========== BATCH SCRAPE ==========
     

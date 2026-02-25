@@ -111,3 +111,73 @@ class ScrapeMainPageResponse(BaseModel):
         }
     )
 
+
+class ScrapeMainPageBatchRequest(BaseModel):
+    """Request para processamento em lote da etapa 1."""
+    total_samples: int = Field(100000, ge=1, description="Total de registros a processar")
+    batch_size: int = Field(
+        3600,
+        ge=1,
+        le=3600,
+        description="Tamanho do lote concorrente (máximo recomendado 3600)",
+    )
+    save_every: int = Field(
+        1000,
+        ge=1,
+        description="Quantidade processada antes de persistir checkpoint em lote",
+    )
+    timeout_seconds: int = Field(
+        30,
+        ge=5,
+        le=120,
+        description="Timeout da etapa 1 por URL",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "total_samples": 100000,
+                "batch_size": 3600,
+                "save_every": 1000,
+                "timeout_seconds": 40,
+            }
+        }
+    )
+
+
+class ScrapeMainBatchRequest(BaseModel):
+    """Request para processamento em lote das etapas 2 e 3."""
+    total_samples: int = Field(100000, ge=1, description="Total de registros a processar")
+    batch_size: int = Field(
+        3600,
+        ge=1,
+        le=3600,
+        description="Tamanho do lote concorrente (máximo recomendado 3600)",
+    )
+    save_every: int = Field(
+        1000,
+        ge=1,
+        description="Quantidade processada antes de persistir checkpoint em lote",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "total_samples": 100000,
+                "batch_size": 3600,
+                "save_every": 1000,
+            }
+        }
+    )
+
+
+class ScrapeMainBatchResponse(BaseModel):
+    """Response de aceite para processamento batch das etapas de scrape_main."""
+    success: bool = Field(..., description="Indica se o batch foi aceito")
+    status: str = Field(default="accepted", description="Status da requisição")
+    stage: str = Field(..., description="Etapa batch solicitada")
+    total_samples: int = Field(..., description="Total solicitado")
+    batch_size: int = Field(..., description="Lote concorrente configurado")
+    save_every: int = Field(..., description="Checkpoint de persistência")
+    message: str = Field(..., description="Mensagem de aceite")
+

@@ -6,6 +6,7 @@ import logging
 import time
 import asyncio
 import json
+from typing import Any, Dict, List
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Query
 from app.schemas.v2.scrape import (
@@ -14,6 +15,9 @@ from app.schemas.v2.scrape import (
     ScrapeMainPageRequest,
     ScrapeMainPageProcessRequest,
     ScrapeMainPageResponse,
+    ScrapeMainPageBatchRequest,
+    ScrapeMainBatchRequest,
+    ScrapeMainBatchResponse,
 )
 from app.services.scraper import (
     scrape_all_subpages,
@@ -28,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 db_service = get_db_service()
+
+
+def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
+    if size <= 0:
+        return [items]
+    return [items[i:i + size] for i in range(0, len(items), size)]
 
 
 async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
@@ -45,6 +55,7 @@ async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
             await db_service.save_scrape_main_error(
                 cnpj_basico=request.cnpj_basico,
                 error=detail,
+                step=1,
                 website_url=final_url or request.website_url,
             )
             logger.warning(f"[BACKGROUND] scrape_main_page erro cnpj={request.cnpj_basico} detail={detail}")
@@ -65,10 +76,93 @@ async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
             await db_service.save_scrape_main_error(
                 cnpj_basico=request.cnpj_basico,
                 error=f"step1:exception:{type(e).__name__}:{str(e)[:300]}",
+                step=1,
                 website_url=request.website_url,
             )
         except Exception:
             logger.error("[BACKGROUND] Falha adicional ao persistir erro da etapa1", exc_info=True)
+
+
+async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
+    """
+    Batch etapa 1:
+    - carrega da website_discovery somente empresas ausentes em scrape_main
+    - processa em lotes concorrentes (batch_size)
+    - persiste em lote a cada save_every
+    """
+    requested_total = request.total_samples
+    batch_size = request.batch_size
+    save_every = request.save_every
+    timeout_seconds = request.timeout_seconds
+
+    processed = 0
+    after_id = 0
+    pending_results: List[Dict[str, Any]] = []
+
+    logger.info(
+        "[BATCH-STEP1] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss",
+        requested_total, batch_size, save_every, timeout_seconds,
+    )
+
+    while processed < requested_total:
+        remaining = requested_total - processed
+        fetch_limit = min(5000, remaining)
+        companies = await db_service.get_pending_scrape_main_step1_companies(
+            limit=fetch_limit,
+            after_id=after_id,
+        )
+        if not companies:
+            break
+
+        after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
+
+        async def run_one(company: Dict[str, Any]) -> Dict[str, Any]:
+            cnpj = company["cnpj_basico"]
+            website_url = company["website_url"]
+            final_url, status_code, raw_content, error = await scrape_main_page_raw(
+                website_url,
+                timeout=timeout_seconds,
+            )
+            if error:
+                return {
+                    "cnpj_basico": cnpj,
+                    "website_url": final_url or website_url,
+                    "raw_content": None,
+                    "num_char_raw_main": 0,
+                    "error_step1": f"step1:{error} | status={status_code} | final_url={final_url}",
+                }
+            return {
+                "cnpj_basico": cnpj,
+                "website_url": final_url or website_url,
+                "raw_content": raw_content,
+                "num_char_raw_main": len(raw_content or ""),
+                "error_step1": None,
+            }
+
+        for chunk in _chunk_list(companies, batch_size):
+            results = await asyncio.gather(*[run_one(c) for c in chunk], return_exceptions=False)
+            pending_results.extend(results)
+
+            while len(pending_results) >= save_every:
+                flush = pending_results[:save_every]
+                pending_results = pending_results[save_every:]
+                saved = await db_service.save_scrape_main_step1_batch(flush)
+                processed += saved
+                logger.info("[BATCH-STEP1] checkpoint: %s/%s", processed, requested_total)
+
+                if processed >= requested_total:
+                    break
+
+            if processed >= requested_total:
+                break
+
+    if pending_results and processed < requested_total:
+        max_to_save = min(len(pending_results), requested_total - processed)
+        saved = await db_service.save_scrape_main_step1_batch(pending_results[:max_to_save])
+        processed += saved
+        logger.info("[BATCH-STEP1] flush final: %s/%s", processed, requested_total)
+
+    logger.info("[BATCH-STEP1] Concluído: processados=%s solicitados=%s", processed, requested_total)
 
 
 async def _process_extract_subpage_links_background(request: ScrapeMainPageProcessRequest):
@@ -87,16 +181,125 @@ async def _process_extract_subpage_links_background(request: ScrapeMainPageProce
 
         links = extract_subpage_links_from_raw(raw_content, website_url)
         serialized_links = json.dumps(links, ensure_ascii=False)
-        await db_service.save_scrape_main_subpage_links(request.cnpj_basico, serialized_links)
+        num_subpages = len(links)
+        await db_service.save_scrape_main_subpage_links(
+            request.cnpj_basico,
+            serialized_links,
+            num_subpages,
+        )
         logger.info(
-            f"[BACKGROUND] extrair_subpage_links concluido: cnpj={request.cnpj_basico}, links={len(links)}"
+            f"[BACKGROUND] extrair_subpage_links concluido: cnpj={request.cnpj_basico}, "
+            f"links={num_subpages}"
         )
     except Exception as e:
         logger.error(f"[BACKGROUND] Erro etapa2 extrair_subpage_links: {e}", exc_info=True)
         await db_service.save_scrape_main_error(
             cnpj_basico=request.cnpj_basico,
             error=f"step2:exception:{type(e).__name__}:{str(e)[:300]}",
+            step=2,
         )
+
+
+async def _run_step2_batch_background(request: ScrapeMainBatchRequest):
+    """
+    Batch etapa 2:
+    - lê scrape_main com raw_content
+    - extrai links em lotes concorrentes (batch_size)
+    - salva sucessos/erros no banco a cada save_every
+    """
+    requested_total = request.total_samples
+    batch_size = request.batch_size
+    save_every = request.save_every
+
+    processed = 0
+    after_id = 0
+    success_buffer: List[Dict[str, Any]] = []
+    error_buffer: List[Dict[str, Any]] = []
+
+    logger.info(
+        "[BATCH-STEP2] Iniciado: total=%s batch_size=%s save_every=%s",
+        requested_total, batch_size, save_every,
+    )
+
+    while processed < requested_total:
+        remaining = requested_total - processed
+        fetch_limit = min(5000, remaining)
+        rows = await db_service.get_pending_scrape_main_step2(limit=fetch_limit, after_id=after_id)
+        if not rows:
+            break
+
+        after_id = max(int(r["id"]) for r in rows if r.get("id") is not None)
+
+        async def run_one(row: Dict[str, Any]) -> Dict[str, Any]:
+            cnpj = row["cnpj_basico"]
+            raw_content = (row.get("raw_content") or "").strip()
+            website_url = (row.get("website_url") or "").strip()
+            try:
+                if not raw_content:
+                    raise ValueError("raw_content vazio na etapa 2")
+                if not website_url:
+                    raise ValueError("website_url vazio na etapa 2")
+
+                links = extract_subpage_links_from_raw(raw_content, website_url)
+                return {
+                    "ok": True,
+                    "cnpj_basico": cnpj,
+                    "subpage_links": json.dumps(links, ensure_ascii=False),
+                    "num_subpages": len(links),
+                }
+            except Exception as exc:
+                return {
+                    "ok": False,
+                    "cnpj_basico": cnpj,
+                    "error_step2": f"step2:exception:{type(exc).__name__}:{str(exc)[:300]}",
+                }
+
+        for chunk in _chunk_list(rows, batch_size):
+            results = await asyncio.gather(*[run_one(r) for r in chunk], return_exceptions=False)
+            for result in results:
+                if result["ok"]:
+                    success_buffer.append(result)
+                else:
+                    error_buffer.append(result)
+
+            while (len(success_buffer) + len(error_buffer)) >= save_every:
+                take_n = save_every
+                flush_ok: List[Dict[str, Any]] = []
+                flush_err: List[Dict[str, Any]] = []
+
+                while take_n > 0 and success_buffer:
+                    flush_ok.append(success_buffer.pop(0))
+                    take_n -= 1
+                while take_n > 0 and error_buffer:
+                    flush_err.append(error_buffer.pop(0))
+                    take_n -= 1
+
+                saved = await db_service.save_scrape_main_step2_batch(flush_ok, flush_err)
+                processed += saved
+                logger.info("[BATCH-STEP2] checkpoint: %s/%s", processed, requested_total)
+                if processed >= requested_total:
+                    break
+
+            if processed >= requested_total:
+                break
+
+    if processed < requested_total and (success_buffer or error_buffer):
+        max_to_save = requested_total - processed
+        flush_ok: List[Dict[str, Any]] = []
+        flush_err: List[Dict[str, Any]] = []
+        for item in success_buffer:
+            if len(flush_ok) + len(flush_err) >= max_to_save:
+                break
+            flush_ok.append(item)
+        for item in error_buffer:
+            if len(flush_ok) + len(flush_err) >= max_to_save:
+                break
+            flush_err.append(item)
+        saved = await db_service.save_scrape_main_step2_batch(flush_ok, flush_err)
+        processed += saved
+        logger.info("[BATCH-STEP2] flush final: %s/%s", processed, requested_total)
+
+    logger.info("[BATCH-STEP2] Concluído: processados=%s solicitados=%s", processed, requested_total)
 
 
 async def _process_mainpage_text_background(request: ScrapeMainPageProcessRequest):
@@ -127,7 +330,113 @@ async def _process_mainpage_text_background(request: ScrapeMainPageProcessReques
         await db_service.save_scrape_main_error(
             cnpj_basico=request.cnpj_basico,
             error=f"step3:exception:{type(e).__name__}:{str(e)[:300]}",
+            step=3,
         )
+
+
+async def _run_step3_batch_background(request: ScrapeMainBatchRequest):
+    """
+    Batch etapa 3:
+    - lê scrape_main com raw_content
+    - processa texto em lotes concorrentes (batch_size)
+    - salva sucessos/erros no banco a cada save_every
+    """
+    requested_total = request.total_samples
+    batch_size = request.batch_size
+    save_every = request.save_every
+
+    processed = 0
+    after_id = 0
+    success_buffer: List[Dict[str, Any]] = []
+    error_buffer: List[Dict[str, Any]] = []
+
+    logger.info(
+        "[BATCH-STEP3] Iniciado: total=%s batch_size=%s save_every=%s",
+        requested_total, batch_size, save_every,
+    )
+
+    while processed < requested_total:
+        remaining = requested_total - processed
+        fetch_limit = min(5000, remaining)
+        rows = await db_service.get_pending_scrape_main_step3(limit=fetch_limit, after_id=after_id)
+        if not rows:
+            break
+
+        after_id = max(int(r["id"]) for r in rows if r.get("id") is not None)
+
+        async def run_one(row: Dict[str, Any]) -> Dict[str, Any]:
+            cnpj = row["cnpj_basico"]
+            raw_content = (row.get("raw_content") or "").strip()
+            website_url = (row.get("website_url") or "").strip()
+            try:
+                if not raw_content:
+                    raise ValueError("raw_content vazio na etapa 3")
+                if not website_url:
+                    raise ValueError("website_url vazio na etapa 3")
+
+                processed_text = extract_mainpage_text_from_raw(raw_content, website_url)
+                if not processed_text.strip():
+                    raise ValueError("não foi possível extrair texto útil")
+
+                return {
+                    "ok": True,
+                    "cnpj_basico": cnpj,
+                    "mainpage_processada": processed_text,
+                    "num_char_main_processada": len(processed_text),
+                }
+            except Exception as exc:
+                return {
+                    "ok": False,
+                    "cnpj_basico": cnpj,
+                    "error_step3": f"step3:exception:{type(exc).__name__}:{str(exc)[:300]}",
+                }
+
+        for chunk in _chunk_list(rows, batch_size):
+            results = await asyncio.gather(*[run_one(r) for r in chunk], return_exceptions=False)
+            for result in results:
+                if result["ok"]:
+                    success_buffer.append(result)
+                else:
+                    error_buffer.append(result)
+
+            while (len(success_buffer) + len(error_buffer)) >= save_every:
+                take_n = save_every
+                flush_ok: List[Dict[str, Any]] = []
+                flush_err: List[Dict[str, Any]] = []
+
+                while take_n > 0 and success_buffer:
+                    flush_ok.append(success_buffer.pop(0))
+                    take_n -= 1
+                while take_n > 0 and error_buffer:
+                    flush_err.append(error_buffer.pop(0))
+                    take_n -= 1
+
+                saved = await db_service.save_scrape_main_step3_batch(flush_ok, flush_err)
+                processed += saved
+                logger.info("[BATCH-STEP3] checkpoint: %s/%s", processed, requested_total)
+                if processed >= requested_total:
+                    break
+
+            if processed >= requested_total:
+                break
+
+    if processed < requested_total and (success_buffer or error_buffer):
+        max_to_save = requested_total - processed
+        flush_ok: List[Dict[str, Any]] = []
+        flush_err: List[Dict[str, Any]] = []
+        for item in success_buffer:
+            if len(flush_ok) + len(flush_err) >= max_to_save:
+                break
+            flush_ok.append(item)
+        for item in error_buffer:
+            if len(flush_ok) + len(flush_err) >= max_to_save:
+                break
+            flush_err.append(item)
+        saved = await db_service.save_scrape_main_step3_batch(flush_ok, flush_err)
+        processed += saved
+        logger.info("[BATCH-STEP3] flush final: %s/%s", processed, requested_total)
+
+    logger.info("[BATCH-STEP3] Concluído: processados=%s solicitados=%s", processed, requested_total)
 
 
 async def _process_scrape_background(request: ScrapeRequest):
@@ -272,6 +581,74 @@ async def process_mainpage_text(request: ScrapeMainPageProcessRequest) -> Scrape
     except Exception as e:
         logger.error(f"Erro ao aceitar requisicao da etapa 3: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erro ao aceitar requisicao: {str(e)}")
+
+
+@router.post("/scrape/main-page/batch", response_model=ScrapeMainBatchResponse)
+async def scrape_main_page_batch(request: ScrapeMainPageBatchRequest) -> ScrapeMainBatchResponse:
+    """
+    Etapa 1 batch:
+    - source: website_discovery ausente em scrape_main
+    - concorrência por lote: batch_size
+    - checkpoint de persistência: save_every
+    """
+    try:
+        asyncio.create_task(_run_stage1_batch_background(request))
+        return ScrapeMainBatchResponse(
+            success=True,
+            status="accepted",
+            stage="step1",
+            total_samples=request.total_samples,
+            batch_size=request.batch_size,
+            save_every=request.save_every,
+            message="Batch etapa 1 aceito para processamento em background.",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar batch da etapa 1: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar batch: {str(e)}")
+
+
+@router.post("/scrape/main-page/subpage-links/batch", response_model=ScrapeMainBatchResponse)
+async def scrape_step2_batch(request: ScrapeMainBatchRequest) -> ScrapeMainBatchResponse:
+    """
+    Etapa 2 batch:
+    - source: scrape_main com raw_content disponível e subpage_links vazio
+    """
+    try:
+        asyncio.create_task(_run_step2_batch_background(request))
+        return ScrapeMainBatchResponse(
+            success=True,
+            status="accepted",
+            stage="step2",
+            total_samples=request.total_samples,
+            batch_size=request.batch_size,
+            save_every=request.save_every,
+            message="Batch etapa 2 aceito para processamento em background.",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar batch da etapa 2: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar batch: {str(e)}")
+
+
+@router.post("/scrape/main-page/process-text/batch", response_model=ScrapeMainBatchResponse)
+async def scrape_step3_batch(request: ScrapeMainBatchRequest) -> ScrapeMainBatchResponse:
+    """
+    Etapa 3 batch:
+    - source: scrape_main com raw_content disponível e mainpage_processada vazio
+    """
+    try:
+        asyncio.create_task(_run_step3_batch_background(request))
+        return ScrapeMainBatchResponse(
+            success=True,
+            status="accepted",
+            stage="step3",
+            total_samples=request.total_samples,
+            batch_size=request.batch_size,
+            save_every=request.save_every,
+            message="Batch etapa 3 aceito para processamento em background.",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar batch da etapa 3: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar batch: {str(e)}")
 
 
 @router.get("/scrape/diagnose")
