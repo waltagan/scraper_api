@@ -1,0 +1,948 @@
+{
+  "1200": {
+    "711proxy": {
+      "provider": "711proxy",
+      "concurrency": 1200,
+      "total_urls": 1200,
+      "total_time_s": 40.5,
+      "throughput_per_min": 1780.0,
+      "success": 1112,
+      "fail": 88,
+      "success_rate_pct": 92.7,
+      "latency_all_ms": {
+        "min": 2285.2,
+        "p25": 5895.6,
+        "p50": 7342.9,
+        "p75": 9315.3,
+        "p90": 11237.4,
+        "p95": 13645.5,
+        "p99": 32651.8,
+        "max": 40355.0,
+        "avg": 8162.6,
+        "stdev": 4384.0
+      },
+      "latency_ok_ms": {
+        "min": 2396.2,
+        "p25": 5936.4,
+        "p50": 7334.1,
+        "p75": 9217.6,
+        "p90": 11031.3,
+        "p95": 12546.6,
+        "p99": 18539.2,
+        "max": 32346.5,
+        "avg": 7856.9,
+        "stdev": 3040.2
+      },
+      "latency_fail_ms": {
+        "min": 2285.2,
+        "p25": 5153.2,
+        "p50": 7779.2,
+        "p75": 11726.8,
+        "p90": 35428.6,
+        "p95": 40115.0,
+        "p99": 40355.0,
+        "max": 40355.0,
+        "avg": 12025.7,
+        "stdev": 11425.9
+      },
+      "http_time_ms": {
+        "min": 2285.2,
+        "p25": 5895.6,
+        "p50": 7342.9,
+        "p75": 9315.3,
+        "p90": 11237.4,
+        "p95": 13645.5,
+        "p99": 32651.8,
+        "max": 40355.0,
+        "avg": 8162.6,
+        "stdev": 4384.0
+      },
+      "error_breakdown": {
+        "connection": 58,
+        "http_403": 10,
+        "http_404": 7,
+        "timeout": 5,
+        "http_500": 5,
+        "http_503": 1,
+        "http_410": 1,
+        "other": 1
+      },
+      "content_size_bytes": {
+        "min": 49,
+        "p25": 45049,
+        "p50": 129221,
+        "p75": 268711,
+        "p90": 603396,
+        "p95": 925807,
+        "p99": 1880857,
+        "max": 9071284,
+        "avg": 258043.0,
+        "stdev": 486240.7
+      },
+      "total_data_mb": 287.35,
+      "bandwidth_mbps": 56.83,
+      "bandwidth_series_mbs": {
+        "min": 0.0,
+        "p25": 0.0,
+        "p50": 0.1,
+        "p75": 3.4,
+        "p90": 35.2,
+        "p95": 45.7,
+        "p99": 62.5,
+        "max": 62.5,
+        "avg": 7.3,
+        "stdev": 15.4
+      },
+      "connections": {
+        "peak": 1199,
+        "samples": {
+          "min": 0,
+          "p25": 15,
+          "p50": 25,
+          "p75": 117,
+          "p90": 1000,
+          "p95": 1188,
+          "p99": 1200,
+          "max": 1200,
+          "avg": 201.5,
+          "stdev": 368.4
+        }
+      },
+      "time_histogram": {
+        "0-3s": {
+          "ok": 1,
+          "fail": 5
+        },
+        "3-6s": {
+          "ok": 293,
+          "fail": 24
+        },
+        "6-10s": {
+          "ok": 611,
+          "fail": 32
+        },
+        "10-15s": {
+          "ok": 181,
+          "fail": 11
+        },
+        "15-20s": {
+          "ok": 16,
+          "fail": 1
+        },
+        "20-30s": {
+          "ok": 9,
+          "fail": 1
+        },
+        "30-40s": {
+          "ok": 1,
+          "fail": 9
+        },
+        "40s+": {
+          "ok": 0,
+          "fail": 5
+        }
+      },
+      "error_distribution_thirds": {
+        "t1_first_third": 25,
+        "t2_mid_third": 34,
+        "t3_last_third": 29
+      },
+      "degradation_point": null,
+      "timeline_5s": [
+        {
+          "t": "0s-5s",
+          "ok": 111,
+          "fail": 20,
+          "total": 131,
+          "success_pct": 84.7,
+          "lat_ok_p50_ms": 4308.3,
+          "lat_ok_p90_ms": 4797.3,
+          "lat_all_p50_ms": 4281.2,
+          "bw_mbs": 2.724
+        },
+        {
+          "t": "5s-10s",
+          "ok": 784,
+          "fail": 41,
+          "total": 825,
+          "success_pct": 95.0,
+          "lat_ok_p50_ms": 7085.5,
+          "lat_ok_p90_ms": 8921.7,
+          "lat_all_p50_ms": 7082.1,
+          "bw_mbs": 42.3
+        },
+        {
+          "t": "10s-15s",
+          "ok": 191,
+          "fail": 11,
+          "total": 202,
+          "success_pct": 94.6,
+          "lat_ok_p50_ms": 10939.5,
+          "lat_ok_p90_ms": 13487.0,
+          "lat_all_p50_ms": 10965.4,
+          "bw_mbs": 11.431
+        },
+        {
+          "t": "15s-20s",
+          "ok": 16,
+          "fail": 1,
+          "total": 17,
+          "success_pct": 94.1,
+          "lat_ok_p50_ms": 17088.9,
+          "lat_ok_p90_ms": 18539.2,
+          "lat_all_p50_ms": 16024.5,
+          "bw_mbs": 0.554
+        },
+        {
+          "t": "20s-25s",
+          "ok": 6,
+          "fail": 0,
+          "total": 6,
+          "success_pct": 100.0,
+          "lat_ok_p50_ms": 23987.2,
+          "lat_ok_p90_ms": 24680.5,
+          "lat_all_p50_ms": 23987.2,
+          "bw_mbs": 0.302
+        },
+        {
+          "t": "25s-30s",
+          "ok": 3,
+          "fail": 1,
+          "total": 4,
+          "success_pct": 75.0,
+          "lat_ok_p50_ms": 27465.6,
+          "lat_ok_p90_ms": 27839.7,
+          "lat_all_p50_ms": 27465.6,
+          "bw_mbs": 0.14
+        },
+        {
+          "t": "30s-35s",
+          "ok": 1,
+          "fail": 5,
+          "total": 6,
+          "success_pct": 16.7,
+          "lat_ok_p50_ms": 32346.5,
+          "lat_ok_p90_ms": 32346.5,
+          "lat_all_p50_ms": 32651.8,
+          "bw_mbs": 0.018
+        },
+        {
+          "t": "35s-40s",
+          "ok": 0,
+          "fail": 4,
+          "total": 4,
+          "success_pct": 0.0,
+          "lat_ok_p50_ms": 0,
+          "lat_ok_p90_ms": 0,
+          "lat_all_p50_ms": 39046.7,
+          "bw_mbs": 0.0
+        },
+        {
+          "t": "40s-45s",
+          "ok": 0,
+          "fail": 5,
+          "total": 5,
+          "success_pct": 0.0,
+          "lat_ok_p50_ms": 0,
+          "lat_ok_p90_ms": 0,
+          "lat_all_p50_ms": 40125.1,
+          "bw_mbs": 0.0
+        }
+      ],
+      "saturation": {
+        "avg_http_time_ms": 8162.6,
+        "avg_elapsed_ms": 8162.6,
+        "cv_latency": 0.537,
+        "peak_active": 1200,
+        "peak_active_pct": 100.0,
+        "avg_active_connections": 201.5,
+        "bottleneck_diagnosis": "proxy saudável — absorveu a carga sem degradação severa"
+      },
+      "cumulative_error_rate": [
+        {
+          "at_request": 120,
+          "pct_complete": 10.0,
+          "error_rate_pct": 7.5
+        },
+        {
+          "at_request": 240,
+          "pct_complete": 20.0,
+          "error_rate_pct": 6.7
+        },
+        {
+          "at_request": 360,
+          "pct_complete": 30.0,
+          "error_rate_pct": 6.4
+        },
+        {
+          "at_request": 480,
+          "pct_complete": 40.0,
+          "error_rate_pct": 6.7
+        },
+        {
+          "at_request": 600,
+          "pct_complete": 50.0,
+          "error_rate_pct": 7.5
+        },
+        {
+          "at_request": 720,
+          "pct_complete": 60.0,
+          "error_rate_pct": 7.2
+        },
+        {
+          "at_request": 840,
+          "pct_complete": 70.0,
+          "error_rate_pct": 7.7
+        },
+        {
+          "at_request": 960,
+          "pct_complete": 80.0,
+          "error_rate_pct": 7.6
+        },
+        {
+          "at_request": 1080,
+          "pct_complete": 90.0,
+          "error_rate_pct": 7.4
+        },
+        {
+          "at_request": 1200,
+          "pct_complete": 100.0,
+          "error_rate_pct": 7.3
+        }
+      ]
+    },
+    "decodo": {
+      "provider": "decodo",
+      "concurrency": 1200,
+      "total_urls": 1200,
+      "total_time_s": 40.3,
+      "throughput_per_min": 1784.8,
+      "success": 887,
+      "fail": 313,
+      "success_rate_pct": 73.9,
+      "latency_all_ms": {
+        "min": 1861.6,
+        "p25": 14471.2,
+        "p50": 17392.3,
+        "p75": 19310.9,
+        "p90": 21044.7,
+        "p95": 22635.4,
+        "p99": 25483.3,
+        "max": 40210.1,
+        "avg": 16593.0,
+        "stdev": 4677.9
+      },
+      "latency_ok_ms": {
+        "min": 3312.4,
+        "p25": 14678.9,
+        "p50": 17618.4,
+        "p75": 19503.4,
+        "p90": 21262.1,
+        "p95": 22934.8,
+        "p99": 25330.2,
+        "max": 39946.9,
+        "avg": 16720.3,
+        "stdev": 4731.1
+      },
+      "latency_fail_ms": {
+        "min": 1861.6,
+        "p25": 13973.4,
+        "p50": 16912.6,
+        "p75": 18639.5,
+        "p90": 20116.8,
+        "p95": 21451.5,
+        "p99": 28769.0,
+        "max": 40210.1,
+        "avg": 16232.5,
+        "stdev": 4511.6
+      },
+      "http_time_ms": {
+        "min": 1861.6,
+        "p25": 14471.2,
+        "p50": 17392.3,
+        "p75": 19310.9,
+        "p90": 21044.7,
+        "p95": 22635.4,
+        "p99": 25483.3,
+        "max": 40210.1,
+        "avg": 16593.0,
+        "stdev": 4677.9
+      },
+      "error_breakdown": {
+        "dns": 173,
+        "connection": 98,
+        "http_522": 19,
+        "http_403": 7,
+        "http_500": 5,
+        "http_404": 5,
+        "other": 2,
+        "timeout": 2,
+        "http_410": 1,
+        "http_502": 1
+      },
+      "content_size_bytes": {
+        "min": 49,
+        "p25": 60348,
+        "p50": 139248,
+        "p75": 311844,
+        "p90": 617648,
+        "p95": 981160,
+        "p99": 1895764,
+        "max": 9071284,
+        "avg": 276812.2,
+        "stdev": 508275.5
+      },
+      "total_data_mb": 245.92,
+      "bandwidth_mbps": 48.77,
+      "bandwidth_series_mbs": {
+        "min": 0.0,
+        "p25": 0.0,
+        "p50": 0.6,
+        "p75": 7.8,
+        "p90": 20.7,
+        "p95": 27.0,
+        "p99": 54.4,
+        "max": 54.4,
+        "avg": 6.2,
+        "stdev": 10.4
+      },
+      "connections": {
+        "peak": 1199,
+        "samples": {
+          "min": 0,
+          "p25": 5,
+          "p50": 142,
+          "p75": 1095,
+          "p90": 1190,
+          "p95": 1199,
+          "p99": 1200,
+          "max": 1200,
+          "avg": 478.6,
+          "stdev": 511.5
+        }
+      },
+      "time_histogram": {
+        "0-3s": {
+          "ok": 0,
+          "fail": 2
+        },
+        "3-6s": {
+          "ok": 58,
+          "fail": 7
+        },
+        "6-10s": {
+          "ok": 24,
+          "fail": 11
+        },
+        "10-15s": {
+          "ok": 166,
+          "fail": 80
+        },
+        "15-20s": {
+          "ok": 470,
+          "fail": 177
+        },
+        "20-30s": {
+          "ok": 166,
+          "fail": 34
+        },
+        "30-40s": {
+          "ok": 3,
+          "fail": 0
+        },
+        "40s+": {
+          "ok": 0,
+          "fail": 2
+        }
+      },
+      "error_distribution_thirds": {
+        "t1_first_third": 95,
+        "t2_mid_third": 85,
+        "t3_last_third": 133
+      },
+      "degradation_point": "6-10s",
+      "timeline_5s": [
+        {
+          "t": "0s-5s",
+          "ok": 39,
+          "fail": 8,
+          "total": 47,
+          "success_pct": 83.0,
+          "lat_ok_p50_ms": 4511.3,
+          "lat_ok_p90_ms": 4907.0,
+          "lat_all_p50_ms": 4385.1,
+          "bw_mbs": 1.397
+        },
+        {
+          "t": "5s-10s",
+          "ok": 43,
+          "fail": 12,
+          "total": 55,
+          "success_pct": 78.2,
+          "lat_ok_p50_ms": 6256.2,
+          "lat_ok_p90_ms": 8288.4,
+          "lat_all_p50_ms": 6464.4,
+          "bw_mbs": 3.204
+        },
+        {
+          "t": "10s-15s",
+          "ok": 162,
+          "fail": 78,
+          "total": 240,
+          "success_pct": 67.5,
+          "lat_ok_p50_ms": 13823.6,
+          "lat_ok_p90_ms": 14748.0,
+          "lat_all_p50_ms": 13498.3,
+          "bw_mbs": 7.495
+        },
+        {
+          "t": "15s-20s",
+          "ok": 467,
+          "fail": 178,
+          "total": 645,
+          "success_pct": 72.4,
+          "lat_ok_p50_ms": 17904.9,
+          "lat_ok_p90_ms": 19502.1,
+          "lat_all_p50_ms": 17850.6,
+          "bw_mbs": 22.269
+        },
+        {
+          "t": "20s-25s",
+          "ok": 162,
+          "fail": 32,
+          "total": 194,
+          "success_pct": 83.5,
+          "lat_ok_p50_ms": 21191.6,
+          "lat_ok_p90_ms": 23628.8,
+          "lat_all_p50_ms": 21109.3,
+          "bw_mbs": 13.865
+        },
+        {
+          "t": "25s-30s",
+          "ok": 11,
+          "fail": 3,
+          "total": 14,
+          "success_pct": 78.6,
+          "lat_ok_p50_ms": 25330.2,
+          "lat_ok_p90_ms": 27012.4,
+          "lat_all_p50_ms": 25483.3,
+          "bw_mbs": 0.746
+        },
+        {
+          "t": "30s-35s",
+          "ok": 1,
+          "fail": 0,
+          "total": 1,
+          "success_pct": 100.0,
+          "lat_ok_p50_ms": 33029.3,
+          "lat_ok_p90_ms": 33029.3,
+          "lat_all_p50_ms": 33029.3,
+          "bw_mbs": 0.057
+        },
+        {
+          "t": "35s-40s",
+          "ok": 1,
+          "fail": 0,
+          "total": 1,
+          "success_pct": 100.0,
+          "lat_ok_p50_ms": 38915.2,
+          "lat_ok_p90_ms": 38915.2,
+          "lat_all_p50_ms": 38915.2,
+          "bw_mbs": 0.07
+        },
+        {
+          "t": "40s-45s",
+          "ok": 1,
+          "fail": 2,
+          "total": 3,
+          "success_pct": 33.3,
+          "lat_ok_p50_ms": 39946.9,
+          "lat_ok_p90_ms": 39946.9,
+          "lat_all_p50_ms": 40148.9,
+          "bw_mbs": 0.08
+        }
+      ],
+      "saturation": {
+        "avg_http_time_ms": 16593.0,
+        "avg_elapsed_ms": 16593.0,
+        "cv_latency": 0.282,
+        "peak_active": 1200,
+        "peak_active_pct": 100.0,
+        "avg_active_connections": 478.6,
+        "bottleneck_diagnosis": "proxy sob pressão — latência elevada mas ainda funcional"
+      },
+      "cumulative_error_rate": [
+        {
+          "at_request": 120,
+          "pct_complete": 10.0,
+          "error_rate_pct": 26.7
+        },
+        {
+          "at_request": 240,
+          "pct_complete": 20.0,
+          "error_rate_pct": 20.0
+        },
+        {
+          "at_request": 360,
+          "pct_complete": 30.0,
+          "error_rate_pct": 23.3
+        },
+        {
+          "at_request": 480,
+          "pct_complete": 40.0,
+          "error_rate_pct": 23.1
+        },
+        {
+          "at_request": 600,
+          "pct_complete": 50.0,
+          "error_rate_pct": 22.3
+        },
+        {
+          "at_request": 720,
+          "pct_complete": 60.0,
+          "error_rate_pct": 21.8
+        },
+        {
+          "at_request": 840,
+          "pct_complete": 70.0,
+          "error_rate_pct": 22.6
+        },
+        {
+          "at_request": 960,
+          "pct_complete": 80.0,
+          "error_rate_pct": 24.5
+        },
+        {
+          "at_request": 1080,
+          "pct_complete": 90.0,
+          "error_rate_pct": 25.4
+        },
+        {
+          "at_request": 1200,
+          "pct_complete": 100.0,
+          "error_rate_pct": 26.1
+        }
+      ]
+    },
+    "evomi": {
+      "provider": "evomi",
+      "concurrency": 1200,
+      "total_urls": 1200,
+      "total_time_s": 40.3,
+      "throughput_per_min": 1784.7,
+      "success": 1129,
+      "fail": 71,
+      "success_rate_pct": 94.1,
+      "latency_all_ms": {
+        "min": 4060.1,
+        "p25": 15038.8,
+        "p50": 17120.9,
+        "p75": 19388.7,
+        "p90": 20871.3,
+        "p95": 22182.1,
+        "p99": 39212.0,
+        "max": 40246.8,
+        "avg": 17568.1,
+        "stdev": 4098.0
+      },
+      "latency_ok_ms": {
+        "min": 11989.6,
+        "p25": 15176.1,
+        "p50": 17198.9,
+        "p75": 19332.8,
+        "p90": 20727.3,
+        "p95": 21819.3,
+        "p99": 26760.2,
+        "max": 38910.0,
+        "avg": 17509.0,
+        "stdev": 2879.9
+      },
+      "latency_fail_ms": {
+        "min": 4060.1,
+        "p25": 11530.9,
+        "p50": 15976.9,
+        "p75": 20693.6,
+        "p90": 40160.3,
+        "p95": 40232.4,
+        "p99": 40246.8,
+        "max": 40246.8,
+        "avg": 18507.6,
+        "stdev": 12371.4
+      },
+      "http_time_ms": {
+        "min": 4060.1,
+        "p25": 15038.8,
+        "p50": 17120.9,
+        "p75": 19388.7,
+        "p90": 20871.3,
+        "p95": 22182.1,
+        "p99": 39212.0,
+        "max": 40246.8,
+        "avg": 17568.1,
+        "stdev": 4098.0
+      },
+      "error_breakdown": {
+        "dns": 17,
+        "connection": 14,
+        "http_500": 13,
+        "timeout": 9,
+        "http_403": 7,
+        "http_404": 6,
+        "ssl": 2,
+        "http_503": 1,
+        "other": 1,
+        "http_410": 1
+      },
+      "content_size_bytes": {
+        "min": 49,
+        "p25": 47790,
+        "p50": 129431,
+        "p75": 271147,
+        "p90": 605006,
+        "p95": 924473,
+        "p99": 1778107,
+        "max": 6190987,
+        "avg": 253576.6,
+        "stdev": 408899.6
+      },
+      "total_data_mb": 286.68,
+      "bandwidth_mbps": 56.85,
+      "bandwidth_series_mbs": {
+        "min": 0.0,
+        "p25": 0.0,
+        "p50": 0.0,
+        "p75": 4.2,
+        "p90": 30.3,
+        "p95": 44.2,
+        "p99": 72.3,
+        "max": 72.3,
+        "avg": 7.4,
+        "stdev": 14.8
+      },
+      "connections": {
+        "peak": 1199,
+        "samples": {
+          "min": 0,
+          "p25": 18,
+          "p50": 121,
+          "p75": 1183,
+          "p90": 1200,
+          "p95": 1200,
+          "p99": 1200,
+          "max": 1200,
+          "avg": 492.4,
+          "stdev": 531.3
+        }
+      },
+      "time_histogram": {
+        "0-3s": {
+          "ok": 0,
+          "fail": 0
+        },
+        "3-6s": {
+          "ok": 0,
+          "fail": 17
+        },
+        "6-10s": {
+          "ok": 0,
+          "fail": 0
+        },
+        "10-15s": {
+          "ok": 262,
+          "fail": 15
+        },
+        "15-20s": {
+          "ok": 640,
+          "fail": 18
+        },
+        "20-30s": {
+          "ok": 222,
+          "fail": 6
+        },
+        "30-40s": {
+          "ok": 5,
+          "fail": 5
+        },
+        "40s+": {
+          "ok": 0,
+          "fail": 10
+        }
+      },
+      "error_distribution_thirds": {
+        "t1_first_third": 36,
+        "t2_mid_third": 14,
+        "t3_last_third": 21
+      },
+      "degradation_point": "3-6s",
+      "timeline_5s": [
+        {
+          "t": "0s-5s",
+          "ok": 0,
+          "fail": 13,
+          "total": 13,
+          "success_pct": 0.0,
+          "lat_ok_p50_ms": 0,
+          "lat_ok_p90_ms": 0,
+          "lat_all_p50_ms": 4073.9,
+          "bw_mbs": 0.0
+        },
+        {
+          "t": "5s-10s",
+          "ok": 0,
+          "fail": 4,
+          "total": 4,
+          "success_pct": 0.0,
+          "lat_ok_p50_ms": 0,
+          "lat_ok_p90_ms": 0,
+          "lat_all_p50_ms": 5215.9,
+          "bw_mbs": 0.0
+        },
+        {
+          "t": "10s-15s",
+          "ok": 258,
+          "fail": 15,
+          "total": 273,
+          "success_pct": 94.5,
+          "lat_ok_p50_ms": 14265.8,
+          "lat_ok_p90_ms": 14639.5,
+          "lat_all_p50_ms": 14265.6,
+          "bw_mbs": 10.021
+        },
+        {
+          "t": "15s-20s",
+          "ok": 644,
+          "fail": 18,
+          "total": 662,
+          "success_pct": 97.3,
+          "lat_ok_p50_ms": 17265.0,
+          "lat_ok_p90_ms": 19275.1,
+          "lat_all_p50_ms": 17264.2,
+          "bw_mbs": 34.023
+        },
+        {
+          "t": "20s-25s",
+          "ok": 211,
+          "fail": 5,
+          "total": 216,
+          "success_pct": 97.7,
+          "lat_ok_p50_ms": 20630.0,
+          "lat_ok_p90_ms": 22562.3,
+          "lat_all_p50_ms": 20635.4,
+          "bw_mbs": 12.327
+        },
+        {
+          "t": "25s-30s",
+          "ok": 11,
+          "fail": 1,
+          "total": 12,
+          "success_pct": 91.7,
+          "lat_ok_p50_ms": 26772.4,
+          "lat_ok_p90_ms": 29032.8,
+          "lat_all_p50_ms": 27475.6,
+          "bw_mbs": 0.536
+        },
+        {
+          "t": "30s-35s",
+          "ok": 3,
+          "fail": 0,
+          "total": 3,
+          "success_pct": 100.0,
+          "lat_ok_p50_ms": 30394.0,
+          "lat_ok_p90_ms": 34645.0,
+          "lat_all_p50_ms": 30394.0,
+          "bw_mbs": 0.267
+        },
+        {
+          "t": "35s-40s",
+          "ok": 2,
+          "fail": 5,
+          "total": 7,
+          "success_pct": 28.6,
+          "lat_ok_p50_ms": 38910.0,
+          "lat_ok_p90_ms": 38910.0,
+          "lat_all_p50_ms": 38874.0,
+          "bw_mbs": 0.162
+        },
+        {
+          "t": "40s-45s",
+          "ok": 0,
+          "fail": 10,
+          "total": 10,
+          "success_pct": 0.0,
+          "lat_ok_p50_ms": 0,
+          "lat_ok_p90_ms": 0,
+          "lat_all_p50_ms": 40215.7,
+          "bw_mbs": 0.0
+        }
+      ],
+      "saturation": {
+        "avg_http_time_ms": 17568.1,
+        "avg_elapsed_ms": 17568.1,
+        "cv_latency": 0.233,
+        "peak_active": 1200,
+        "peak_active_pct": 100.0,
+        "avg_active_connections": 492.4,
+        "bottleneck_diagnosis": "proxy sob pressão — latência elevada mas ainda funcional"
+      },
+      "cumulative_error_rate": [
+        {
+          "at_request": 120,
+          "pct_complete": 10.0,
+          "error_rate_pct": 5.8
+        },
+        {
+          "at_request": 240,
+          "pct_complete": 20.0,
+          "error_rate_pct": 11.7
+        },
+        {
+          "at_request": 360,
+          "pct_complete": 30.0,
+          "error_rate_pct": 9.2
+        },
+        {
+          "at_request": 480,
+          "pct_complete": 40.0,
+          "error_rate_pct": 7.9
+        },
+        {
+          "at_request": 600,
+          "pct_complete": 50.0,
+          "error_rate_pct": 7.0
+        },
+        {
+          "at_request": 720,
+          "pct_complete": 60.0,
+          "error_rate_pct": 6.2
+        },
+        {
+          "at_request": 840,
+          "pct_complete": 70.0,
+          "error_rate_pct": 6.0
+        },
+        {
+          "at_request": 960,
+          "pct_complete": 80.0,
+          "error_rate_pct": 6.1
+        },
+        {
+          "at_request": 1080,
+          "pct_complete": 90.0,
+          "error_rate_pct": 5.6
+        },
+        {
+          "at_request": 1200,
+          "pct_complete": 100.0,
+          "error_rate_pct": 5.9
+        }
+      ]
+    }
+  },
+  "_meta": {
+    "timestamp": "2026-02-24 15:34:25",
+    "proxies_711": 900,
+    "proxies_decodo": 9999,
+    "proxies_evomi": 10000,
+    "total_urls_available": 1200
+  }
+}

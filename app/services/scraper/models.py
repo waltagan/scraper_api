@@ -45,4 +45,3 @@ class ScrapeResult:
     probe_ok: bool = False
     main_scrape_time_ms: float = 0.0
     subpages_time_ms: float = 0.0
-    retries_used: int = 0
