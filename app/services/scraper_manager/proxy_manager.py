@@ -10,7 +10,7 @@ import asyncio
 import logging
 import time
 import httpx
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from app.configs.config_loader import load_config
 
 logger = logging.getLogger(__name__)
@@ -233,6 +233,17 @@ class ProxyPool:
         if self._evomi_proxies:
             providers.append("evomi")
         return providers
+
+    def get_provider_proxy_snapshot(self) -> Dict[str, List[str]]:
+        """
+        Retorna cópia imutável da visão atual do pool por provider.
+        Usado quando a chamada precisa seguir exatamente proxy_urls[i % len(proxy_urls)].
+        """
+        return {
+            "711proxy": list(self._711_proxies),
+            "decodo": list(self._decodo_proxies),
+            "evomi": list(self._evomi_proxies),
+        }
 
     def get_sticky_proxy_for_provider(self, provider: str) -> Optional[str]:
         p = (provider or "").lower().strip()

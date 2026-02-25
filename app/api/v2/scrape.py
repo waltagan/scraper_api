@@ -25,6 +25,7 @@ from app.services.scraper import (
     extract_subpage_links_from_raw,
     extract_mainpage_text_from_raw,
 )
+from app.services.scraper_manager.proxy_manager import proxy_pool
 from app.services.database_service import get_db_service
 from app.core.chunking import process_content
 
@@ -104,6 +105,25 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
         requested_total, batch_size, save_every, timeout_seconds,
     )
 
+    await proxy_pool.preload()
+    proxy_snapshot = proxy_pool.get_provider_proxy_snapshot()
+    provider_order = ["711proxy", "decodo", "evomi"]
+    provider_proxy_lists = {
+        provider: proxy_snapshot.get(provider, [])
+        for provider in provider_order
+        if proxy_snapshot.get(provider)
+    }
+    if not provider_proxy_lists:
+        logger.error("[BATCH-STEP1] Nenhum proxy carregado para execução")
+        return
+
+    logger.info(
+        "[BATCH-STEP1] Proxies carregados: 711=%s decodo=%s evomi=%s",
+        len(provider_proxy_lists.get("711proxy", [])),
+        len(provider_proxy_lists.get("decodo", [])),
+        len(provider_proxy_lists.get("evomi", [])),
+    )
+
     while processed < requested_total:
         remaining = requested_total - processed
         fetch_limit = min(5000, remaining)
@@ -116,12 +136,13 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
 
         after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
 
-        async def run_one(company: Dict[str, Any]) -> Dict[str, Any]:
+        async def run_one(company: Dict[str, Any], proxy_url: str, proxy_provider: str) -> Dict[str, Any]:
             cnpj = company["cnpj_basico"]
             website_url = company["website_url"]
             final_url, status_code, raw_content, error = await scrape_main_page_raw(
                 website_url,
                 timeout=timeout_seconds,
+                proxy=proxy_url,
             )
             if error:
                 return {
@@ -129,7 +150,10 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
                     "website_url": final_url or website_url,
                     "raw_content": None,
                     "num_char_raw_main": 0,
-                    "error_step1": f"step1:{error} | status={status_code} | final_url={final_url}",
+                    "error_step1": (
+                        f"step1:{error} | status={status_code} | final_url={final_url} "
+                        f"| provider={proxy_provider}"
+                    ),
                 }
             return {
                 "cnpj_basico": cnpj,
@@ -140,15 +164,38 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
             }
 
         for chunk in _chunk_list(companies, batch_size):
-            results = await asyncio.gather(*[run_one(c) for c in chunk], return_exceptions=False)
-            pending_results.extend(results)
+            provider_capacity = 1200 * len(provider_proxy_lists)
+            for start_idx in range(0, len(chunk), provider_capacity):
+                provider_window = chunk[start_idx:start_idx + provider_capacity]
+                cursor = 0
+                for provider in provider_order:
+                    proxy_urls = provider_proxy_lists.get(provider, [])
+                    if not proxy_urls:
+                        continue
+                    company_slice = provider_window[cursor:cursor + 1200]
+                    cursor += 1200
+                    if not company_slice:
+                        continue
 
-            while len(pending_results) >= save_every:
-                flush = pending_results[:save_every]
-                pending_results = pending_results[save_every:]
-                saved = await db_service.save_scrape_main_step1_batch(flush)
-                processed += saved
-                logger.info("[BATCH-STEP1] checkpoint: %s/%s", processed, requested_total)
+                    tasks = [
+                        run_one(company, proxy_urls[i % len(proxy_urls)], provider)
+                        for i, company in enumerate(company_slice)
+                    ]
+                    results = await asyncio.gather(*tasks, return_exceptions=False)
+                    pending_results.extend(results)
+
+                    while len(pending_results) >= save_every:
+                        flush = pending_results[:save_every]
+                        pending_results = pending_results[save_every:]
+                        saved = await db_service.save_scrape_main_step1_batch(flush)
+                        processed += saved
+                        logger.info("[BATCH-STEP1] checkpoint: %s/%s", processed, requested_total)
+
+                        if processed >= requested_total:
+                            break
+
+                    if processed >= requested_total:
+                        break
 
                 if processed >= requested_total:
                     break
