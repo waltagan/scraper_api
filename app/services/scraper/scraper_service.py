@@ -431,10 +431,30 @@ async def scrape_main_page_raw(
     if not HAS_CURL_CFFI:
         return url, 0, "", "curl_cffi_not_available"
 
-    target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
     session = AsyncSession(impersonate="chrome131", verify=False, max_clients=200)
-    error = ""
+    try:
+        return await scrape_main_page_raw_with_session(
+            session=session,
+            url=url,
+            timeout=timeout,
+            proxy=proxy,
+        )
+    finally:
+        await session.close()
 
+
+async def scrape_main_page_raw_with_session(
+    session: "AsyncSession",
+    url: str,
+    timeout: int = REQUEST_TIMEOUT,
+    proxy: str = "",
+) -> Tuple[str, int, str, str]:
+    """
+    Igual ao stress test: usa sessão HTTP reutilizada para múltiplas URLs.
+    PROIBIDO alterar este padrão para criar sessão por requisição.
+    """
+    target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
+    error = ""
     try:
         resp = await asyncio.wait_for(
             session.get(
@@ -459,8 +479,6 @@ async def scrape_main_page_raw(
         return final_url, status_code, raw_html, error
     except Exception as exc:
         return target_url, 0, "", f"{type(exc).__name__}: {str(exc)[:200]}"
-    finally:
-        await session.close()
 
 
 def extract_subpage_links_from_raw(raw_content: str, base_url: str) -> List[str]:

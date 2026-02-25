@@ -23,6 +23,7 @@ from app.schemas.v2.scrape import (
 from app.services.scraper import (
     scrape_all_subpages,
     scrape_main_page_raw,
+    scrape_main_page_raw_with_session,
     extract_subpage_links_from_raw,
     extract_mainpage_text_from_raw,
 )
@@ -34,6 +35,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 db_service = get_db_service()
+
+try:
+    from curl_cffi.requests import AsyncSession
+    HAS_CURL_CFFI = True
+except ImportError:
+    AsyncSession = None
+    HAS_CURL_CFFI = False
 
 
 def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
@@ -122,15 +130,24 @@ async def _run_unified_one(
     timeout_seconds: int,
     proxy_url: str = "",
     proxy_provider: str = "",
+    session: Any = None,
 ) -> Dict[str, Any]:
     """
     Executa etapas 1/2/3 em memória, sem persistir raw_content.
     """
-    final_url, status_code, raw_content, step1_error = await scrape_main_page_raw(
-        website_url,
-        timeout=timeout_seconds,
-        proxy=proxy_url,
-    )
+    if session is not None:
+        final_url, status_code, raw_content, step1_error = await scrape_main_page_raw_with_session(
+            session=session,
+            url=website_url,
+            timeout=timeout_seconds,
+            proxy=proxy_url,
+        )
+    else:
+        final_url, status_code, raw_content, step1_error = await scrape_main_page_raw(
+            website_url,
+            timeout=timeout_seconds,
+            proxy=proxy_url,
+        )
 
     result: Dict[str, Any] = {
         "cnpj_basico": cnpj_basico,
@@ -489,38 +506,36 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
 
             after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
 
-            async def run_one_safe(company: Dict[str, Any], provider: str, proxy_url: str) -> Dict[str, Any]:
-                try:
-                    return await _run_unified_one(
-                        cnpj_basico=company["cnpj_basico"],
-                        website_url=company["website_url"],
-                        timeout_seconds=timeout_seconds,
-                        proxy_url=proxy_url,
-                        proxy_provider=provider,
-                    )
-                except Exception as exc:
-                    website_url = company.get("website_url") or ""
-                    return {
-                        "cnpj_basico": company["cnpj_basico"],
-                        "website_url": website_url,
-                        "error_step1": f"step1:exception:{type(exc).__name__}:{str(exc)[:300]} | provider={provider}",
-                        "subpage_links": None,
-                        "num_subpages": 0,
-                        "error_step2": None,
-                        "mainpage_processada": None,
-                        "error_step3": None,
-                    }
-
             async def run_provider_slice(
                 provider: str,
                 company_slice: List[Dict[str, Any]],
                 proxy_urls: List[str],
             ) -> List[Dict[str, Any]]:
-                tasks = [
-                    run_one_safe(company, provider, proxy_urls[i % len(proxy_urls)])
-                    for i, company in enumerate(company_slice)
-                ]
-                return await asyncio.gather(*tasks, return_exceptions=False)
+                # PROIBIDO alterar: sessão HTTP deve ser reutilizada por slice/provider
+                # para manter comportamento/performance alinhados ao stress_test_unified.py.
+                session = None
+                if HAS_CURL_CFFI and AsyncSession is not None:
+                    session = AsyncSession(
+                        impersonate="chrome131",
+                        verify=False,
+                        max_clients=len(company_slice) + 100,
+                    )
+                try:
+                    tasks = [
+                        _run_unified_one(
+                            cnpj_basico=company["cnpj_basico"],
+                            website_url=company["website_url"],
+                            timeout_seconds=timeout_seconds,
+                            proxy_url=proxy_urls[i % len(proxy_urls)],
+                            proxy_provider=provider,
+                            session=session,
+                        )
+                        for i, company in enumerate(company_slice)
+                    ]
+                    return await asyncio.gather(*tasks, return_exceptions=False)
+                finally:
+                    if session is not None:
+                        await session.close()
 
             for chunk in _chunk_list(companies, batch_size):
                 provider_capacity = 1200 * len(active_providers)
