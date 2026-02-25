@@ -351,6 +351,26 @@ class DatabaseService:
                 num_char_raw_main,
             )
 
+    async def save_scrape_main_step1_success(
+        self,
+        cnpj_basico: str,
+        website_url: Optional[str] = None,
+    ) -> None:
+        """
+        Marca etapa 1 como sucesso no novo fluxo sem raw_content.
+        """
+        sanitized_website_url = _sanitize_text_for_postgres(website_url)
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                UPDATE "{SCHEMA}".scrape_main
+                SET error_step1 = NULL,
+                    website_url = COALESCE($2, website_url)
+                WHERE cnpj_basico = $1
+                """
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.step1_success")
+            await conn.execute(query, cnpj_basico, sanitized_website_url)
+
     async def save_scrape_main_error(
         self,
         cnpj_basico: str,
@@ -390,8 +410,8 @@ class DatabaseService:
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
-                SELECT cnpj_basico, website_url, raw_content, subpage_links, mainpage_processada,
-                       num_char_raw_main, num_char_main_processada,
+                SELECT cnpj_basico, website_url, subpage_links, mainpage_processada,
+                       num_char_main_processada,
                        error_step1, error_step2, error_step3
                 FROM "{SCHEMA}".scrape_main
                 WHERE cnpj_basico = $1
@@ -482,16 +502,16 @@ class DatabaseService:
         after_id: int = 0,
     ) -> List[Dict[str, Any]]:
         """
-        Carrega registros aptos para etapa 2 (raw_content disponível e links ainda não processados).
+        Carrega registros aptos para etapa 2 (links ainda não processados).
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
-                SELECT id, cnpj_basico, website_url, raw_content
+                SELECT id, cnpj_basico, website_url
                 FROM "{SCHEMA}".scrape_main
                 WHERE id > $1
-                  AND raw_content IS NOT NULL
-                  AND LENGTH(TRIM(raw_content)) > 0
+                  AND website_url IS NOT NULL
+                  AND TRIM(website_url) <> ''
                   AND (subpage_links IS NULL OR TRIM(subpage_links) = '')
                 ORDER BY id
                 LIMIT $2
@@ -505,16 +525,16 @@ class DatabaseService:
         after_id: int = 0,
     ) -> List[Dict[str, Any]]:
         """
-        Carrega registros aptos para etapa 3 (raw_content disponível e texto processado vazio).
+        Carrega registros aptos para etapa 3 (texto processado vazio).
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
-                SELECT id, cnpj_basico, website_url, raw_content
+                SELECT id, cnpj_basico, website_url
                 FROM "{SCHEMA}".scrape_main
                 WHERE id > $1
-                  AND raw_content IS NOT NULL
-                  AND LENGTH(TRIM(raw_content)) > 0
+                  AND website_url IS NOT NULL
+                  AND TRIM(website_url) <> ''
                   AND (mainpage_processada IS NULL OR TRIM(mainpage_processada) = '')
                 ORDER BY id
                 LIMIT $2
@@ -532,15 +552,11 @@ class DatabaseService:
         payload = []
         for r in records:
             website_url = _sanitize_text_for_postgres(r["website_url"])
-            raw_content = _sanitize_text_for_postgres(r.get("raw_content"))
             error_step1 = _sanitize_text_for_postgres(r.get("error_step1"))
-            num_char_raw_main = len(raw_content or "")
             payload.append(
                 (
                     r["cnpj_basico"],
                     website_url,
-                    raw_content,
-                    num_char_raw_main,
                     error_step1,
                 )
             )
@@ -549,14 +565,73 @@ class DatabaseService:
         async with pool.acquire() as conn:
             query = f"""
                 INSERT INTO "{SCHEMA}".scrape_main
-                    (cnpj_basico, website_url, raw_content, num_char_raw_main, error_step1)
-                VALUES ($1, $2, $3, $4, $5)
+                    (cnpj_basico, website_url, error_step1)
+                VALUES ($1, $2, $3)
                 ON CONFLICT (cnpj_basico)
                 DO UPDATE SET
                     website_url = EXCLUDED.website_url,
-                    raw_content = EXCLUDED.raw_content,
-                    num_char_raw_main = EXCLUDED.num_char_raw_main,
                     error_step1 = EXCLUDED.error_step1
+                """
+            await conn.executemany(query, payload)
+            return len(payload)
+
+    async def save_scrape_main_unified_batch(self, records: List[Dict[str, Any]]) -> int:
+        """
+        Persiste resultado unificado das etapas 1/2/3 sem raw_content.
+        """
+        if not records:
+            return 0
+
+        payload = []
+        for r in records:
+            website_url = _sanitize_text_for_postgres(r.get("website_url"))
+            error_step1 = _sanitize_text_for_postgres(r.get("error_step1"))
+            subpage_links = _sanitize_text_for_postgres(r.get("subpage_links"))
+            error_step2 = _sanitize_text_for_postgres(r.get("error_step2"))
+            mainpage_processada = _sanitize_text_for_postgres(r.get("mainpage_processada"))
+            error_step3 = _sanitize_text_for_postgres(r.get("error_step3"))
+            num_subpages = int(r.get("num_subpages") or 0)
+            num_char_main_processada = len(mainpage_processada or "")
+            payload.append(
+                (
+                    r["cnpj_basico"],
+                    website_url,
+                    error_step1,
+                    subpage_links,
+                    num_subpages,
+                    error_step2,
+                    mainpage_processada,
+                    num_char_main_processada,
+                    error_step3,
+                )
+            )
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            query = f"""
+                INSERT INTO "{SCHEMA}".scrape_main
+                    (
+                        cnpj_basico,
+                        website_url,
+                        error_step1,
+                        subpage_links,
+                        num_subpages,
+                        error_step2,
+                        mainpage_processada,
+                        num_char_main_processada,
+                        error_step3
+                    )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                ON CONFLICT (cnpj_basico)
+                DO UPDATE SET
+                    website_url = EXCLUDED.website_url,
+                    error_step1 = EXCLUDED.error_step1,
+                    subpage_links = EXCLUDED.subpage_links,
+                    num_subpages = EXCLUDED.num_subpages,
+                    error_step2 = EXCLUDED.error_step2,
+                    mainpage_processada = EXCLUDED.mainpage_processada,
+                    num_char_main_processada = EXCLUDED.num_char_main_processada,
+                    error_step3 = EXCLUDED.error_step3
                 """
             await conn.executemany(query, payload)
             return len(payload)

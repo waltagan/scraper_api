@@ -115,6 +115,101 @@ async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
             logger.error("[BACKGROUND] Falha adicional ao persistir erro da etapa1", exc_info=True)
 
 
+async def _run_unified_one(
+    cnpj_basico: str,
+    website_url: str,
+    timeout_seconds: int,
+    proxy_url: str = "",
+    proxy_provider: str = "",
+) -> Dict[str, Any]:
+    """
+    Executa etapas 1/2/3 em memória, sem persistir raw_content.
+    """
+    final_url, status_code, raw_content, step1_error = await scrape_main_page_raw(
+        website_url,
+        timeout=timeout_seconds,
+        proxy=proxy_url,
+    )
+
+    result: Dict[str, Any] = {
+        "cnpj_basico": cnpj_basico,
+        "website_url": final_url or website_url,
+        "error_step1": None,
+        "subpage_links": None,
+        "num_subpages": 0,
+        "error_step2": None,
+        "mainpage_processada": None,
+        "error_step3": None,
+    }
+
+    if step1_error:
+        result["error_step1"] = (
+            f"step1:{step1_error} | status={status_code} | final_url={final_url}"
+            + (f" | provider={proxy_provider}" if proxy_provider else "")
+        )
+        return result
+
+    # Etapa 1 concluída sem erro (sem salvar raw_content)
+    result["error_step1"] = None
+
+    # Etapa 2
+    try:
+        links = extract_subpage_links_from_raw(raw_content or "", final_url or website_url)
+        result["subpage_links"] = json.dumps(links, ensure_ascii=False)
+        result["num_subpages"] = len(links)
+        result["error_step2"] = None
+    except Exception as exc:
+        result["error_step2"] = f"step2:exception:{type(exc).__name__}:{str(exc)[:300]}"
+
+    # Etapa 3
+    try:
+        processed_text = extract_mainpage_text_from_raw(raw_content or "", final_url or website_url)
+        if not processed_text.strip():
+            raise ValueError("não foi possível extrair texto útil")
+        result["mainpage_processada"] = processed_text
+        result["error_step3"] = None
+    except Exception as exc:
+        result["error_step3"] = f"step3:exception:{type(exc).__name__}:{str(exc)[:300]}"
+
+    return result
+
+
+async def _process_scrape_main_unified_background(request: ScrapeMainPageRequest):
+    """
+    Endpoint unificado: executa etapas 1/2/3 em sequência para um CNPJ.
+    Não persiste raw_content.
+    """
+    try:
+        await db_service.upsert_scrape_main_base(
+            cnpj_basico=request.cnpj_basico,
+            website_url=request.website_url,
+        )
+        result = await _run_unified_one(
+            cnpj_basico=request.cnpj_basico,
+            website_url=request.website_url,
+            timeout_seconds=30,
+        )
+        await db_service.save_scrape_main_unified_batch([result])
+        logger.info(
+            "[BACKGROUND] scrape_main_unified concluido: cnpj=%s err1=%s err2=%s err3=%s",
+            request.cnpj_basico,
+            bool(result.get("error_step1")),
+            bool(result.get("error_step2")),
+            bool(result.get("error_step3")),
+        )
+    except Exception as e:
+        logger.error(f"[BACKGROUND] Erro no endpoint unificado: {e}", exc_info=True)
+        try:
+            await db_service.save_scrape_main_error(
+                cnpj_basico=request.cnpj_basico,
+                error=f"step1:exception:{type(e).__name__}:{str(e)[:300]}",
+                step=1,
+                website_url=request.website_url,
+            )
+        except Exception:
+            logger.error("[BACKGROUND] Falha adicional ao persistir erro do unificado", exc_info=True)
+
+
 async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
     """
     Batch etapa 1:
@@ -262,6 +357,121 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
         processed,
         requested_total,
         elapsed_s,
+    )
+
+
+async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
+    """
+    Batch unificado:
+    - lê website_discovery ausente em scrape_main
+    - executa etapas 1/2/3 em memória
+    - persiste apenas campos finais/erros por etapa (sem raw_content)
+    """
+    started_at = time.perf_counter()
+    requested_total = request.total_samples
+    batch_size = request.batch_size
+    save_every = request.save_every
+    timeout_seconds = request.timeout_seconds
+
+    processed = 0
+    after_id = 0
+    pending_results: List[Dict[str, Any]] = []
+
+    logger.info(
+        "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss",
+        requested_total, batch_size, save_every, timeout_seconds,
+    )
+
+    await proxy_pool.preload()
+    proxy_snapshot = proxy_pool.get_provider_proxy_snapshot()
+    provider_order = ["711proxy", "decodo", "evomi"]
+    provider_proxy_lists = {
+        provider: proxy_snapshot.get(provider, [])
+        for provider in provider_order
+        if proxy_snapshot.get(provider)
+    }
+    active_providers = [p for p in provider_order if p in provider_proxy_lists]
+    if not active_providers:
+        logger.error("[BATCH-UNIFIED] Nenhum proxy carregado para execução")
+        return
+
+    while processed < requested_total:
+        remaining = requested_total - processed
+        fetch_limit = min(5000, remaining)
+        companies = await db_service.get_pending_scrape_main_step1_companies(
+            limit=fetch_limit,
+            after_id=after_id,
+        )
+        if not companies:
+            break
+
+        after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
+
+        async def run_provider_slice(
+            provider: str,
+            company_slice: List[Dict[str, Any]],
+            proxy_urls: List[str],
+        ) -> List[Dict[str, Any]]:
+            tasks = [
+                _run_unified_one(
+                    cnpj_basico=company["cnpj_basico"],
+                    website_url=company["website_url"],
+                    timeout_seconds=timeout_seconds,
+                    proxy_url=proxy_urls[i % len(proxy_urls)],
+                    proxy_provider=provider,
+                )
+                for i, company in enumerate(company_slice)
+            ]
+            return await asyncio.gather(*tasks, return_exceptions=False)
+
+        for chunk in _chunk_list(companies, batch_size):
+            provider_capacity = 1200 * len(active_providers)
+            for start_idx in range(0, len(chunk), provider_capacity):
+                provider_window = chunk[start_idx:start_idx + provider_capacity]
+                allocation = _allocate_provider_slices(
+                    total_items=len(provider_window),
+                    providers=active_providers,
+                    per_provider_cap=1200,
+                )
+                cursor = 0
+                jobs = []
+                for provider in active_providers:
+                    take = allocation.get(provider, 0)
+                    company_slice = provider_window[cursor:cursor + take]
+                    cursor += take
+                    if not company_slice:
+                        continue
+                    jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
+
+                if jobs:
+                    provider_results = await asyncio.gather(*jobs, return_exceptions=False)
+                    for results in provider_results:
+                        pending_results.extend(results)
+
+                while len(pending_results) >= save_every:
+                    flush = pending_results[:save_every]
+                    pending_results = pending_results[save_every:]
+                    saved = await db_service.save_scrape_main_unified_batch(flush)
+                    processed += saved
+                    logger.info("[BATCH-UNIFIED] checkpoint: %s/%s", processed, requested_total)
+                    if processed >= requested_total:
+                        break
+
+                if processed >= requested_total:
+                    break
+            if processed >= requested_total:
+                break
+
+    if pending_results and processed < requested_total:
+        max_to_save = min(len(pending_results), requested_total - processed)
+        saved = await db_service.save_scrape_main_unified_batch(pending_results[:max_to_save])
+        processed += saved
+        logger.info("[BATCH-UNIFIED] flush final: %s/%s", processed, requested_total)
+
+    elapsed_s = round(time.perf_counter() - started_at, 2)
+    logger.info(
+        "[BATCH-UNIFIED] Concluído: processados=%s solicitados=%s elapsed_s=%s",
+        processed, requested_total, elapsed_s,
     )
 
 
@@ -645,6 +855,30 @@ async def scrape_main_page(request: ScrapeMainPageRequest) -> ScrapeMainPageResp
         raise HTTPException(status_code=500, detail=f"Erro ao aceitar requisicao: {str(e)}")
 
 
+@router.post("/scrape/main-page/unified", response_model=ScrapeMainPageResponse)
+async def scrape_main_page_unified(request: ScrapeMainPageRequest) -> ScrapeMainPageResponse:
+    """
+    Endpoint unificado: executa etapas 1, 2 e 3 em sequência para o CNPJ.
+    Não persiste raw_content no banco.
+    """
+    try:
+        logger.info(
+            "Requisicao scrape_main_page_unified recebida: cnpj=%s, url=%s",
+            request.cnpj_basico,
+            request.website_url,
+        )
+        asyncio.create_task(_process_scrape_main_unified_background(request))
+        return ScrapeMainPageResponse(
+            success=True,
+            message=f"Endpoint unificado aceito para CNPJ {request.cnpj_basico}.",
+            cnpj_basico=request.cnpj_basico,
+            status="accepted",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar requisicao do endpoint unificado: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar requisicao: {str(e)}")
+
+
 @router.post("/scrape/main-page/subpage-links", response_model=ScrapeMainPageResponse)
 async def extract_subpage_links(request: ScrapeMainPageProcessRequest) -> ScrapeMainPageResponse:
     """
@@ -704,6 +938,30 @@ async def scrape_main_page_batch(request: ScrapeMainPageBatchRequest) -> ScrapeM
         )
     except Exception as e:
         logger.error(f"Erro ao aceitar batch da etapa 1: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao aceitar batch: {str(e)}")
+
+
+@router.post("/scrape/main-page/unified/batch", response_model=ScrapeMainBatchResponse)
+async def scrape_main_page_unified_batch(request: ScrapeMainPageBatchRequest) -> ScrapeMainBatchResponse:
+    """
+    Endpoint batch unificado:
+    - source: website_discovery ausente em scrape_main
+    - executa etapas 1/2/3 em memória
+    - salva somente campos finais/erros por etapa (sem raw_content)
+    """
+    try:
+        asyncio.create_task(_run_unified_batch_background(request))
+        return ScrapeMainBatchResponse(
+            success=True,
+            status="accepted",
+            stage="unified",
+            total_samples=request.total_samples,
+            batch_size=request.batch_size,
+            save_every=request.save_every,
+            message="Batch unificado aceito para processamento em background.",
+        )
+    except Exception as e:
+        logger.error(f"Erro ao aceitar batch unificado: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erro ao aceitar batch: {str(e)}")
 
 
