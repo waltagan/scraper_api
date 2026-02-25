@@ -135,6 +135,8 @@ async def _run_unified_one(
     """
     Executa etapas 1/2/3 em memória, sem persistir raw_content.
     """
+    overall_t0 = time.perf_counter()
+    step1_t0 = time.perf_counter()
     if session is not None:
         final_url, status_code, raw_content, step1_error = await scrape_main_page_raw_with_session(
             session=session,
@@ -148,6 +150,7 @@ async def _run_unified_one(
             timeout=timeout_seconds,
             proxy=proxy_url,
         )
+    step1_ms = (time.perf_counter() - step1_t0) * 1000.0
 
     result: Dict[str, Any] = {
         "cnpj_basico": cnpj_basico,
@@ -158,6 +161,10 @@ async def _run_unified_one(
         "error_step2": None,
         "mainpage_processada": None,
         "error_step3": None,
+        "timing_step1_ms": round(step1_ms, 2),
+        "timing_step2_ms": 0.0,
+        "timing_step3_ms": 0.0,
+        "timing_total_ms": 0.0,
     }
 
     if step1_error:
@@ -165,12 +172,14 @@ async def _run_unified_one(
             f"step1:{step1_error} | status={status_code} | final_url={final_url}"
             + (f" | provider={proxy_provider}" if proxy_provider else "")
         )
+        result["timing_total_ms"] = round((time.perf_counter() - overall_t0) * 1000.0, 2)
         return result
 
     # Etapa 1 concluída sem erro (sem salvar raw_content)
     result["error_step1"] = None
 
     # Etapa 2
+    step2_t0 = time.perf_counter()
     try:
         links = extract_subpage_links_from_raw(raw_content or "", final_url or website_url)
         result["subpage_links"] = json.dumps(links, ensure_ascii=False)
@@ -178,8 +187,11 @@ async def _run_unified_one(
         result["error_step2"] = None
     except Exception as exc:
         result["error_step2"] = f"step2:exception:{type(exc).__name__}:{str(exc)[:300]}"
+    finally:
+        result["timing_step2_ms"] = round((time.perf_counter() - step2_t0) * 1000.0, 2)
 
     # Etapa 3
+    step3_t0 = time.perf_counter()
     try:
         processed_text = extract_mainpage_text_from_raw(raw_content or "", final_url or website_url)
         if not processed_text.strip():
@@ -188,7 +200,10 @@ async def _run_unified_one(
         result["error_step3"] = None
     except Exception as exc:
         result["error_step3"] = f"step3:exception:{type(exc).__name__}:{str(exc)[:300]}"
+    finally:
+        result["timing_step3_ms"] = round((time.perf_counter() - step3_t0) * 1000.0, 2)
 
+    result["timing_total_ms"] = round((time.perf_counter() - overall_t0) * 1000.0, 2)
     return result
 
 
@@ -403,6 +418,20 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
     sentinel = object()
     persist_lock = asyncio.Lock()
 
+    # Métricas de funil (tempos em ms)
+    db_load_total_ms = 0.0
+    db_load_calls = 0
+    proxy_wall_total_ms = 0.0
+    proxy_waves = 0
+    step1_total_ms = 0.0
+    step1_max_ms = 0.0
+    step2_total_ms = 0.0
+    step3_total_ms = 0.0
+    processing_total_ms = 0.0
+    processing_items = 0
+    save_total_ms = 0.0
+    save_flushes = 0
+
     logger.info(
         "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s timeout=%ss writers=%s flush_size=%s queue_maxsize=%s retry=%s",
         requested_total,
@@ -428,7 +457,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
         return
 
     async def flush_with_retry(records: List[Dict[str, Any]], worker_id: int) -> int:
-        nonlocal persisted
+        nonlocal persisted, save_total_ms, save_flushes
         if not records:
             return 0
 
@@ -436,16 +465,21 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
         while True:
             attempt += 1
             try:
+                save_t0 = time.perf_counter()
                 saved = await db_service.save_scrape_main_unified_batch(records)
+                save_ms = (time.perf_counter() - save_t0) * 1000.0
                 async with persist_lock:
                     persisted += saved
                     checkpoint = persisted
+                    save_total_ms += save_ms
+                    save_flushes += 1
                 logger.info(
-                    "[BATCH-UNIFIED][writer=%s] checkpoint: %s/%s (flush=%s)",
+                    "[BATCH-UNIFIED][writer=%s] checkpoint: %s/%s (flush=%s save_ms=%.1f)",
                     worker_id,
                     checkpoint,
                     requested_total,
                     saved,
+                    save_ms,
                 )
                 return saved
             except Exception as exc:
@@ -497,9 +531,20 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
         while produced < requested_total:
             remaining = requested_total - produced
             fetch_limit = min(5000, remaining)
+            db_t0 = time.perf_counter()
             companies = await db_service.get_pending_scrape_main_step1_companies(
                 limit=fetch_limit,
                 after_id=after_id,
+            )
+            db_ms = (time.perf_counter() - db_t0) * 1000.0
+            db_load_total_ms += db_ms
+            db_load_calls += 1
+            logger.info(
+                "[BATCH-UNIFIED][FUNIL] carregar_db: rows=%s fetch_ms=%.1f total_fetch_ms=%.1f calls=%s",
+                len(companies),
+                db_ms,
+                db_load_total_ms,
+                db_load_calls,
             )
             if not companies:
                 break
@@ -557,20 +602,34 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
                         jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
 
                     if jobs:
+                        proxy_wave_t0 = time.perf_counter()
                         provider_results = await asyncio.gather(*jobs, return_exceptions=False)
+                        proxy_wave_ms = (time.perf_counter() - proxy_wave_t0) * 1000.0
+                        proxy_wall_total_ms += proxy_wave_ms
+                        proxy_waves += 1
                         for results in provider_results:
                             for result in results:
                                 if produced >= requested_total:
                                     break
+                                s1 = float(result.get("timing_step1_ms") or 0.0)
+                                s2 = float(result.get("timing_step2_ms") or 0.0)
+                                s3 = float(result.get("timing_step3_ms") or 0.0)
+                                step1_total_ms += s1
+                                step1_max_ms = max(step1_max_ms, s1)
+                                step2_total_ms += s2
+                                step3_total_ms += s3
+                                processing_total_ms += (s2 + s3)
+                                processing_items += 1
                                 await queue.put(result)
                                 produced += 1
 
                     logger.info(
-                        "[BATCH-UNIFIED] progresso producer: produced=%s persisted=%s queue=%s/%s",
+                        "[BATCH-UNIFIED] progresso producer: produced=%s persisted=%s queue=%s/%s proxy_wave_ms=%.1f",
                         produced,
                         persisted,
                         queue.qsize(),
                         queue_maxsize,
+                        proxy_wave_ms if jobs else 0.0,
                     )
 
                     if produced >= requested_total:
@@ -609,6 +668,40 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest):
             )
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
+    avg_db_fetch_ms = (db_load_total_ms / db_load_calls) if db_load_calls else 0.0
+    avg_step1_ms = (step1_total_ms / processing_items) if processing_items else 0.0
+    avg_processing_ms = (processing_total_ms / processing_items) if processing_items else 0.0
+    avg_save_flush_ms = (save_total_ms / save_flushes) if save_flushes else 0.0
+
+    logger.info(
+        "[BATCH-UNIFIED][FUNIL] carregar_db_total_ms=%.1f calls=%s avg_fetch_ms=%.1f",
+        db_load_total_ms,
+        db_load_calls,
+        avg_db_fetch_ms,
+    )
+    logger.info(
+        "[BATCH-UNIFIED][FUNIL] chamadas_proxy_wall_total_ms=%.1f waves=%s avg_step1_ms=%.1f max_step1_ms=%.1f timeout_config_s=%s",
+        proxy_wall_total_ms,
+        proxy_waves,
+        avg_step1_ms,
+        step1_max_ms,
+        timeout_seconds,
+    )
+    logger.info(
+        "[BATCH-UNIFIED][FUNIL] processamento_lotes_total_ms=%.1f items=%s avg_processamento_ms=%.1f (step2_total_ms=%.1f step3_total_ms=%.1f)",
+        processing_total_ms,
+        processing_items,
+        avg_processing_ms,
+        step2_total_ms,
+        step3_total_ms,
+    )
+    logger.info(
+        "[BATCH-UNIFIED][FUNIL] salvamento_total_ms=%.1f flushes=%s avg_flush_ms=%.1f persistidos=%s",
+        save_total_ms,
+        save_flushes,
+        avg_save_flush_ms,
+        persisted,
+    )
     logger.info(
         "[BATCH-UNIFIED] Concluído: produzidos=%s persistidos=%s solicitados=%s elapsed_s=%s",
         produced,
