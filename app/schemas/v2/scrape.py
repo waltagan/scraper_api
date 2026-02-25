@@ -116,10 +116,10 @@ class ScrapeMainPageBatchRequest(BaseModel):
     """Request para processamento em lote da etapa 1."""
     total_samples: int = Field(100000, ge=1, description="Total de registros a processar")
     batch_size: int = Field(
-        3600,
+        3000,
         ge=1,
-        le=3600,
-        description="Tamanho do lote concorrente (máximo recomendado 3600)",
+        le=3000,
+        description="Tamanho do lote concorrente (máximo recomendado 3000)",
     )
     save_every: int = Field(
         1000,
@@ -137,7 +137,7 @@ class ScrapeMainPageBatchRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "total_samples": 100000,
-                "batch_size": 3600,
+                "batch_size": 3000,
                 "save_every": 1000,
                 "timeout_seconds": 40,
             }

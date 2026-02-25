@@ -72,51 +72,6 @@ def _allocate_provider_slices(
     return allocation
 
 
-async def _save_unified_results_parallel(
-    records: List[Dict[str, Any]],
-    max_to_save: int,
-    num_connections: int = 10,
-) -> int:
-    """
-    Salva resultados unificados em paralelo usando múltiplas conexões.
-    A persistência ocorre apenas ao final do batch.
-    """
-    if not records or max_to_save <= 0:
-        return 0
-
-    records_to_save = records[:max_to_save]
-    chunk_size = max(1, (len(records_to_save) + num_connections - 1) // num_connections)
-    chunks = _chunk_list(records_to_save, chunk_size)
-
-    logger.info(
-        "[BATCH-UNIFIED][FASE=salvamento][SUBFASE=preparar_lotes] total_registros=%s total_chunks=%s conexoes=%s chunk_size=%s",
-        len(records_to_save),
-        len(chunks),
-        num_connections,
-        chunk_size,
-    )
-
-    async def save_chunk(chunk_idx: int, chunk_records: List[Dict[str, Any]]) -> int:
-        logger.info(
-            "[BATCH-UNIFIED][FASE=salvamento][SUBFASE=chunk_inicio] chunk=%s tamanho=%s",
-            chunk_idx,
-            len(chunk_records),
-        )
-        saved = await db_service.save_scrape_main_unified_batch(chunk_records)
-        logger.info(
-            "[BATCH-UNIFIED][FASE=salvamento][SUBFASE=chunk_fim] chunk=%s salvos=%s",
-            chunk_idx,
-            saved,
-        )
-        return saved
-
-    results = await asyncio.gather(
-        *[save_chunk(idx + 1, chunk) for idx, chunk in enumerate(chunks)],
-        return_exceptions=False,
-    )
-    return sum(results)
-
-
 async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
     """Etapa 1: scrape da main page e persistência de raw_content/error."""
     try:
@@ -170,14 +125,11 @@ async def _run_unified_one(
     """
     Executa etapas 1/2/3 em memória, sem persistir raw_content.
     """
-    t0_total = time.perf_counter()
-    t0_coleta = time.perf_counter()
     final_url, status_code, raw_content, step1_error = await scrape_main_page_raw(
         website_url,
         timeout=timeout_seconds,
         proxy=proxy_url,
     )
-    coleta_ms = round((time.perf_counter() - t0_coleta) * 1000, 2)
 
     result: Dict[str, Any] = {
         "cnpj_basico": cnpj_basico,
@@ -188,12 +140,6 @@ async def _run_unified_one(
         "error_step2": None,
         "mainpage_processada": None,
         "error_step3": None,
-        "__provider": proxy_provider or "unknown",
-        "__status_code": status_code,
-        "__coleta_ms": coleta_ms,
-        "__processamento_links_ms": 0.0,
-        "__processamento_texto_ms": 0.0,
-        "__total_ms": 0.0,
     }
 
     if step1_error:
@@ -201,7 +147,6 @@ async def _run_unified_one(
             f"step1:{step1_error} | status={status_code} | final_url={final_url}"
             + (f" | provider={proxy_provider}" if proxy_provider else "")
         )
-        result["__total_ms"] = round((time.perf_counter() - t0_total) * 1000, 2)
         return result
 
     # Etapa 1 concluída sem erro (sem salvar raw_content)
@@ -209,9 +154,7 @@ async def _run_unified_one(
 
     # Etapa 2
     try:
-        t0_links = time.perf_counter()
         links = extract_subpage_links_from_raw(raw_content or "", final_url or website_url)
-        result["__processamento_links_ms"] = round((time.perf_counter() - t0_links) * 1000, 2)
         result["subpage_links"] = json.dumps(links, ensure_ascii=False)
         result["num_subpages"] = len(links)
         result["error_step2"] = None
@@ -220,9 +163,7 @@ async def _run_unified_one(
 
     # Etapa 3
     try:
-        t0_texto = time.perf_counter()
         processed_text = extract_mainpage_text_from_raw(raw_content or "", final_url or website_url)
-        result["__processamento_texto_ms"] = round((time.perf_counter() - t0_texto) * 1000, 2)
         if not processed_text.strip():
             raise ValueError("não foi possível extrair texto útil")
         result["mainpage_processada"] = processed_text
@@ -230,7 +171,6 @@ async def _run_unified_one(
     except Exception as exc:
         result["error_step3"] = f"step3:exception:{type(exc).__name__}:{str(exc)[:300]}"
 
-    result["__total_ms"] = round((time.perf_counter() - t0_total) * 1000, 2)
     return result
 
 
@@ -426,7 +366,7 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
     - lê website_discovery ausente em scrape_main
     - executa etapas 1/2/3 em memória
     - persiste apenas campos finais/erros por etapa (sem raw_content)
-    - salvamento único ao final em 10 conexões paralelas
+    - salva no banco somente após finalizar todo o processamento
     """
     started_at = time.perf_counter()
     requested_total = request.total_samples
@@ -434,33 +374,15 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
     save_every = request.save_every
     timeout_seconds = request.timeout_seconds
 
-    collected = 0
-    saved_total = 0
+    processed = 0
     after_id = 0
     pending_results: List[Dict[str, Any]] = []
-    stats: Dict[str, Any] = {
-        "step1_ok": 0,
-        "step1_error": 0,
-        "step2_ok": 0,
-        "step2_error": 0,
-        "step3_ok": 0,
-        "step3_error": 0,
-        "coleta_ms_sum": 0.0,
-        "proc_links_ms_sum": 0.0,
-        "proc_texto_ms_sum": 0.0,
-        "total_ms_sum": 0.0,
-        "by_provider": {},
-    }
 
     logger.info(
-        "[BATCH-UNIFIED][FASE=inicio] total=%s batch_size=%s timeout_coleta=%ss save_every=%s (ignorado; salvamento apenas final)",
-        requested_total,
-        batch_size,
-        timeout_seconds,
-        save_every,
+        "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss",
+        requested_total, batch_size, save_every, timeout_seconds,
     )
 
-    logger.info("[BATCH-UNIFIED][FASE=coleta][SUBFASE=preload_proxies] iniciando preload")
     await proxy_pool.preload()
     proxy_snapshot = proxy_pool.get_provider_proxy_snapshot()
     provider_order = ["711proxy", "decodo", "evomi"]
@@ -473,36 +395,18 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
     if not active_providers:
         logger.error("[BATCH-UNIFIED] Nenhum proxy carregado para execução")
         return
-    logger.info(
-        "[BATCH-UNIFIED][FASE=coleta][SUBFASE=proxies_ativos] providers=%s cap_por_provider=%s cap_total_onda=%s",
-        active_providers,
-        1000,
-        1000 * len(active_providers),
-    )
 
-    while collected < requested_total:
-        remaining = requested_total - collected
+    while processed < requested_total:
+        remaining = requested_total - processed
         fetch_limit = min(5000, remaining)
-        logger.info(
-            "[BATCH-UNIFIED][FASE=coleta][SUBFASE=buscar_pendentes] after_id=%s fetch_limit=%s remaining=%s",
-            after_id,
-            fetch_limit,
-            remaining,
-        )
         companies = await db_service.get_pending_scrape_main_step1_companies(
             limit=fetch_limit,
             after_id=after_id,
         )
         if not companies:
-            logger.info("[BATCH-UNIFIED][FASE=coleta][SUBFASE=buscar_pendentes] nenhum_registro_encontrado")
             break
 
         after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
-        logger.info(
-            "[BATCH-UNIFIED][FASE=coleta][SUBFASE=buscar_pendentes] fetched=%s novo_after_id=%s",
-            len(companies),
-            after_id,
-        )
 
         async def run_provider_slice(
             provider: str,
@@ -523,22 +427,12 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
 
         for chunk in _chunk_list(companies, batch_size):
             provider_capacity = 1000 * len(active_providers)
-            logger.info(
-                "[BATCH-UNIFIED][FASE=coleta][SUBFASE=chunk] tamanho_chunk=%s cap_onda=%s",
-                len(chunk),
-                provider_capacity,
-            )
             for start_idx in range(0, len(chunk), provider_capacity):
                 provider_window = chunk[start_idx:start_idx + provider_capacity]
                 allocation = _allocate_provider_slices(
                     total_items=len(provider_window),
                     providers=active_providers,
                     per_provider_cap=1000,
-                )
-                logger.info(
-                    "[BATCH-UNIFIED][FASE=coleta][SUBFASE=alocacao_provider] janela=%s allocation=%s",
-                    len(provider_window),
-                    allocation,
                 )
                 cursor = 0
                 jobs = []
@@ -554,90 +448,24 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
                     provider_results = await asyncio.gather(*jobs, return_exceptions=False)
                     for results in provider_results:
                         pending_results.extend(results)
-                        collected += len(results)
-                        for r in results:
-                            provider = r.get("__provider", "unknown")
-                            pstats = stats["by_provider"].setdefault(
-                                provider,
-                                {"total": 0, "step1_error": 0, "step2_error": 0, "step3_error": 0},
-                            )
-                            pstats["total"] += 1
-                            stats["coleta_ms_sum"] += float(r.get("__coleta_ms", 0.0) or 0.0)
-                            stats["proc_links_ms_sum"] += float(r.get("__processamento_links_ms", 0.0) or 0.0)
-                            stats["proc_texto_ms_sum"] += float(r.get("__processamento_texto_ms", 0.0) or 0.0)
-                            stats["total_ms_sum"] += float(r.get("__total_ms", 0.0) or 0.0)
-
-                            if r.get("error_step1"):
-                                stats["step1_error"] += 1
-                                pstats["step1_error"] += 1
-                            else:
-                                stats["step1_ok"] += 1
-                                if r.get("error_step2"):
-                                    stats["step2_error"] += 1
-                                    pstats["step2_error"] += 1
-                                else:
-                                    stats["step2_ok"] += 1
-                                if r.get("error_step3"):
-                                    stats["step3_error"] += 1
-                                    pstats["step3_error"] += 1
-                                else:
-                                    stats["step3_ok"] += 1
-
-                logger.info(
-                    "[BATCH-UNIFIED][FASE=processamento][SUBFASE=janela_concluida] coletados=%s/%s buffer_memoria=%s step1_ok=%s step1_error=%s step2_error=%s step3_error=%s",
-                    collected,
-                    requested_total,
-                    len(pending_results),
-                    stats["step1_ok"],
-                    stats["step1_error"],
-                    stats["step2_error"],
-                    stats["step3_error"],
-                )
-
-                if collected >= requested_total:
+                        processed += len(results)
+                        if processed >= requested_total:
+                            break
+                if processed >= requested_total:
                     break
-            if collected >= requested_total:
+            if processed >= requested_total:
                 break
 
     if pending_results:
-        t0_save = time.perf_counter()
         max_to_save = min(len(pending_results), requested_total)
-        logger.info(
-            "[BATCH-UNIFIED][FASE=salvamento][SUBFASE=inicio] buffer_total=%s max_to_save=%s conexoes=10",
-            len(pending_results),
-            max_to_save,
-        )
-        saved_total = await _save_unified_results_parallel(
-            pending_results,
-            max_to_save=max_to_save,
-            num_connections=10,
-        )
-        save_elapsed_s = round(time.perf_counter() - t0_save, 2)
-        logger.info(
-            "[BATCH-UNIFIED][FASE=salvamento][SUBFASE=fim] salvos=%s elapsed_s=%s",
-            saved_total,
-            save_elapsed_s,
-        )
+        saved = await db_service.save_scrape_main_unified_batch(pending_results[:max_to_save])
+        logger.info("[BATCH-UNIFIED] flush final único: %s/%s", saved, requested_total)
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
-    avg_coleta_ms = round(stats["coleta_ms_sum"] / collected, 2) if collected else 0.0
-    avg_links_ms = round(stats["proc_links_ms_sum"] / max(1, stats["step1_ok"]), 2) if stats["step1_ok"] else 0.0
-    avg_texto_ms = round(stats["proc_texto_ms_sum"] / max(1, stats["step1_ok"]), 2) if stats["step1_ok"] else 0.0
-    avg_total_ms = round(stats["total_ms_sum"] / collected, 2) if collected else 0.0
     logger.info(
-        "[BATCH-UNIFIED][FASE=resumo] coletados=%s solicitados=%s salvos=%s elapsed_s=%s avg_coleta_ms=%s avg_proc_links_ms=%s avg_proc_texto_ms=%s avg_total_ms=%s",
-        collected,
-        requested_total,
-        saved_total,
-        elapsed_s,
-        avg_coleta_ms,
-        avg_links_ms,
-        avg_texto_ms,
-        avg_total_ms,
+        "[BATCH-UNIFIED] Concluído: processados=%s solicitados=%s elapsed_s=%s",
+        processed, requested_total, elapsed_s,
     )
-    logger.info("[BATCH-UNIFIED][FASE=resumo][SUBFASE=etapas] step1_ok=%s step1_error=%s step2_ok=%s step2_error=%s step3_ok=%s step3_error=%s",
-                stats["step1_ok"], stats["step1_error"], stats["step2_ok"], stats["step2_error"], stats["step3_ok"], stats["step3_error"])
-    logger.info("[BATCH-UNIFIED][FASE=resumo][SUBFASE=providers] %s", stats["by_provider"])
 
 
 async def _process_extract_subpage_links_background(request: ScrapeMainPageProcessRequest):

@@ -38,9 +38,10 @@ Documentação interativa: `/docs`
 
 ## Padrões no Scraper
 
-- Pipeline em 2 etapas globais: probe+main em janelas de 3600 e subpages em ondas de 3600.
+- Pipeline em 2 etapas globais com limite de 1000 conexões por provider (até 3000 por onda com 3 providers).
 - Timeouts fixos de 30s e sem retry para manter comportamento previsível próximo ao stress test.
-- Distribuição de providers em round-robin fixo (sem pesos) no pool, com execução isolada por provider no batch (uma janela por vez, sem mistura simultânea).
+- Distribuição de providers em round-robin fixo (sem pesos) no pool, com execução isolada por provider no batch e cap de 1000 por provider.
 - Probe simplificado para GET único (sem fallback/retry), usando proxy gateway único, headers fixos, sessão compartilhada por execução e timeout hard (`asyncio.wait_for`) alinhado ao comportamento do stress test.
 - Fluxo unificado em uma chamada: scrape da main page + extração de links + extração de texto processado.
 - Persistência com upsert por `cnpj_basico` na tabela `scrape_main`, sem armazenar `raw_content`.
+- No batch unificado, os resultados são persistidos somente ao final da execução (flush único).
