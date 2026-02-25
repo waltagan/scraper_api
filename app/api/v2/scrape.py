@@ -72,6 +72,42 @@ def _allocate_provider_slices(
     return allocation
 
 
+async def _save_unified_results_parallel(
+    records: List[Dict[str, Any]],
+    max_to_save: int,
+    num_connections: int = 20,
+) -> int:
+    """
+    Salva resultados unificados em paralelo usando múltiplas conexões.
+    A persistência ocorre apenas na etapa final.
+    """
+    if not records or max_to_save <= 0:
+        return 0
+
+    records_to_save = records[:max_to_save]
+    workers = max(1, min(num_connections, len(records_to_save)))
+    base = len(records_to_save) // workers
+    remainder = len(records_to_save) % workers
+
+    chunks: List[List[Dict[str, Any]]] = []
+    cursor = 0
+    for idx in range(workers):
+        take = base + (1 if idx < remainder else 0)
+        if take <= 0:
+            continue
+        chunks.append(records_to_save[cursor:cursor + take])
+        cursor += take
+
+    async def save_chunk(chunk_records: List[Dict[str, Any]]) -> int:
+        return await db_service.save_scrape_main_unified_batch(chunk_records)
+
+    results = await asyncio.gather(
+        *[save_chunk(chunk) for chunk in chunks],
+        return_exceptions=False,
+    )
+    return sum(results)
+
+
 async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
     """Etapa 1: scrape da main page e persistência de raw_content/error."""
     try:
@@ -458,8 +494,12 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
 
     if pending_results:
         max_to_save = min(len(pending_results), requested_total)
-        saved = await db_service.save_scrape_main_unified_batch(pending_results[:max_to_save])
-        logger.info("[BATCH-UNIFIED] flush final único: %s/%s", saved, requested_total)
+        saved = await _save_unified_results_parallel(
+            pending_results,
+            max_to_save=max_to_save,
+            num_connections=20,
+        )
+        logger.info("[BATCH-UNIFIED] flush final paralelo(20): %s/%s", saved, requested_total)
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
     logger.info(
