@@ -41,6 +41,37 @@ def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
+def _allocate_provider_slices(
+    total_items: int,
+    providers: List[str],
+    per_provider_cap: int = 1200,
+) -> Dict[str, int]:
+    """
+    Distribui empresas por provider em uma onda.
+    - baixa carga: equilibrado entre providers ativos
+    - alta carga: preenche 1200 por provider em ordem, com resto no próximo
+    """
+    if total_items <= 0 or not providers:
+        return {p: 0 for p in providers}
+
+    if total_items < (per_provider_cap * 2):
+        n = len(providers)
+        base = total_items // n
+        remainder = total_items % n
+        return {
+            p: base + (1 if idx < remainder else 0)
+            for idx, p in enumerate(providers)
+        }
+
+    remaining = total_items
+    allocation: Dict[str, int] = {}
+    for provider in providers:
+        take = min(per_provider_cap, remaining)
+        allocation[provider] = take
+        remaining -= take
+    return allocation
+
+
 async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
     """Etapa 1: scrape da main page e persistência de raw_content/error."""
     try:
@@ -114,6 +145,7 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
         for provider in provider_order
         if proxy_snapshot.get(provider)
     }
+    active_providers = [p for p in provider_order if p in provider_proxy_lists]
     if not provider_proxy_lists:
         logger.error("[BATCH-STEP1] Nenhum proxy carregado para execução")
         return
@@ -164,36 +196,50 @@ async def _run_stage1_batch_background(request: ScrapeMainPageBatchRequest):
                 "error_step1": None,
             }
 
+        async def run_provider_slice(
+            provider: str,
+            company_slice: List[Dict[str, Any]],
+            proxy_urls: List[str],
+        ) -> List[Dict[str, Any]]:
+            tasks = [
+                run_one(company, proxy_urls[i % len(proxy_urls)], provider)
+                for i, company in enumerate(company_slice)
+            ]
+            return await asyncio.gather(*tasks, return_exceptions=False)
+
         for chunk in _chunk_list(companies, batch_size):
-            provider_capacity = 1200 * len(provider_proxy_lists)
+            provider_capacity = 1200 * len(active_providers)
             for start_idx in range(0, len(chunk), provider_capacity):
                 provider_window = chunk[start_idx:start_idx + provider_capacity]
+                allocation = _allocate_provider_slices(
+                    total_items=len(provider_window),
+                    providers=active_providers,
+                    per_provider_cap=1200,
+                )
+
                 cursor = 0
-                for provider in provider_order:
-                    proxy_urls = provider_proxy_lists.get(provider, [])
-                    if not proxy_urls:
-                        continue
-                    company_slice = provider_window[cursor:cursor + 1200]
-                    cursor += 1200
+                provider_jobs = []
+                for provider in active_providers:
+                    take = allocation.get(provider, 0)
+                    company_slice = provider_window[cursor:cursor + take]
+                    cursor += take
                     if not company_slice:
                         continue
 
-                    tasks = [
-                        run_one(company, proxy_urls[i % len(proxy_urls)], provider)
-                        for i, company in enumerate(company_slice)
-                    ]
-                    results = await asyncio.gather(*tasks, return_exceptions=False)
-                    pending_results.extend(results)
+                    proxy_urls = provider_proxy_lists[provider]
+                    provider_jobs.append(run_provider_slice(provider, company_slice, proxy_urls))
 
-                    while len(pending_results) >= save_every:
-                        flush = pending_results[:save_every]
-                        pending_results = pending_results[save_every:]
-                        saved = await db_service.save_scrape_main_step1_batch(flush)
-                        processed += saved
-                        logger.info("[BATCH-STEP1] checkpoint: %s/%s", processed, requested_total)
+                if provider_jobs:
+                    provider_results = await asyncio.gather(*provider_jobs, return_exceptions=False)
+                    for results in provider_results:
+                        pending_results.extend(results)
 
-                        if processed >= requested_total:
-                            break
+                while len(pending_results) >= save_every:
+                    flush = pending_results[:save_every]
+                    pending_results = pending_results[save_every:]
+                    saved = await db_service.save_scrape_main_step1_batch(flush)
+                    processed += saved
+                    logger.info("[BATCH-STEP1] checkpoint: %s/%s", processed, requested_total)
 
                     if processed >= requested_total:
                         break
