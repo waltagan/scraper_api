@@ -1,253 +1,370 @@
 {
-  "title": "Scrape Unified - Operations & Saturation",
+  "title": "Scrape Unified - Run Analysis v4",
   "timezone": "browser",
   "schemaVersion": 38,
-  "version": 3,
-  "refresh": "5s",
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
+  "version": 1,
+  "refresh": "",
+  "time": { "from": "now-24h", "to": "now" },
   "templating": {
     "list": [
       {
         "name": "run",
         "type": "query",
         "label": "run_id",
-        "datasource": "Prometheus",
+        "datasource": { "type": "prometheus", "uid": "prometheus-1" },
         "query": "label_values(scrape_unified_batch_run_seconds_count, run)",
         "refresh": 2,
-        "includeAll": true,
-        "allValue": ".*",
+        "includeAll": false,
         "multi": false,
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": ".*"
-        }
+        "sort": 2,
+        "current": { "selected": false, "text": "", "value": "" }
       }
     ]
   },
   "panels": [
+    { "id": 100, "type": "row", "title": "Resumo do Run", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+
     {
-      "id": 1,
-      "type": "timeseries",
-      "title": "Throughput/s por Provider e Etapa (success)",
-      "targets": [
-        {
-          "expr": "sum by (provider, stage) (clamp_min(rate(scrape_unified_requests_total{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0))",
-          "legendFormat": "{{provider}}/{{stage}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 0 }
+      "id": 1, "type": "stat", "title": "Total Empresas",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_total_seconds_count{run=~\"^$run$\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 }
     },
     {
-      "id": 2,
-      "type": "timeseries",
-      "title": "Erro/s por Provider/Etapa/Tipo",
-      "targets": [
-        {
-          "expr": "sum by (provider, stage, error_type) (clamp_min(rate(scrape_unified_errors_total{run=~\"$run\"}[$__rate_interval]), 0))",
-          "legendFormat": "{{provider}}/{{stage}}/{{error_type}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 0 }
+      "id": 2, "type": "stat", "title": "Duração Run",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_batch_run_seconds_sum{run=~\"^$run$\"}) / clamp_min(sum(scrape_unified_batch_run_seconds_count{run=~\"^$run$\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 }
     },
     {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Taxa de Sucesso Step1 por Provider (%)",
-      "targets": [
-        {
-          "expr": "100 * sum by (provider) (increase(scrape_unified_requests_total{stage=\"step1\",status=\"success\",run=~\"$run\"}[5m])) / clamp_min(sum by (provider) (increase(scrape_unified_requests_total{stage=\"step1\",run=~\"$run\"}[5m])), 1)",
-          "legendFormat": "{{provider}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 }
+      "id": 3, "type": "stat", "title": "% Erro Step1 (Proxy)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 15}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "100 * sum(scrape_unified_requests_total{run=~\"^$run$\",stage=\"step1\",status=\"error\"}) / clamp_min(sum(scrape_unified_requests_total{run=~\"^$run$\",stage=\"step1\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 }
     },
     {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Latência Step1 p50/p90/p99 (s)",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum by (le, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=\"step1\",run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p50 {{provider}}"
-        },
-        {
-          "expr": "histogram_quantile(0.90, sum by (le, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=\"step1\",run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p90 {{provider}}"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum by (le, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=\"step1\",run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p99 {{provider}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 7 }
+      "id": 4, "type": "stat", "title": "% Erro Step2 (Links)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 15}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "100 * (sum(scrape_unified_requests_total{run=~\"^$run$\",stage=\"step2\",status=\"error\"}) or vector(0)) / clamp_min(sum(scrape_unified_requests_total{run=~\"^$run$\",stage=\"step2\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 }
     },
     {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Latência Step2/Step3 p90 (s)",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.90, sum by (le, stage, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=~\"step2|step3\",run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "{{stage}} {{provider}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 }
+      "id": 5, "type": "stat", "title": "% Erro Step3 (Texto)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 15}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "100 * (sum(scrape_unified_requests_total{run=~\"^$run$\",stage=\"step3\",status=\"error\"}) or vector(0)) / clamp_min(sum(scrape_unified_requests_total{run=~\"^$run$\",stage=\"step3\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 }
     },
     {
-      "id": 6,
-      "type": "timeseries",
-      "title": "Tempo Total por Empresa p50/p90/p99 (s)",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum by (le, provider) (clamp_min(rate(scrape_unified_company_total_seconds_bucket{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p50 {{provider}}"
-        },
-        {
-          "expr": "histogram_quantile(0.90, sum by (le, provider) (clamp_min(rate(scrape_unified_company_total_seconds_bucket{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p90 {{provider}}"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum by (le, provider) (clamp_min(rate(scrape_unified_company_total_seconds_bucket{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p99 {{provider}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 }
+      "id": 6, "type": "stat", "title": "Sucesso Fim-a-Fim",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_total_seconds_count{run=~\"^$run$\",status=\"success\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 }
+    },
+
+    { "id": 150, "type": "row", "title": "Load de Empresas (DB)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 } },
+
+    {
+      "id": 40, "type": "stat", "title": "Tempo Total Load",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_load_seconds_sum{run=~\"^$run$\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 7 }
     },
     {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Backlog e Fila de Persistência",
-      "targets": [
-        {
-          "expr": "sum by (stage) (scrape_unified_queue_depth{run=~\"$run\"})",
-          "legendFormat": "queue {{stage}}"
-        },
-        {
-          "expr": "sum by (mode) (scrape_unified_pending_results_depth{run=~\"$run\"})",
-          "legendFormat": "pending {{mode}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 }
+      "id": 41, "type": "stat", "title": "Média por Load",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_load_seconds_sum{run=~\"^$run$\"}) / clamp_min(sum(scrape_unified_company_load_seconds_count{run=~\"^$run$\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 7 }
     },
     {
-      "id": 8,
-      "type": "timeseries",
-      "title": "Inflight por Etapa/Provider",
-      "targets": [
-        {
-          "expr": "sum by (provider, stage) (scrape_unified_inflight_requests{run=~\"$run\"})",
-          "legendFormat": "{{provider}}/{{stage}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 }
+      "id": 42, "type": "stat", "title": "Qtd Loads",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_load_seconds_count{run=~\"^$run$\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 7 }
     },
     {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Persistência no Banco - Latência Flush p50/p90/p99 (s)",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum by (le, mode) (clamp_min(rate(scrape_unified_batch_flush_seconds_bucket{run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p50 {{mode}}"
-        },
-        {
-          "expr": "histogram_quantile(0.90, sum by (le, mode) (clamp_min(rate(scrape_unified_batch_flush_seconds_bucket{run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p90 {{mode}}"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum by (le, mode) (clamp_min(rate(scrape_unified_batch_flush_seconds_bucket{run=~\"$run\"}[$__rate_interval]), 0)))",
-          "legendFormat": "p99 {{mode}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 }
+      "id": 43, "type": "stat", "title": "Empresas por Load (Média)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_load_count_sum{run=~\"^$run$\"}) / clamp_min(sum(scrape_unified_company_load_count_count{run=~\"^$run$\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 7 }
+    },
+
+    { "id": 200, "type": "row", "title": "Tempos Médios e Saturação", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 } },
+
+    {
+      "id": 7, "type": "stat", "title": "Média Step1 (Proxy)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_latency_seconds_sum{run=~\"^$run$\",stage=\"step1\"}) / clamp_min(sum(scrape_unified_latency_seconds_count{run=~\"^$run$\",stage=\"step1\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 13 }
     },
     {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Persistência no Banco - Registros por Flush (avg)",
-      "targets": [
-        {
-          "expr": "sum by (mode) (rate(scrape_unified_batch_flush_records_sum{run=~\"$run\"}[$__rate_interval])) / clamp_min(sum by (mode) (rate(scrape_unified_batch_flush_records_count{run=~\"$run\"}[$__rate_interval])), 0.0001)",
-          "legendFormat": "{{mode}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 }
+      "id": 8, "type": "stat", "title": "Média Step2 (Local)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_latency_seconds_sum{run=~\"^$run$\",stage=\"step2\"}) / clamp_min(sum(scrape_unified_latency_seconds_count{run=~\"^$run$\",stage=\"step2\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 13 }
     },
     {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Duração do Run Batch p50/p90/p99 (s)",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum by (le, mode, status) (clamp_min(rate(scrape_unified_batch_run_seconds_bucket{run=~\"$run\"}[10m]), 0)))",
-          "legendFormat": "p50 {{mode}}/{{status}}"
-        },
-        {
-          "expr": "histogram_quantile(0.90, sum by (le, mode, status) (clamp_min(rate(scrape_unified_batch_run_seconds_bucket{run=~\"$run\"}[10m]), 0)))",
-          "legendFormat": "p90 {{mode}}/{{status}}"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum by (le, mode, status) (clamp_min(rate(scrape_unified_batch_run_seconds_bucket{run=~\"$run\"}[10m]), 0)))",
-          "legendFormat": "p99 {{mode}}/{{status}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 35 }
+      "id": 9, "type": "stat", "title": "Média Step3 (Local)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_latency_seconds_sum{run=~\"^$run$\",stage=\"step3\"}) / clamp_min(sum(scrape_unified_latency_seconds_count{run=~\"^$run$\",stage=\"step3\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 13 }
     },
     {
-      "id": 12,
-      "type": "timeseries",
-      "title": "HTTP da API - Inflight e P95",
-      "targets": [
-        {
-          "expr": "scrape_http_inflight_requests",
-          "legendFormat": "http inflight"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum by (le, path) (clamp_min(rate(scrape_http_request_duration_seconds_bucket[$__rate_interval]), 0)))",
-          "legendFormat": "p95 {{path}}"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 35 }
+      "id": 10, "type": "stat", "title": "Média Total/Empresa",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_total_seconds_sum{run=~\"^$run$\"}) / clamp_min(sum(scrape_unified_company_total_seconds_count{run=~\"^$run$\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 13 }
     },
     {
-      "id": 13,
-      "type": "timeseries",
-      "title": "Saturação do Servidor - CPU%, Memória RSS, FD",
-      "targets": [
-        {
-          "expr": "avg_over_time(scrape_server_cpu_percent[1m])",
-          "legendFormat": "cpu%"
-        },
-        {
-          "expr": "avg_over_time(scrape_server_memory_rss_bytes[1m]) / 1024 / 1024",
-          "legendFormat": "memory_rss_mb"
-        },
-        {
-          "expr": "avg_over_time(scrape_server_open_fds[1m])",
-          "legendFormat": "open_fds"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 42 }
+      "id": 11, "type": "stat", "title": "Max CPU (vCPU) [Global]",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 2}, {"color": "red", "value": 4}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "max_over_time(scrape_server_cpu_percent[$__range]) / 100", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 13 }
     },
     {
-      "id": 14,
-      "type": "timeseries",
-      "title": "Saturação do Servidor - Event Loop Lag e Load",
-      "targets": [
-        {
-          "expr": "avg_over_time(scrape_server_event_loop_lag_seconds[1m])",
-          "legendFormat": "event_loop_lag_s"
-        },
-        {
-          "expr": "avg_over_time(scrape_server_loadavg_1m[1m])",
-          "legendFormat": "loadavg_1m"
-        }
-      ],
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 42 }
+      "id": 12, "type": "stat", "title": "Max Memória [Global]",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 419430400}, {"color": "red", "value": 734003200}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "max_over_time(scrape_server_memory_rss_bytes[$__range])", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 13 }
+    },
+
+    { "id": 300, "type": "row", "title": "Step1 - Proxy por Provider", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 } },
+
+    {
+      "id": 13, "type": "bargauge", "title": "Sucesso Step1 por Provider (%)",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 80}, {"color": "green", "value": 90}] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "orientation": "horizontal" },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "100 * sum by (provider) (scrape_unified_requests_total{run=~\"^$run$\",stage=\"step1\",status=\"success\"}) / clamp_min(sum by (provider) (scrape_unified_requests_total{run=~\"^$run$\",stage=\"step1\"}), 1)", "legendFormat": "{{provider}}", "instant": true, "range": false }],
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 19 }
+    },
+    {
+      "id": 14, "type": "bargauge", "title": "Latência Média Step1 por Provider",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 20}] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "orientation": "horizontal" },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum by (provider) (scrape_unified_latency_seconds_sum{run=~\"^$run$\",stage=\"step1\"}) / clamp_min(sum by (provider) (scrape_unified_latency_seconds_count{run=~\"^$run$\",stage=\"step1\"}), 1)", "legendFormat": "{{provider}}", "instant": true, "range": false }],
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 19 }
+    },
+    {
+      "id": 15, "type": "bargauge", "title": "Erros Step1 por Provider",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "orientation": "horizontal" },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum by (provider) (scrape_unified_requests_total{run=~\"^$run$\",stage=\"step1\",status=\"error\"})", "legendFormat": "{{provider}}", "instant": true, "range": false }],
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 19 }
+    },
+
+    { "id": 350, "type": "row", "title": "Step1 - Percentis e Timeout Compliance por Provider", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 } },
+
+    {
+      "id": 27, "type": "bargauge", "title": "Step1 p50 por Provider",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 15}, {"color": "red", "value": 30}] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "orientation": "horizontal" },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le, provider) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step1\"}))", "legendFormat": "{{provider}}", "instant": true, "range": false }],
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 27 }
+    },
+    {
+      "id": 28, "type": "bargauge", "title": "Step1 p90 por Provider",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 20}, {"color": "red", "value": 30}] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "orientation": "horizontal" },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.90, sum by (le, provider) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step1\"}))", "legendFormat": "{{provider}}", "instant": true, "range": false }],
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 27 }
+    },
+    {
+      "id": 29, "type": "bargauge", "title": "Step1 Empresas 30-60s por Provider",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 30}, {"color": "red", "value": 80}] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false }, "orientation": "horizontal" },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum by (provider) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step1\",le=\"60\"}) - sum by (provider) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step1\",le=\"30\"})", "legendFormat": "{{provider}}", "instant": true, "range": false }],
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 27 }
+    },
+
+    { "id": 400, "type": "row", "title": "Step1 - Erros Detalhados por Provider e Tipo", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 } },
+
+    {
+      "id": 16, "type": "table", "title": "Erros Step1 por Provider e Tipo",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "options": { "showHeader": true },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum by (provider, error_type) (scrape_unified_errors_total{run=~\"^$run$\",stage=\"step1\"})", "format": "table", "instant": true, "range": false }],
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 35 }
+    },
+    {
+      "id": 17, "type": "table", "title": "Resumo por Provider e Etapa",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "options": { "showHeader": true },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum by (provider, stage, status) (scrape_unified_requests_total{run=~\"^$run$\"})", "format": "table", "instant": true, "range": false }],
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 35 }
+    },
+
+    { "id": 600, "type": "row", "title": "Percentis de Tempo por Empresa (Fim-a-Fim)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 } },
+
+    {
+      "id": 21, "type": "stat", "title": "Empresa p50",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (scrape_unified_company_total_seconds_bucket{run=~\"^$run$\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 45 }
+    },
+    {
+      "id": 22, "type": "stat", "title": "Empresa p75",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.75, sum by (le) (scrape_unified_company_total_seconds_bucket{run=~\"^$run$\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 45 }
+    },
+    {
+      "id": 23, "type": "stat", "title": "Empresa p90",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 60}, {"color": "red", "value": 120}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.90, sum by (le) (scrape_unified_company_total_seconds_bucket{run=~\"^$run$\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 45 }
+    },
+    {
+      "id": 24, "type": "stat", "title": "Empresa p95",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 60}, {"color": "red", "value": 120}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (le) (scrape_unified_company_total_seconds_bucket{run=~\"^$run$\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 45 }
+    },
+    {
+      "id": 25, "type": "stat", "title": "Empresa p99",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 120}, {"color": "red", "value": 180}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.99, sum by (le) (scrape_unified_company_total_seconds_bucket{run=~\"^$run$\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 45 }
+    },
+    {
+      "id": 26, "type": "stat", "title": "Empresas >60s",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_total_seconds_count{run=~\"^$run$\"}) - sum(scrape_unified_company_total_seconds_bucket{run=~\"^$run$\",le=\"60\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 45 }
+    },
+
+    { "id": 800, "type": "row", "title": "Step2/Step3 - Processamento Local (sem proxy)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 50 } },
+
+    {
+      "id": 30, "type": "stat", "title": "Step2 p50",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 15}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step2\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 51 }
+    },
+    {
+      "id": 31, "type": "stat", "title": "Step2 p90",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 30}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.90, sum by (le) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step2\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 51 }
+    },
+    {
+      "id": 32, "type": "stat", "title": "Step2 >30s",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 50}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_latency_seconds_count{run=~\"^$run$\",stage=\"step2\"}) - sum(scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step2\",le=\"30\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 51 }
+    },
+    {
+      "id": 33, "type": "stat", "title": "Step3 p50",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 15}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.50, sum by (le) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step3\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 51 }
+    },
+    {
+      "id": 34, "type": "stat", "title": "Step3 p90",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 30}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "histogram_quantile(0.90, sum by (le) (scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step3\"}))", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 51 }
+    },
+    {
+      "id": 35, "type": "stat", "title": "Step3 >30s",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 50}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_latency_seconds_count{run=~\"^$run$\",stage=\"step3\"}) - sum(scrape_unified_latency_seconds_bucket{run=~\"^$run$\",stage=\"step3\",le=\"30\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 51 }
+    },
+
+    { "id": 900, "type": "row", "title": "Persistência no Banco", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 } },
+
+    {
+      "id": 36, "type": "stat", "title": "Tempo Total Flush",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_batch_flush_seconds_sum{run=~\"^$run$\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 57 }
+    },
+    {
+      "id": 37, "type": "stat", "title": "Média por Flush",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_batch_flush_seconds_sum{run=~\"^$run$\"}) / clamp_min(sum(scrape_unified_batch_flush_seconds_count{run=~\"^$run$\"}), 1)", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 57 }
+    },
+    {
+      "id": 38, "type": "stat", "title": "Qtd Flushes",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_batch_flush_seconds_count{run=~\"^$run$\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 57 }
+    },
+    {
+      "id": 39, "type": "stat", "title": "Registros Persistidos",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_batch_flush_records_sum{run=~\"^$run$\"})", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 57 }
     }
   ]
 }

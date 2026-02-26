@@ -18,7 +18,10 @@ from .constants import (
     RETRY_TIMEOUT, MAX_RETRIES, PROBE_ONLY_MODE,
     smart_referer,
 )
-from .html_parser import is_cloudflare_challenge, is_soft_404, normalize_url, parse_html, extract_links
+from .html_parser import (
+    is_cloudflare_challenge, is_soft_404, normalize_url,
+    parse_html, extract_links, extract_text_and_internal_links,
+)
 from .link_selector import filter_non_html_links, prioritize_links
 from .url_prober import fast_probe_and_scrape, URLNotReachable
 from .http_client import cffi_scrape_safe
@@ -450,7 +453,7 @@ async def scrape_main_page_raw(
         if strict_timeout:
             resp = await request_coro
         else:
-            resp = await asyncio.wait_for(request_coro, timeout=timeout + 5)
+            resp = await asyncio.wait_for(request_coro, timeout=timeout)
         status_code = int(getattr(resp, "status_code", 0) or 0)
         final_url = str(getattr(resp, "url", target_url))
         raw_html = (resp.content or b"").decode("utf-8", errors="ignore")
@@ -484,3 +487,15 @@ def extract_mainpage_text_from_raw(raw_content: str, base_url: str) -> str:
     """
     text, _docs, _links = parse_html(raw_content or "", base_url)
     return text or ""
+
+
+def extract_text_and_links_from_raw(raw_content: str, base_url: str) -> Tuple[str, List[str]]:
+    """
+    Single-pass: parse HTML uma vez e extrai texto limpo + links priorizados.
+    Substitui chamadas separadas a extract_subpage_links_from_raw + extract_mainpage_text_from_raw
+    eliminando 3x re-parse do BeautifulSoup.
+    """
+    text, _docs, internal = extract_text_and_internal_links(raw_content or "", base_url)
+    filtered = filter_non_html_links(internal)
+    links = prioritize_links(filtered, base_url)
+    return text, links

@@ -29,6 +29,7 @@ from app.services.scraper import (
     scrape_main_page_raw,
     extract_subpage_links_from_raw,
     extract_mainpage_text_from_raw,
+    extract_text_and_links_from_raw,
 )
 from app.services.scraper_manager.proxy_manager import proxy_pool
 from app.services.scraper_manager.raw_content_cache import raw_content_cache
@@ -40,6 +41,7 @@ from app.core.metrics import (
     observe_company_total,
     observe_batch_run,
     observe_batch_flush,
+    observe_company_load,
     unified_inflight_requests,
     unified_queue_depth,
     unified_pending_results_depth,
@@ -367,17 +369,18 @@ async def _run_unified_pipeline_for_company(
     finally:
         unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).dec()
 
-    # step2 + step3: lê do Redis temporário
+    # step2 + step3: single-pass parse de dados in-memory (sem Redis reads)
+    base_url = base_result["website_url"]
+    processed_text = ""
+    links: list = []
+
     stage = "step2"
     unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).inc()
     t1 = time.perf_counter()
     try:
-        cached = await raw_content_cache.get_raw_content(run_id=run_id, cnpj_basico=cnpj)
-        if not cached:
-            raise ValueError("raw_content temporário expirado/ausente no Redis")
-        raw_content = (cached.get("raw_content") or "").strip()
-        base_url = (cached.get("website_url") or website_url).strip()
-        links = extract_subpage_links_from_raw(raw_content, base_url)
+        processed_text, links = await asyncio.to_thread(
+            extract_text_and_links_from_raw, raw_content, base_url,
+        )
         base_result["subpage_links"] = json.dumps(links, ensure_ascii=False)
         base_result["num_subpages"] = len(links)
         observe_request(proxy_provider, stage, "success", time.perf_counter() - t1, run=run_id)
@@ -392,12 +395,6 @@ async def _run_unified_pipeline_for_company(
     unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).inc()
     t2 = time.perf_counter()
     try:
-        cached = await raw_content_cache.get_raw_content(run_id=run_id, cnpj_basico=cnpj)
-        if not cached:
-            raise ValueError("raw_content temporário expirado/ausente no Redis")
-        raw_content = (cached.get("raw_content") or "").strip()
-        base_url = (cached.get("website_url") or website_url).strip()
-        processed_text = extract_mainpage_text_from_raw(raw_content, base_url)
         if not processed_text.strip():
             raise ValueError("não foi possível extrair texto útil")
         base_result["mainpage_processada"] = processed_text
@@ -475,9 +472,15 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         while completed < requested_total:
             remaining = requested_total - completed
             fetch_limit = min(5000, remaining)
+            load_t0 = time.perf_counter()
             companies = await db_service.get_pending_scrape_main_unified_companies(
                 limit=fetch_limit,
                 after_id=after_id,
+            )
+            observe_company_load(
+                time.perf_counter() - load_t0,
+                len(companies) if companies else 0,
+                run=run_id,
             )
             if not companies:
                 break

@@ -78,6 +78,20 @@ unified_batch_flush_records = Histogram(
     buckets=(1, 10, 25, 50, 100, 250, 500, 1000, 2000, 5000),
 )
 
+unified_company_load_seconds = Histogram(
+    "scrape_unified_company_load_seconds",
+    "Tempo para carregar empresas do banco de dados",
+    ["run"],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20),
+)
+
+unified_company_load_count = Histogram(
+    "scrape_unified_company_load_count",
+    "Quantidade de empresas carregadas por fetch",
+    ["run"],
+    buckets=(1, 10, 50, 100, 500, 1000, 2000, 5000),
+)
+
 http_inflight_requests = Gauge(
     "scrape_http_inflight_requests",
     "Quantidade de requisições HTTP em andamento na API",
@@ -162,6 +176,12 @@ def observe_batch_flush(save_mode: str, records: int, elapsed_s: float, run: Opt
     run_label = _normalize_run_label(run)
     unified_batch_flush_seconds.labels(mode=save_mode, run=run_label).observe(max(elapsed_s, 0.0))
     unified_batch_flush_records.labels(mode=save_mode, run=run_label).observe(max(float(records), 0.0))
+
+
+def observe_company_load(elapsed_s: float, count: int, run: Optional[str] = None):
+    run_label = _normalize_run_label(run)
+    unified_company_load_seconds.labels(run=run_label).observe(max(elapsed_s, 0.0))
+    unified_company_load_count.labels(run=run_label).observe(max(float(count), 0.0))
 
 
 def observe_http_request(method: str, path: str, status_code: int, elapsed_s: float):

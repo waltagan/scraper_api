@@ -29,6 +29,7 @@ try:
         scrape_main_page_raw,
         extract_subpage_links_from_raw,
         extract_mainpage_text_from_raw,
+        extract_text_and_links_from_raw,
     )
 except ImportError as e:
     import logging
@@ -50,12 +51,16 @@ except ImportError as e:
     def extract_mainpage_text_from_raw(raw_content: str, base_url: str):
         return ""
 
+    def extract_text_and_links_from_raw(raw_content: str, base_url: str):
+        return "", []
+
 
 __all__ = [
     'scrape_all_subpages',
     'scrape_main_page_raw',
     'extract_subpage_links_from_raw',
     'extract_mainpage_text_from_raw',
+    'extract_text_and_links_from_raw',
     'fast_probe_and_scrape',
     'parse_html',
     'is_cloudflare_challenge',

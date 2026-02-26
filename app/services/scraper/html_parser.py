@@ -77,47 +77,22 @@ def parse_html(html: str, url: str) -> Tuple[str, Set[str], Set[str]]:
         return "", set(), set()
 
 
-def extract_links(html: str, base_url: str) -> Tuple[Set[str], Set[str]]:
-    """
-    Extrai links de documentos e links internos do HTML.
-    
-    Args:
-        html: Conteúdo HTML
-        base_url: URL base para resolver links relativos
-    
-    Returns:
-        Tuple de (links_documentos, links_internos)
-    """
+def _extract_links_from_soup(soup, base_url: str) -> Tuple[Set[str], Set[str]]:
+    """Extrai links de documentos e internos a partir de um BeautifulSoup já parseado."""
     documents: Set[str] = set()
     internal: Set[str] = set()
-    
     try:
-        soup = BeautifulSoup(html, 'html.parser')
         base_domain = urlparse(base_url).netloc
-        
         for a in soup.find_all('a', href=True):
-            href = a['href'].strip()
-            
-            # Remover vírgulas finais (bug identificado)
-            href = href.rstrip(',')
-            
+            href = a['href'].strip().rstrip(',')
             if href.startswith('#') or href.lower().startswith('javascript:'):
                 continue
-                
-            full = urljoin(base_url, href)
-            
-            # Remover vírgula final do URL completo também
-            full = full.rstrip(',')
-            
+            full = urljoin(base_url, href).rstrip(',')
             if '#' in full:
-                full_no_frag = full.split('#')[0]
-                base_no_frag = base_url.split('#')[0]
-                if full_no_frag == base_no_frag:
+                if full.split('#')[0] == base_url.split('#')[0]:
                     continue
-
             parsed = urlparse(full)
             path_lower = parsed.path.lower()
-            
             if any(path_lower.endswith(ext) for ext in DOCUMENT_EXTENSIONS):
                 documents.add(full)
             elif any(path_lower.endswith(ext) for ext in EXCLUDED_EXTENSIONS):
@@ -127,8 +102,44 @@ def extract_links(html: str, base_url: str) -> Tuple[Set[str], Set[str]]:
                     internal.add(full)
     except:
         pass
-    
     return documents, internal
+
+
+def extract_links(html: str, base_url: str) -> Tuple[Set[str], Set[str]]:
+    """
+    Extrai links de documentos e links internos do HTML.
+    """
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+    except:
+        return set(), set()
+    return _extract_links_from_soup(soup, base_url)
+
+
+def extract_text_and_internal_links(html: str, base_url: str) -> Tuple[str, Set[str], Set[str]]:
+    """
+    Single-pass: parse HTML uma vez, extrai texto limpo + links internos + documentos.
+    Evita 3x re-parse do BeautifulSoup usado nos steps 2+3 separados.
+    """
+    if not html:
+        return "", set(), set()
+    try:
+        try:
+            soup = BeautifulSoup(html, 'lxml')
+        except:
+            soup = BeautifulSoup(html, 'html.parser')
+
+        documents, internal = _extract_links_from_soup(soup, base_url)
+
+        for tag in soup(["script", "style", "noscript", "iframe", "svg", "path", "defs", "symbol", "use"]):
+            tag.extract()
+        text = soup.get_text(separator='\n\n')
+        lines = [line.strip() for line in text.splitlines()]
+        clean_text = '\n'.join(line for line in lines if line)
+        return clean_text, documents, internal
+    except Exception as e:
+        logger.error(f"Erro no parsing HTML de {base_url}: {e}")
+        return "", set(), set()
 
 
 def normalize_url(url: str) -> str:
