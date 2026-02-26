@@ -124,7 +124,7 @@ class ScrapeMainPageBatchRequest(BaseModel):
     save_every: int = Field(
         1000,
         ge=1,
-        description="Mantido por compatibilidade (batch unificado salva somente no final)",
+        description="Tamanho do lote de salvamento por worker na persistência final",
     )
     timeout_seconds: int = Field(
         30,

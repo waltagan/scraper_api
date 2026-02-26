@@ -75,6 +75,7 @@ def _allocate_provider_slices(
 async def _save_unified_results_parallel(
     records: List[Dict[str, Any]],
     max_to_save: int,
+    save_every: int,
     num_connections: int = 10,
 ) -> int:
     """
@@ -85,18 +86,8 @@ async def _save_unified_results_parallel(
         return 0
 
     records_to_save = records[:max_to_save]
-    workers = max(1, min(num_connections, len(records_to_save)))
-    base = len(records_to_save) // workers
-    remainder = len(records_to_save) % workers
-
-    chunks: List[List[Dict[str, Any]]] = []
-    cursor = 0
-    for idx in range(workers):
-        take = base + (1 if idx < remainder else 0)
-        if take <= 0:
-            continue
-        chunks.append(records_to_save[cursor:cursor + take])
-        cursor += take
+    batch_size_per_worker = max(1, int(save_every))
+    chunks = _chunk_list(records_to_save, batch_size_per_worker)
 
     async def save_chunk(chunk_records: List[Dict[str, Any]]) -> int:
         retries = 3
@@ -118,11 +109,15 @@ async def _save_unified_results_parallel(
                 )
                 await asyncio.sleep(delay)
 
-    results = await asyncio.gather(
-        *[save_chunk(chunk) for chunk in chunks],
-        return_exceptions=False,
-    )
-    return sum(results)
+    saved_total = 0
+    concurrency = max(1, int(num_connections))
+    for wave in _chunk_list(chunks, concurrency):
+        results = await asyncio.gather(
+            *[save_chunk(chunk) for chunk in wave],
+            return_exceptions=False,
+        )
+        saved_total += sum(results)
+    return saved_total
 
 
 async def _process_scrape_main_page_background(request: ScrapeMainPageRequest):
@@ -514,9 +509,15 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
         saved = await _save_unified_results_parallel(
             pending_results,
             max_to_save=max_to_save,
+            save_every=save_every,
             num_connections=10,
         )
-        logger.info("[BATCH-UNIFIED] flush final paralelo(10): %s/%s", saved, requested_total)
+        logger.info(
+            "[BATCH-UNIFIED] flush final paralelo(10) com lote_por_worker=%s: %s/%s",
+            save_every,
+            saved,
+            requested_total,
+        )
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
     logger.info(
