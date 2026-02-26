@@ -2,11 +2,31 @@
   "title": "Scrape Unified - Operations & Saturation",
   "timezone": "browser",
   "schemaVersion": 38,
-  "version": 2,
-  "refresh": "1s",
+  "version": 3,
+  "refresh": "5s",
   "time": {
     "from": "now-1h",
     "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "run",
+        "type": "query",
+        "label": "run_id",
+        "datasource": "Prometheus",
+        "query": "label_values(scrape_unified_batch_run_seconds_count, run)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ".*"
+        }
+      }
+    ]
   },
   "panels": [
     {
@@ -15,7 +35,7 @@
       "title": "Throughput/s por Provider e Etapa (success)",
       "targets": [
         {
-          "expr": "sum by (provider, stage) (rate(scrape_unified_requests_total{status=\"success\"}[1m]))",
+          "expr": "sum by (provider, stage) (clamp_min(rate(scrape_unified_requests_total{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0))",
           "legendFormat": "{{provider}}/{{stage}}"
         }
       ],
@@ -27,7 +47,7 @@
       "title": "Erro/s por Provider/Etapa/Tipo",
       "targets": [
         {
-          "expr": "sum by (provider, stage, error_type) (rate(scrape_unified_errors_total[1m]))",
+          "expr": "sum by (provider, stage, error_type) (clamp_min(rate(scrape_unified_errors_total{run=~\"$run\"}[$__rate_interval]), 0))",
           "legendFormat": "{{provider}}/{{stage}}/{{error_type}}"
         }
       ],
@@ -39,7 +59,7 @@
       "title": "Taxa de Sucesso Step1 por Provider (%)",
       "targets": [
         {
-          "expr": "100 * sum by (provider) (rate(scrape_unified_requests_total{stage=\"step1\",status=\"success\"}[1m])) / clamp_min(sum by (provider) (rate(scrape_unified_requests_total{stage=\"step1\"}[1m])), 0.0001)",
+          "expr": "100 * sum by (provider) (increase(scrape_unified_requests_total{stage=\"step1\",status=\"success\",run=~\"$run\"}[5m])) / clamp_min(sum by (provider) (increase(scrape_unified_requests_total{stage=\"step1\",run=~\"$run\"}[5m])), 1)",
           "legendFormat": "{{provider}}"
         }
       ],
@@ -51,15 +71,15 @@
       "title": "Latência Step1 p50/p90/p99 (s)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, provider) (rate(scrape_unified_latency_seconds_bucket{stage=\"step1\"}[1m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=\"step1\",run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p50 {{provider}}"
         },
         {
-          "expr": "histogram_quantile(0.90, sum by (le, provider) (rate(scrape_unified_latency_seconds_bucket{stage=\"step1\"}[1m])))",
+          "expr": "histogram_quantile(0.90, sum by (le, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=\"step1\",run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p90 {{provider}}"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, provider) (rate(scrape_unified_latency_seconds_bucket{stage=\"step1\"}[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=\"step1\",run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p99 {{provider}}"
         }
       ],
@@ -71,7 +91,7 @@
       "title": "Latência Step2/Step3 p90 (s)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.90, sum by (le, stage, provider) (rate(scrape_unified_latency_seconds_bucket{stage=~\"step2|step3\"}[1m])))",
+          "expr": "histogram_quantile(0.90, sum by (le, stage, provider) (clamp_min(rate(scrape_unified_latency_seconds_bucket{stage=~\"step2|step3\",run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "{{stage}} {{provider}}"
         }
       ],
@@ -83,15 +103,15 @@
       "title": "Tempo Total por Empresa p50/p90/p99 (s)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, provider) (rate(scrape_unified_company_total_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, provider) (clamp_min(rate(scrape_unified_company_total_seconds_bucket{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p50 {{provider}}"
         },
         {
-          "expr": "histogram_quantile(0.90, sum by (le, provider) (rate(scrape_unified_company_total_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.90, sum by (le, provider) (clamp_min(rate(scrape_unified_company_total_seconds_bucket{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p90 {{provider}}"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, provider) (rate(scrape_unified_company_total_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, provider) (clamp_min(rate(scrape_unified_company_total_seconds_bucket{status=\"success\",run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p99 {{provider}}"
         }
       ],
@@ -103,11 +123,11 @@
       "title": "Backlog e Fila de Persistência",
       "targets": [
         {
-          "expr": "sum by (stage) (scrape_unified_queue_depth)",
+          "expr": "sum by (stage) (scrape_unified_queue_depth{run=~\"$run\"})",
           "legendFormat": "queue {{stage}}"
         },
         {
-          "expr": "sum by (mode) (scrape_unified_pending_results_depth)",
+          "expr": "sum by (mode) (scrape_unified_pending_results_depth{run=~\"$run\"})",
           "legendFormat": "pending {{mode}}"
         }
       ],
@@ -119,7 +139,7 @@
       "title": "Inflight por Etapa/Provider",
       "targets": [
         {
-          "expr": "sum by (provider, stage) (scrape_unified_inflight_requests)",
+          "expr": "sum by (provider, stage) (scrape_unified_inflight_requests{run=~\"$run\"})",
           "legendFormat": "{{provider}}/{{stage}}"
         }
       ],
@@ -131,15 +151,15 @@
       "title": "Persistência no Banco - Latência Flush p50/p90/p99 (s)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, mode) (rate(scrape_unified_batch_flush_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, mode) (clamp_min(rate(scrape_unified_batch_flush_seconds_bucket{run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p50 {{mode}}"
         },
         {
-          "expr": "histogram_quantile(0.90, sum by (le, mode) (rate(scrape_unified_batch_flush_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.90, sum by (le, mode) (clamp_min(rate(scrape_unified_batch_flush_seconds_bucket{run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p90 {{mode}}"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, mode) (rate(scrape_unified_batch_flush_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, mode) (clamp_min(rate(scrape_unified_batch_flush_seconds_bucket{run=~\"$run\"}[$__rate_interval]), 0)))",
           "legendFormat": "p99 {{mode}}"
         }
       ],
@@ -151,7 +171,7 @@
       "title": "Persistência no Banco - Registros por Flush (avg)",
       "targets": [
         {
-          "expr": "rate(scrape_unified_batch_flush_records_sum[1m]) / clamp_min(rate(scrape_unified_batch_flush_records_count[1m]), 0.0001)",
+          "expr": "sum by (mode) (rate(scrape_unified_batch_flush_records_sum{run=~\"$run\"}[$__rate_interval])) / clamp_min(sum by (mode) (rate(scrape_unified_batch_flush_records_count{run=~\"$run\"}[$__rate_interval])), 0.0001)",
           "legendFormat": "{{mode}}"
         }
       ],
@@ -163,15 +183,15 @@
       "title": "Duração do Run Batch p50/p90/p99 (s)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, mode, status) (rate(scrape_unified_batch_run_seconds_bucket[10m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, mode, status) (clamp_min(rate(scrape_unified_batch_run_seconds_bucket{run=~\"$run\"}[10m]), 0)))",
           "legendFormat": "p50 {{mode}}/{{status}}"
         },
         {
-          "expr": "histogram_quantile(0.90, sum by (le, mode, status) (rate(scrape_unified_batch_run_seconds_bucket[10m])))",
+          "expr": "histogram_quantile(0.90, sum by (le, mode, status) (clamp_min(rate(scrape_unified_batch_run_seconds_bucket{run=~\"$run\"}[10m]), 0)))",
           "legendFormat": "p90 {{mode}}/{{status}}"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, mode, status) (rate(scrape_unified_batch_run_seconds_bucket[10m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, mode, status) (clamp_min(rate(scrape_unified_batch_run_seconds_bucket{run=~\"$run\"}[10m]), 0)))",
           "legendFormat": "p99 {{mode}}/{{status}}"
         }
       ],
@@ -187,7 +207,7 @@
           "legendFormat": "http inflight"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(scrape_http_request_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, path) (clamp_min(rate(scrape_http_request_duration_seconds_bucket[$__rate_interval]), 0)))",
           "legendFormat": "p95 {{path}}"
         }
       ],
@@ -199,15 +219,15 @@
       "title": "Saturação do Servidor - CPU%, Memória RSS, FD",
       "targets": [
         {
-          "expr": "scrape_server_cpu_percent",
+          "expr": "avg_over_time(scrape_server_cpu_percent[1m])",
           "legendFormat": "cpu%"
         },
         {
-          "expr": "scrape_server_memory_rss_bytes / 1024 / 1024",
+          "expr": "avg_over_time(scrape_server_memory_rss_bytes[1m]) / 1024 / 1024",
           "legendFormat": "memory_rss_mb"
         },
         {
-          "expr": "scrape_server_open_fds",
+          "expr": "avg_over_time(scrape_server_open_fds[1m])",
           "legendFormat": "open_fds"
         }
       ],
@@ -219,11 +239,11 @@
       "title": "Saturação do Servidor - Event Loop Lag e Load",
       "targets": [
         {
-          "expr": "scrape_server_event_loop_lag_seconds",
+          "expr": "avg_over_time(scrape_server_event_loop_lag_seconds[1m])",
           "legendFormat": "event_loop_lag_s"
         },
         {
-          "expr": "scrape_server_loadavg_1m",
+          "expr": "avg_over_time(scrape_server_loadavg_1m[1m])",
           "legendFormat": "loadavg_1m"
         }
       ],

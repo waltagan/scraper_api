@@ -16,65 +16,65 @@ except ImportError:  # pragma: no cover - ambiente sem psutil
 unified_requests_total = Counter(
     "scrape_unified_requests_total",
     "Total de requisições por provider/etapa/status",
-    ["provider", "stage", "status"],
+    ["provider", "stage", "status", "run"],
 )
 
 unified_errors_total = Counter(
     "scrape_unified_errors_total",
     "Total de erros por provider/etapa/tipo",
-    ["provider", "stage", "error_type"],
+    ["provider", "stage", "error_type", "run"],
 )
 
 unified_latency_seconds = Histogram(
     "scrape_unified_latency_seconds",
     "Latência por provider/etapa",
-    ["provider", "stage"],
+    ["provider", "stage", "run"],
     buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 60),
 )
 
 unified_inflight_requests = Gauge(
     "scrape_unified_inflight_requests",
     "Requisições em voo por provider/etapa",
-    ["provider", "stage"],
+    ["provider", "stage", "run"],
 )
 
 unified_queue_depth = Gauge(
     "scrape_unified_queue_depth",
     "Profundidade da fila do batch unificado por etapa",
-    ["stage"],
+    ["stage", "run"],
 )
 
 unified_pending_results_depth = Gauge(
     "scrape_unified_pending_results_depth",
     "Quantidade de resultados em buffer aguardando persistência",
-    ["mode"],
+    ["mode", "run"],
 )
 
 unified_company_total_seconds = Histogram(
     "scrape_unified_company_total_seconds",
     "Tempo total por empresa no fluxo unificado",
-    ["provider", "status"],
+    ["provider", "status", "run"],
     buckets=(0.5, 1, 2, 5, 10, 20, 30, 60, 120, 240),
 )
 
 unified_batch_run_seconds = Histogram(
     "scrape_unified_batch_run_seconds",
     "Duração total de execução de um run do batch unificado",
-    ["mode", "status"],
+    ["mode", "status", "run"],
     buckets=(5, 10, 30, 60, 120, 180, 240, 300, 600, 1200),
 )
 
 unified_batch_flush_seconds = Histogram(
     "scrape_unified_batch_flush_seconds",
     "Duração de cada flush de persistência no banco",
-    ["mode"],
+    ["mode", "run"],
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20),
 )
 
 unified_batch_flush_records = Histogram(
     "scrape_unified_batch_flush_records",
     "Quantidade de registros persistidos por flush",
-    ["mode"],
+    ["mode", "run"],
     buckets=(1, 10, 25, 50, 100, 250, 500, 1000, 2000, 5000),
 )
 
@@ -133,26 +133,35 @@ def _sanitize_path_for_labels(path: str) -> str:
     return "other"
 
 
-def observe_request(provider: str, stage: str, status: str, elapsed_s: float):
-    unified_requests_total.labels(provider=provider, stage=stage, status=status).inc()
-    unified_latency_seconds.labels(provider=provider, stage=stage).observe(max(elapsed_s, 0.0))
+def _normalize_run_label(run: Optional[str]) -> str:
+    return (run or "unknown").strip() or "unknown"
 
 
-def observe_error(provider: str, stage: str, error_type: str):
-    unified_errors_total.labels(provider=provider, stage=stage, error_type=error_type).inc()
+def observe_request(provider: str, stage: str, status: str, elapsed_s: float, run: Optional[str] = None):
+    run_label = _normalize_run_label(run)
+    unified_requests_total.labels(provider=provider, stage=stage, status=status, run=run_label).inc()
+    unified_latency_seconds.labels(provider=provider, stage=stage, run=run_label).observe(max(elapsed_s, 0.0))
 
 
-def observe_company_total(provider: str, status: str, elapsed_s: float):
-    unified_company_total_seconds.labels(provider=provider, status=status).observe(max(elapsed_s, 0.0))
+def observe_error(provider: str, stage: str, error_type: str, run: Optional[str] = None):
+    run_label = _normalize_run_label(run)
+    unified_errors_total.labels(provider=provider, stage=stage, error_type=error_type, run=run_label).inc()
 
 
-def observe_batch_run(save_mode: str, status: str, elapsed_s: float):
-    unified_batch_run_seconds.labels(mode=save_mode, status=status).observe(max(elapsed_s, 0.0))
+def observe_company_total(provider: str, status: str, elapsed_s: float, run: Optional[str] = None):
+    run_label = _normalize_run_label(run)
+    unified_company_total_seconds.labels(provider=provider, status=status, run=run_label).observe(max(elapsed_s, 0.0))
 
 
-def observe_batch_flush(save_mode: str, records: int, elapsed_s: float):
-    unified_batch_flush_seconds.labels(mode=save_mode).observe(max(elapsed_s, 0.0))
-    unified_batch_flush_records.labels(mode=save_mode).observe(max(float(records), 0.0))
+def observe_batch_run(save_mode: str, status: str, elapsed_s: float, run: Optional[str] = None):
+    run_label = _normalize_run_label(run)
+    unified_batch_run_seconds.labels(mode=save_mode, status=status, run=run_label).observe(max(elapsed_s, 0.0))
+
+
+def observe_batch_flush(save_mode: str, records: int, elapsed_s: float, run: Optional[str] = None):
+    run_label = _normalize_run_label(run)
+    unified_batch_flush_seconds.labels(mode=save_mode, run=run_label).observe(max(elapsed_s, 0.0))
+    unified_batch_flush_records.labels(mode=save_mode, run=run_label).observe(max(float(records), 0.0))
 
 
 def observe_http_request(method: str, path: str, status_code: int, elapsed_s: float):

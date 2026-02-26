@@ -329,7 +329,7 @@ async def _run_unified_pipeline_for_company(
 
     # step1: fetch main page
     stage = "step1"
-    unified_inflight_requests.labels(provider=proxy_provider, stage=stage).inc()
+    unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).inc()
     t0 = time.perf_counter()
     try:
         final_url, status_code, raw_content, error = await scrape_main_page_raw(
@@ -343,9 +343,9 @@ async def _run_unified_pipeline_for_company(
             base_result["error_step1"] = (
                 f"step1:{error} | status={status_code} | final_url={final_url} | provider={proxy_provider}"
             )
-            observe_request(proxy_provider, stage, "error", elapsed)
-            observe_error(proxy_provider, stage, _classify_error_type(error))
-            observe_company_total(proxy_provider, "error_step1", time.perf_counter() - pipeline_started)
+            observe_request(proxy_provider, stage, "error", elapsed, run=run_id)
+            observe_error(proxy_provider, stage, _classify_error_type(error), run=run_id)
+            observe_company_total(proxy_provider, "error_step1", time.perf_counter() - pipeline_started, run=run_id)
             return base_result
 
         await raw_content_cache.set_raw_content(
@@ -356,20 +356,20 @@ async def _run_unified_pipeline_for_company(
             ttl_seconds=redis_ttl_seconds,
         )
         base_result["website_url"] = final_url or website_url
-        observe_request(proxy_provider, stage, "success", elapsed)
+        observe_request(proxy_provider, stage, "success", elapsed, run=run_id)
     except Exception as e:
         elapsed = time.perf_counter() - t0
         base_result["error_step1"] = f"step1:exception:{type(e).__name__}:{str(e)[:300]} | provider={proxy_provider}"
-        observe_request(proxy_provider, stage, "error", elapsed)
-        observe_error(proxy_provider, stage, _classify_error_type(e))
-        observe_company_total(proxy_provider, "error_step1", time.perf_counter() - pipeline_started)
+        observe_request(proxy_provider, stage, "error", elapsed, run=run_id)
+        observe_error(proxy_provider, stage, _classify_error_type(e), run=run_id)
+        observe_company_total(proxy_provider, "error_step1", time.perf_counter() - pipeline_started, run=run_id)
         return base_result
     finally:
-        unified_inflight_requests.labels(provider=proxy_provider, stage=stage).dec()
+        unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).dec()
 
     # step2 + step3: lê do Redis temporário
     stage = "step2"
-    unified_inflight_requests.labels(provider=proxy_provider, stage=stage).inc()
+    unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).inc()
     t1 = time.perf_counter()
     try:
         cached = await raw_content_cache.get_raw_content(run_id=run_id, cnpj_basico=cnpj)
@@ -380,16 +380,16 @@ async def _run_unified_pipeline_for_company(
         links = extract_subpage_links_from_raw(raw_content, base_url)
         base_result["subpage_links"] = json.dumps(links, ensure_ascii=False)
         base_result["num_subpages"] = len(links)
-        observe_request(proxy_provider, stage, "success", time.perf_counter() - t1)
+        observe_request(proxy_provider, stage, "success", time.perf_counter() - t1, run=run_id)
     except Exception as e:
         base_result["error_step2"] = f"step2:exception:{type(e).__name__}:{str(e)[:300]}"
-        observe_request(proxy_provider, stage, "error", time.perf_counter() - t1)
-        observe_error(proxy_provider, stage, _classify_error_type(e))
+        observe_request(proxy_provider, stage, "error", time.perf_counter() - t1, run=run_id)
+        observe_error(proxy_provider, stage, _classify_error_type(e), run=run_id)
     finally:
-        unified_inflight_requests.labels(provider=proxy_provider, stage=stage).dec()
+        unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).dec()
 
     stage = "step3"
-    unified_inflight_requests.labels(provider=proxy_provider, stage=stage).inc()
+    unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).inc()
     t2 = time.perf_counter()
     try:
         cached = await raw_content_cache.get_raw_content(run_id=run_id, cnpj_basico=cnpj)
@@ -401,13 +401,13 @@ async def _run_unified_pipeline_for_company(
         if not processed_text.strip():
             raise ValueError("não foi possível extrair texto útil")
         base_result["mainpage_processada"] = processed_text
-        observe_request(proxy_provider, stage, "success", time.perf_counter() - t2)
+        observe_request(proxy_provider, stage, "success", time.perf_counter() - t2, run=run_id)
     except Exception as e:
         base_result["error_step3"] = f"step3:exception:{type(e).__name__}:{str(e)[:300]}"
-        observe_request(proxy_provider, stage, "error", time.perf_counter() - t2)
-        observe_error(proxy_provider, stage, _classify_error_type(e))
+        observe_request(proxy_provider, stage, "error", time.perf_counter() - t2, run=run_id)
+        observe_error(proxy_provider, stage, _classify_error_type(e), run=run_id)
     finally:
-        unified_inflight_requests.labels(provider=proxy_provider, stage=stage).dec()
+        unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).dec()
         try:
             await raw_content_cache.delete_raw_content(run_id=run_id, cnpj_basico=cnpj)
         except Exception:
@@ -419,7 +419,7 @@ async def _run_unified_pipeline_for_company(
         final_status = "error_step2"
     else:
         final_status = "success"
-    observe_company_total(proxy_provider, final_status, time.perf_counter() - pipeline_started)
+    observe_company_total(proxy_provider, final_status, time.perf_counter() - pipeline_started, run=run_id)
     return base_result
 
 
@@ -462,7 +462,12 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
     active_providers = [p for p in provider_order if p in provider_proxy_lists]
     if not active_providers:
         logger.error("[BATCH-UNIFIED] run_id=%s nenhum proxy carregado", run_id)
-        observe_batch_run(save_mode=save_mode, status="no_providers", elapsed_s=time.perf_counter() - started_at)
+        observe_batch_run(
+            save_mode=save_mode,
+            status="no_providers",
+            elapsed_s=time.perf_counter() - started_at,
+            run=run_id,
+        )
         return
 
     batch_status = "success"
@@ -478,7 +483,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
                 break
 
             after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
-            unified_queue_depth.labels(stage="unified_batch").set(len(companies))
+            unified_queue_depth.labels(stage="unified_batch", run=run_id).set(len(companies))
 
             for chunk in _chunk_list(companies, batch_size):
                 provider_capacity = 1200 * len(active_providers)
@@ -517,7 +522,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
                         for result_list in provider_results:
                             pending_results.extend(result_list)
                             completed += len(result_list)
-                        unified_pending_results_depth.labels(mode=save_mode).set(len(pending_results))
+                        unified_pending_results_depth.labels(mode=save_mode, run=run_id).set(len(pending_results))
 
                     if save_mode == "checkpoint":
                         while len(pending_results) >= save_every:
@@ -529,9 +534,10 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
                                 save_mode=save_mode,
                                 records=saved,
                                 elapsed_s=time.perf_counter() - flush_started,
+                                run=run_id,
                             )
                             persisted += saved
-                            unified_pending_results_depth.labels(mode=save_mode).set(len(pending_results))
+                            unified_pending_results_depth.labels(mode=save_mode, run=run_id).set(len(pending_results))
                             logger.info(
                                 "[BATCH-UNIFIED] run_id=%s checkpoint: persisted=%s completed=%s/%s",
                                 run_id,
@@ -556,9 +562,10 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
                     save_mode=save_mode,
                     records=saved,
                     elapsed_s=time.perf_counter() - flush_started,
+                    run=run_id,
                 )
                 persisted += saved
-                unified_pending_results_depth.labels(mode=save_mode).set(len(pending_results))
+                unified_pending_results_depth.labels(mode=save_mode, run=run_id).set(len(pending_results))
                 logger.info(
                     "[BATCH-UNIFIED] run_id=%s flush final: persisted=%s completed=%s/%s",
                     run_id,
@@ -570,10 +577,10 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         batch_status = "error"
         logger.error("[BATCH-UNIFIED] run_id=%s erro fatal: %s", run_id, e, exc_info=True)
     finally:
-        unified_queue_depth.labels(stage="unified_batch").set(0)
-        unified_pending_results_depth.labels(mode=save_mode).set(0)
+        unified_queue_depth.labels(stage="unified_batch", run=run_id).set(0)
+        unified_pending_results_depth.labels(mode=save_mode, run=run_id).set(0)
         elapsed_s = round(time.perf_counter() - started_at, 2)
-        observe_batch_run(save_mode=save_mode, status=batch_status, elapsed_s=elapsed_s)
+        observe_batch_run(save_mode=save_mode, status=batch_status, elapsed_s=elapsed_s, run=run_id)
         logger.info(
             "[BATCH-UNIFIED] run_id=%s concluído completed=%s persisted=%s/%s elapsed_s=%s",
             run_id,
