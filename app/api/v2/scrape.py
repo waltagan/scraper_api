@@ -487,6 +487,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         )
         save_mode = "checkpoint"
 
+    parse_executor, executor_type = _create_parse_executor(parse_workers)
     unified_parse_workers.labels(run=run_id).set(parse_workers)
     logger.info(
         "[BATCH-UNIFIED] Iniciado run_id=%s total=%s batch_size=%s save_mode=%s save_every=%s save_in_batches=%s timeout=%ss redis_ttl=%ss parse_workers=%s executor=%s",
@@ -504,6 +505,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
     active_providers = [p for p in provider_order if p in provider_proxy_lists]
     if not active_providers:
         logger.error("[BATCH-UNIFIED] run_id=%s nenhum proxy carregado", run_id)
+        parse_executor.shutdown(wait=False)
         observe_batch_run(
             save_mode=save_mode,
             status="no_providers",
@@ -513,7 +515,6 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         return
 
     batch_status = "success"
-    parse_executor, executor_type = _create_parse_executor(parse_workers)
     try:
         while completed < requested_total:
             remaining = requested_total - completed
