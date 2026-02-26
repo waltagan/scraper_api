@@ -78,6 +78,12 @@ unified_batch_flush_records = Histogram(
     buckets=(1, 10, 25, 50, 100, 250, 500, 1000, 2000, 5000),
 )
 
+unified_parse_workers = Gauge(
+    "scrape_unified_parse_workers",
+    "Número de processos paralelos (ProcessPool) configurados para parsing HTML",
+    ["run"],
+)
+
 unified_company_load_seconds = Histogram(
     "scrape_unified_company_load_seconds",
     "Tempo para carregar empresas do banco de dados",

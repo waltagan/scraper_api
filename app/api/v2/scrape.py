@@ -7,7 +7,8 @@ import time
 import asyncio
 import json
 import uuid
-from typing import Any, Dict, List
+from concurrent.futures import ProcessPoolExecutor
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Query
 from app.schemas.v2.scrape import (
@@ -45,6 +46,7 @@ from app.core.metrics import (
     unified_inflight_requests,
     unified_queue_depth,
     unified_pending_results_depth,
+    unified_parse_workers,
 )
 
 logger = logging.getLogger(__name__)
@@ -314,6 +316,7 @@ async def _run_unified_pipeline_for_company(
     proxy_provider: str,
     timeout_seconds: int,
     redis_ttl_seconds: int,
+    parse_executor: Optional[ProcessPoolExecutor] = None,
 ) -> Dict[str, Any]:
     pipeline_started = time.perf_counter()
     cnpj = company["cnpj_basico"]
@@ -378,8 +381,9 @@ async def _run_unified_pipeline_for_company(
     unified_inflight_requests.labels(provider=proxy_provider, stage=stage, run=run_id).inc()
     t1 = time.perf_counter()
     try:
-        processed_text, links = await asyncio.to_thread(
-            extract_text_and_links_from_raw, raw_content, base_url,
+        loop = asyncio.get_running_loop()
+        processed_text, links = await loop.run_in_executor(
+            parse_executor, extract_text_and_links_from_raw, raw_content, base_url,
         )
         base_result["subpage_links"] = json.dumps(links, ensure_ascii=False)
         base_result["num_subpages"] = len(links)
@@ -428,6 +432,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
     save_in_batches = request.save_in_batches
     timeout_seconds = request.timeout_seconds
     redis_ttl_seconds = request.redis_ttl_seconds
+    parse_workers = request.parse_workers
 
     completed = 0
     persisted = 0
@@ -443,9 +448,10 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         )
         save_mode = "checkpoint"
 
+    unified_parse_workers.labels(run=run_id).set(parse_workers)
     logger.info(
-        "[BATCH-UNIFIED] Iniciado run_id=%s total=%s batch_size=%s save_mode=%s save_every=%s save_in_batches=%s timeout=%ss redis_ttl=%ss",
-        run_id, requested_total, batch_size, save_mode, save_every, save_in_batches, timeout_seconds, redis_ttl_seconds,
+        "[BATCH-UNIFIED] Iniciado run_id=%s total=%s batch_size=%s save_mode=%s save_every=%s save_in_batches=%s timeout=%ss redis_ttl=%ss parse_workers=%s",
+        run_id, requested_total, batch_size, save_mode, save_every, save_in_batches, timeout_seconds, redis_ttl_seconds, parse_workers,
     )
 
     await proxy_pool.preload()
@@ -468,6 +474,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         return
 
     batch_status = "success"
+    parse_executor = ProcessPoolExecutor(max_workers=parse_workers)
     try:
         while completed < requested_total:
             remaining = requested_total - completed
@@ -515,6 +522,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
                                 proxy_provider=provider,
                                 timeout_seconds=timeout_seconds,
                                 redis_ttl_seconds=redis_ttl_seconds,
+                                parse_executor=parse_executor,
                             )
                             for i, company in enumerate(company_slice)
                         ]
@@ -580,17 +588,19 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         batch_status = "error"
         logger.error("[BATCH-UNIFIED] run_id=%s erro fatal: %s", run_id, e, exc_info=True)
     finally:
+        parse_executor.shutdown(wait=False)
         unified_queue_depth.labels(stage="unified_batch", run=run_id).set(0)
         unified_pending_results_depth.labels(mode=save_mode, run=run_id).set(0)
         elapsed_s = round(time.perf_counter() - started_at, 2)
         observe_batch_run(save_mode=save_mode, status=batch_status, elapsed_s=elapsed_s, run=run_id)
         logger.info(
-            "[BATCH-UNIFIED] run_id=%s concluído completed=%s persisted=%s/%s elapsed_s=%s",
+            "[BATCH-UNIFIED] run_id=%s concluído completed=%s persisted=%s/%s elapsed_s=%s parse_workers=%s",
             run_id,
             completed,
             persisted,
             requested_total,
             elapsed_s,
+            parse_workers,
         )
 
 

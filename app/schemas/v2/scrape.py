@@ -214,6 +214,12 @@ class ScrapeMainUnifiedBatchRequest(BaseModel):
         le=3600,
         description="TTL do raw_content temporário em Redis",
     )
+    parse_workers: int = Field(
+        4,
+        ge=1,
+        le=16,
+        description="Número de processos paralelos para parsing HTML (step2). Cada processo tem sua própria CPU, contornando o GIL do Python.",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -225,6 +231,7 @@ class ScrapeMainUnifiedBatchRequest(BaseModel):
                 "save_in_batches": 500,
                 "timeout_seconds": 30,
                 "redis_ttl_seconds": 600,
+                "parse_workers": 4,
             }
         }
     )

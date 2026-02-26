@@ -70,7 +70,15 @@
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
       "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "sum(scrape_unified_company_total_seconds_count{run=~\"^$run$\",status=\"success\"})", "instant": true, "range": false }],
-      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 }
+      "gridPos": { "h": 5, "w": 3, "x": 20, "y": 1 }
+    },
+    {
+      "id": 44, "type": "stat", "title": "Parse Workers",
+      "datasource": { "type": "prometheus", "uid": "prometheus-1" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{"color": "blue", "value": null}] } }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus-1" }, "editorMode": "code", "expr": "scrape_unified_parse_workers{run=~\"^$run$\"}", "instant": true, "range": false }],
+      "gridPos": { "h": 5, "w": 1, "x": 23, "y": 1 }
     },
 
     { "id": 150, "type": "row", "title": "Load de Empresas (DB)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 } },
