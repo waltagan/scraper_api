@@ -75,7 +75,7 @@ def _allocate_provider_slices(
 async def _save_unified_results_parallel(
     records: List[Dict[str, Any]],
     max_to_save: int,
-    num_connections: int = 20,
+    num_connections: int = 10,
 ) -> int:
     """
     Salva resultados unificados em paralelo usando múltiplas conexões.
@@ -99,7 +99,24 @@ async def _save_unified_results_parallel(
         cursor += take
 
     async def save_chunk(chunk_records: List[Dict[str, Any]]) -> int:
-        return await db_service.save_scrape_main_unified_batch(chunk_records)
+        retries = 3
+        base_delay_s = 0.5
+        for attempt in range(1, retries + 1):
+            try:
+                return await db_service.save_scrape_main_unified_batch(chunk_records)
+            except (TimeoutError, asyncio.TimeoutError) as exc:
+                if attempt >= retries:
+                    raise
+                delay = base_delay_s * (2 ** (attempt - 1))
+                logger.warning(
+                    "[BATCH-UNIFIED] timeout no salvamento de chunk (%s regs), tentativa %s/%s, aguardando %.1fs: %s",
+                    len(chunk_records),
+                    attempt,
+                    retries,
+                    delay,
+                    type(exc).__name__,
+                )
+                await asyncio.sleep(delay)
 
     results = await asyncio.gather(
         *[save_chunk(chunk) for chunk in chunks],
@@ -497,9 +514,9 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
         saved = await _save_unified_results_parallel(
             pending_results,
             max_to_save=max_to_save,
-            num_connections=20,
+            num_connections=10,
         )
-        logger.info("[BATCH-UNIFIED] flush final paralelo(20): %s/%s", saved, requested_total)
+        logger.info("[BATCH-UNIFIED] flush final paralelo(10): %s/%s", saved, requested_total)
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
     logger.info(
