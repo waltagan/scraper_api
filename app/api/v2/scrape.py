@@ -8,7 +8,8 @@ import asyncio
 import json
 import uuid
 import multiprocessing
-from concurrent.futures import ProcessPoolExecutor
+import traceback
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Query
@@ -54,6 +55,38 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 db_service = get_db_service()
+
+
+def _parse_html_standalone(raw_content: str, base_url: str):
+    """
+    Parsing HTML isolado para uso em ProcessPoolExecutor.
+    Importa apenas html_parser e link_selector (sem curl_cffi).
+    """
+    from app.services.scraper.html_parser import extract_text_and_internal_links
+    from app.services.scraper.link_selector import filter_non_html_links, prioritize_links
+    text, _docs, internal = extract_text_and_internal_links(raw_content or "", base_url)
+    filtered = filter_non_html_links(internal)
+    links = prioritize_links(filtered, base_url)
+    return text, links
+
+
+def _create_parse_executor(parse_workers: int):
+    """Tenta criar ProcessPoolExecutor; fallback para ThreadPoolExecutor."""
+    try:
+        executor = ProcessPoolExecutor(
+            max_workers=parse_workers,
+            mp_context=multiprocessing.get_context("spawn"),
+        )
+        future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
+        future.result(timeout=10)
+        logger.info("[PARSE-EXECUTOR] ProcessPoolExecutor(workers=%s, spawn) inicializado com sucesso", parse_workers)
+        return executor, "process"
+    except Exception as e:
+        logger.warning(
+            "[PARSE-EXECUTOR] ProcessPoolExecutor falhou (%s: %s), usando ThreadPoolExecutor como fallback",
+            type(e).__name__, str(e)[:200],
+        )
+        return ThreadPoolExecutor(max_workers=parse_workers), "thread"
 
 
 def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
@@ -384,13 +417,18 @@ async def _run_unified_pipeline_for_company(
     try:
         loop = asyncio.get_running_loop()
         processed_text, links = await loop.run_in_executor(
-            parse_executor, extract_text_and_links_from_raw, raw_content, base_url,
+            parse_executor, _parse_html_standalone, raw_content, base_url,
         )
         base_result["subpage_links"] = json.dumps(links, ensure_ascii=False)
         base_result["num_subpages"] = len(links)
         observe_request(proxy_provider, stage, "success", time.perf_counter() - t1, run=run_id)
     except Exception as e:
-        base_result["error_step2"] = f"step2:exception:{type(e).__name__}:{str(e)[:300]}"
+        err_detail = f"step2:exception:{type(e).__name__}:{str(e)[:300]}"
+        base_result["error_step2"] = err_detail
+        logger.error(
+            "[STEP2-ERROR] run=%s cnpj=%s provider=%s error=%s\n%s",
+            run_id, cnpj, proxy_provider, err_detail, traceback.format_exc(),
+        )
         observe_request(proxy_provider, stage, "error", time.perf_counter() - t1, run=run_id)
         observe_error(proxy_provider, stage, _classify_error_type(e), run=run_id)
     finally:
@@ -451,8 +489,8 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
 
     unified_parse_workers.labels(run=run_id).set(parse_workers)
     logger.info(
-        "[BATCH-UNIFIED] Iniciado run_id=%s total=%s batch_size=%s save_mode=%s save_every=%s save_in_batches=%s timeout=%ss redis_ttl=%ss parse_workers=%s",
-        run_id, requested_total, batch_size, save_mode, save_every, save_in_batches, timeout_seconds, redis_ttl_seconds, parse_workers,
+        "[BATCH-UNIFIED] Iniciado run_id=%s total=%s batch_size=%s save_mode=%s save_every=%s save_in_batches=%s timeout=%ss redis_ttl=%ss parse_workers=%s executor=%s",
+        run_id, requested_total, batch_size, save_mode, save_every, save_in_batches, timeout_seconds, redis_ttl_seconds, parse_workers, executor_type,
     )
 
     await proxy_pool.preload()
@@ -475,10 +513,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         return
 
     batch_status = "success"
-    parse_executor = ProcessPoolExecutor(
-        max_workers=parse_workers,
-        mp_context=multiprocessing.get_context("spawn"),
-    )
+    parse_executor, executor_type = _create_parse_executor(parse_workers)
     try:
         while completed < requested_total:
             remaining = requested_total - completed
