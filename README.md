@@ -7,9 +7,13 @@ API para construção automática de perfis de empresas B2B brasileiras.
 - `POST /v2/serper` - Busca no Google
 - `POST /v2/encontrar_site` - Identifica site oficial
 - `POST /v2/scrape` - Extrai conteúdo do site
-- `POST /v2/scrape/main-page/unified` - Executa etapas 1/2/3 em um único fluxo
-- `POST /v2/scrape/main-page/unified/batch` - Processamento em lote no fluxo unificado
+- `POST /v2/scrape/main-page` - Etapa 1 legada (compat)
+- `POST /v2/scrape/main-page/subpage-links` - Etapa 2 legada (compat)
+- `POST /v2/scrape/main-page/process-text` - Etapa 3 legada (compat)
+- `POST /v2/scrape/main-page/unified` - Fluxo unificado em 3 microetapas (Redis temporário)
+- `POST /v2/scrape/main-page/unified/batch` - Fluxo unificado em lote (proxy-safe)
 - `POST /v2/montagem_perfil` - Gera perfil estruturado
+- `GET /metrics` - Métricas Prometheus
 
 Todos os endpoints retornam imediatamente e processam em background.
 
@@ -29,6 +33,7 @@ Todos os endpoints retornam imediatamente e processam em background.
 - `OPENAI_API_KEY` - API key da OpenAI (fallback)
 - `API_ACCESS_TOKEN` - Token de autenticação
 - `PHOENIX_COLLECTOR_URL` - URL do Phoenix (observabilidade)
+- `REDIS_URL` - Redis para armazenamento temporário de `raw_content` no endpoint unificado
 
 ## Deploy
 
@@ -38,10 +43,10 @@ Documentação interativa: `/docs`
 
 ## Padrões no Scraper
 
-- Pipeline em 2 etapas globais com limite de 1000 conexões por provider (até 3000 por onda com 3 providers).
+- Pipeline em 2 etapas globais: probe+main em janelas de 3600 e subpages em ondas de 3600.
 - Timeouts fixos de 30s e sem retry para manter comportamento previsível próximo ao stress test.
-- Distribuição de providers em round-robin fixo (sem pesos) no pool, com execução isolada por provider no batch e cap de 1000 por provider.
+- Distribuição de providers em round-robin fixo (sem pesos) no pool, com execução isolada por provider no batch (uma janela por vez, sem mistura simultânea).
 - Probe simplificado para GET único (sem fallback/retry), usando proxy gateway único, headers fixos, sessão compartilhada por execução e timeout hard (`asyncio.wait_for`) alinhado ao comportamento do stress test.
-- Fluxo unificado em uma chamada: scrape da main page + extração de links + extração de texto processado.
-- Persistência com upsert por `cnpj_basico` na tabela `scrape_main`, sem armazenar `raw_content`.
-- No batch unificado, os resultados são persistidos somente ao final da execução (flush único).
+- Fluxo unificado para `scrape_main` executa 3 microetapas e **não persiste `raw_content` no PostgreSQL** (usa Redis com TTL).
+- Persistência do novo fluxo com upsert por `cnpj_basico` na tabela `scrape_main`.
+- Observabilidade por provider/etapa com Prometheus: taxa de sucesso, erro, latência, inflight e fila.

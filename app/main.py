@@ -6,6 +6,7 @@ from typing import Optional, List
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, HttpUrl
+from prometheus_client import make_asgi_app
 
 # Configurar encoding UTF-8 para Windows
 import sys
@@ -40,6 +41,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="B2B Flash Profiler")
+app.mount("/metrics", make_asgi_app())
 
 # Registrar router v2
 app.include_router(v2_router, prefix="/v2")

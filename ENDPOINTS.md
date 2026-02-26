@@ -75,11 +75,35 @@ POST /v2/scrape/main-page/process-text
 }
 ```
 
-## Novo fluxo em 3 etapas
+#### 8. `/v2/scrape/main-page/unified` - Fluxo Unificado (Single)
+```json
+POST /v2/scrape/main-page/unified
+{
+  "cnpj_basico": "12345678",
+  "website_url": "https://example.com",
+  "timeout_seconds": 30,
+  "redis_ttl_seconds": 600
+}
+```
 
-- Etapa 1 salva `raw_content` (sucesso) ou `error` (falha) em `busca_fornecedor.scrape_main`.
-- Etapa 2 lê `raw_content`, extrai links de subpágina e salva em `subpage_links`.
-- Etapa 3 lê `raw_content`, extrai texto limpo e salva em `mainpage_processada`.
+#### 9. `/v2/scrape/main-page/unified/batch` - Fluxo Unificado (Batch)
+```json
+POST /v2/scrape/main-page/unified/batch
+{
+  "total_samples": 3200,
+  "batch_size": 3200,
+  "save_every": 50,
+  "timeout_seconds": 30,
+  "redis_ttl_seconds": 600
+}
+```
+
+## Fluxo unificado em 3 microetapas
+
+- Etapa 1 captura `raw_content` e mantém temporariamente no Redis (TTL curto).
+- Etapa 2 lê o `raw_content` temporário, extrai links de subpágina e salva em `subpage_links`.
+- Etapa 3 lê o `raw_content` temporário, extrai texto limpo e salva em `mainpage_processada`.
+- `raw_content` **não** é salvo no PostgreSQL.
 - Chave de atualização: upsert por `cnpj_basico`.
 
 ## Respostas

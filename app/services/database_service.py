@@ -327,49 +327,24 @@ class DatabaseService:
         website_url: Optional[str] = None,
     ) -> None:
         """
-        Salva o raw_content da main page e limpa error da etapa 1.
+        Compat legado: coluna raw_content foi removida.
+        Mantém apenas atualização de website_url e limpeza de error_step1.
         """
-        sanitized_raw_content = _sanitize_text_for_postgres(raw_content or "") or ""
         sanitized_website_url = _sanitize_text_for_postgres(website_url)
-        num_char_raw_main = len(sanitized_raw_content)
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
                 UPDATE "{SCHEMA}".scrape_main
-                SET raw_content = $2,
-                    website_url = COALESCE($3, website_url),
-                    num_char_raw_main = $4,
+                SET website_url = COALESCE($2, website_url),
                     error_step1 = NULL
                 WHERE cnpj_basico = $1
                 """
-            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.raw_content")
+            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.step1_compat")
             await conn.execute(
                 query,
                 cnpj_basico,
-                sanitized_raw_content,
                 sanitized_website_url,
-                num_char_raw_main,
             )
-
-    async def save_scrape_main_step1_success(
-        self,
-        cnpj_basico: str,
-        website_url: Optional[str] = None,
-    ) -> None:
-        """
-        Marca etapa 1 como sucesso no novo fluxo sem raw_content.
-        """
-        sanitized_website_url = _sanitize_text_for_postgres(website_url)
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            query = f"""
-                UPDATE "{SCHEMA}".scrape_main
-                SET error_step1 = NULL,
-                    website_url = COALESCE($2, website_url)
-                WHERE cnpj_basico = $1
-                """
-            logger.info(f"🔍 [SCHEMA={SCHEMA}] UPDATE scrape_main.step1_success")
-            await conn.execute(query, cnpj_basico, sanitized_website_url)
 
     async def save_scrape_main_error(
         self,
@@ -411,7 +386,7 @@ class DatabaseService:
         async with pool.acquire() as conn:
             query = f"""
                 SELECT cnpj_basico, website_url, subpage_links, mainpage_processada,
-                       num_char_main_processada,
+                       num_subpages, num_char_main_processada,
                        error_step1, error_step2, error_step3
                 FROM "{SCHEMA}".scrape_main
                 WHERE cnpj_basico = $1
@@ -502,16 +477,16 @@ class DatabaseService:
         after_id: int = 0,
     ) -> List[Dict[str, Any]]:
         """
-        Carrega registros aptos para etapa 2 (links ainda não processados).
+        Compat legado após remoção de raw_content:
+        carrega registros com step1 sem erro e links ainda não processados.
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
-                SELECT id, cnpj_basico, website_url
+                SELECT id, cnpj_basico, website_url, ''::text AS raw_content
                 FROM "{SCHEMA}".scrape_main
                 WHERE id > $1
-                  AND website_url IS NOT NULL
-                  AND TRIM(website_url) <> ''
+                  AND (error_step1 IS NULL OR TRIM(error_step1) = '')
                   AND (subpage_links IS NULL OR TRIM(subpage_links) = '')
                 ORDER BY id
                 LIMIT $2
@@ -525,16 +500,16 @@ class DatabaseService:
         after_id: int = 0,
     ) -> List[Dict[str, Any]]:
         """
-        Carrega registros aptos para etapa 3 (texto processado vazio).
+        Compat legado após remoção de raw_content:
+        carrega registros com step1 sem erro e texto processado vazio.
         """
         pool = await get_pool()
         async with pool.acquire() as conn:
             query = f"""
-                SELECT id, cnpj_basico, website_url
+                SELECT id, cnpj_basico, website_url, ''::text AS raw_content
                 FROM "{SCHEMA}".scrape_main
                 WHERE id > $1
-                  AND website_url IS NOT NULL
-                  AND TRIM(website_url) <> ''
+                  AND (error_step1 IS NULL OR TRIM(error_step1) = '')
                   AND (mainpage_processada IS NULL OR TRIM(mainpage_processada) = '')
                 ORDER BY id
                 LIMIT $2
@@ -575,9 +550,44 @@ class DatabaseService:
             await conn.executemany(query, payload)
             return len(payload)
 
+    async def get_pending_scrape_main_unified_companies(
+        self,
+        limit: int = 5000,
+        after_id: int = 0,
+        status_filter: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Pendentes para fluxo unificado:
+        website_discovery ainda ausente em scrape_main.
+        """
+        if not status_filter:
+            status_filter = ["muito_alto", "alto", "medio"]
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            placeholders = ", ".join(f"${i+1}" for i in range(len(status_filter)))
+            n = len(status_filter)
+            query = f"""
+                SELECT wd.id as wd_id, wd.cnpj_basico, wd.website_url
+                FROM "{SCHEMA}".website_discovery wd
+                WHERE wd.discovery_status IN ({placeholders})
+                  AND wd.website_url IS NOT NULL
+                  AND wd.website_url <> ''
+                  AND wd.id > ${n + 1}
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM "{SCHEMA}".scrape_main sm
+                    WHERE sm.cnpj_basico = wd.cnpj_basico
+                  )
+                ORDER BY wd.id
+                LIMIT ${n + 2}
+            """
+            rows = await conn.fetch(query, *status_filter, after_id, limit)
+            return [dict(row) for row in rows]
+
     async def save_scrape_main_unified_batch(self, records: List[Dict[str, Any]]) -> int:
         """
-        Persiste resultado unificado das etapas 1/2/3 sem raw_content.
+        Persiste resultados do endpoint unificado (sem raw_content).
         """
         if not records:
             return 0
@@ -585,23 +595,21 @@ class DatabaseService:
         payload = []
         for r in records:
             website_url = _sanitize_text_for_postgres(r.get("website_url"))
+            subpage_links = _sanitize_text_for_postgres(r.get("subpage_links")) or ""
+            mainpage_processada = _sanitize_text_for_postgres(r.get("mainpage_processada")) or ""
             error_step1 = _sanitize_text_for_postgres(r.get("error_step1"))
-            subpage_links = _sanitize_text_for_postgres(r.get("subpage_links"))
             error_step2 = _sanitize_text_for_postgres(r.get("error_step2"))
-            mainpage_processada = _sanitize_text_for_postgres(r.get("mainpage_processada"))
             error_step3 = _sanitize_text_for_postgres(r.get("error_step3"))
-            num_subpages = int(r.get("num_subpages") or 0)
-            num_char_main_processada = len(mainpage_processada or "")
             payload.append(
                 (
                     r["cnpj_basico"],
                     website_url,
-                    error_step1,
                     subpage_links,
-                    num_subpages,
-                    error_step2,
+                    int(r.get("num_subpages") or 0),
                     mainpage_processada,
-                    num_char_main_processada,
+                    len(mainpage_processada),
+                    error_step1,
+                    error_step2,
                     error_step3,
                 )
             )
@@ -611,28 +619,22 @@ class DatabaseService:
             query = f"""
                 INSERT INTO "{SCHEMA}".scrape_main
                     (
-                        cnpj_basico,
-                        website_url,
-                        error_step1,
-                        subpage_links,
-                        num_subpages,
-                        error_step2,
-                        mainpage_processada,
-                        num_char_main_processada,
-                        error_step3
+                        cnpj_basico, website_url, subpage_links, num_subpages,
+                        mainpage_processada, num_char_main_processada,
+                        error_step1, error_step2, error_step3
                     )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (cnpj_basico)
                 DO UPDATE SET
                     website_url = EXCLUDED.website_url,
-                    error_step1 = EXCLUDED.error_step1,
                     subpage_links = EXCLUDED.subpage_links,
                     num_subpages = EXCLUDED.num_subpages,
-                    error_step2 = EXCLUDED.error_step2,
                     mainpage_processada = EXCLUDED.mainpage_processada,
                     num_char_main_processada = EXCLUDED.num_char_main_processada,
+                    error_step1 = EXCLUDED.error_step1,
+                    error_step2 = EXCLUDED.error_step2,
                     error_step3 = EXCLUDED.error_step3
-                """
+            """
             await conn.executemany(query, payload)
             return len(payload)
 

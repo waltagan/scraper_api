@@ -145,6 +145,102 @@ class ScrapeMainPageBatchRequest(BaseModel):
     )
 
 
+class ScrapeMainUnifiedRequest(BaseModel):
+    """Request para endpoint unificado (etapas 1->2->3 em sequência)."""
+    cnpj_basico: str = Field(
+        ...,
+        description="CNPJ básico da empresa (8 primeiros dígitos)",
+        min_length=8,
+        max_length=8,
+    )
+    website_url: str = Field(..., description="URL do site oficial para processamento unificado")
+    timeout_seconds: int = Field(
+        30,
+        ge=5,
+        le=120,
+        description="Timeout por URL na microetapa de captura da main page",
+    )
+    redis_ttl_seconds: int = Field(
+        600,
+        ge=60,
+        le=3600,
+        description="TTL do raw_content temporário em Redis",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "cnpj_basico": "12345678",
+                "website_url": "https://www.empresa.com.br",
+                "timeout_seconds": 30,
+                "redis_ttl_seconds": 600,
+            }
+        }
+    )
+
+
+class ScrapeMainUnifiedBatchRequest(BaseModel):
+    """Request para endpoint unificado em lote."""
+    total_samples: int = Field(100000, ge=1, description="Total de registros a processar")
+    batch_size: int = Field(
+        3600,
+        ge=1,
+        le=3600,
+        description="Tamanho do lote concorrente (máximo recomendado 3600)",
+    )
+    save_every: int = Field(
+        1000,
+        ge=1,
+        description="Quantidade processada antes de persistir checkpoint em lote",
+    )
+    timeout_seconds: int = Field(
+        30,
+        ge=5,
+        le=120,
+        description="Timeout da microetapa de captura por URL",
+    )
+    redis_ttl_seconds: int = Field(
+        600,
+        ge=60,
+        le=3600,
+        description="TTL do raw_content temporário em Redis",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "total_samples": 3200,
+                "batch_size": 3200,
+                "save_every": 50,
+                "timeout_seconds": 30,
+                "redis_ttl_seconds": 600,
+            }
+        }
+    )
+
+
+class ScrapeMainUnifiedResponse(BaseModel):
+    """Response de aceite para endpoint unificado."""
+    success: bool = Field(..., description="Indica se a requisição foi aceita")
+    status: str = Field(default="accepted", description="Status da requisição")
+    stage: str = Field(default="unified", description="Etapa solicitada")
+    message: str = Field(..., description="Mensagem de aceite")
+    run_id: str = Field(..., description="ID da execução para rastreio")
+    cnpj_basico: str = Field(..., description="CNPJ básico da empresa")
+
+
+class ScrapeMainUnifiedBatchResponse(BaseModel):
+    """Response de aceite para processamento batch unificado."""
+    success: bool = Field(..., description="Indica se o batch foi aceito")
+    status: str = Field(default="accepted", description="Status da requisição")
+    stage: str = Field(default="unified", description="Etapa batch solicitada")
+    total_samples: int = Field(..., description="Total solicitado")
+    batch_size: int = Field(..., description="Lote concorrente configurado")
+    save_every: int = Field(..., description="Checkpoint de persistência")
+    run_id: str = Field(..., description="ID da execução para rastreio")
+    message: str = Field(..., description="Mensagem de aceite")
+
+
 class ScrapeMainBatchRequest(BaseModel):
     """Request para processamento em lote das etapas 2 e 3."""
     total_samples: int = Field(100000, ge=1, description="Total de registros a processar")

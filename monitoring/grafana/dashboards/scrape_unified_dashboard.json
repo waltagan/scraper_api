@@ -1,0 +1,69 @@
+{
+  "title": "Scrape Unified Proxy Health",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Throughput por provider/etapa",
+      "targets": [
+        {
+          "expr": "sum by (provider, stage) (rate(scrape_unified_requests_total{status=\"success\"}[1m]))",
+          "legendFormat": "{{provider}}/{{stage}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Erro por provider/etapa/tipo",
+      "targets": [
+        {
+          "expr": "sum by (provider, stage, error_type) (rate(scrape_unified_errors_total[1m]))",
+          "legendFormat": "{{provider}}/{{stage}}/{{error_type}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Latência p50/p90/p99 por provider/etapa",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le, provider, stage) (rate(scrape_unified_latency_seconds_bucket[1m])))",
+          "legendFormat": "p50 {{provider}}/{{stage}}"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum by (le, provider, stage) (rate(scrape_unified_latency_seconds_bucket[1m])))",
+          "legendFormat": "p90 {{provider}}/{{stage}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, provider, stage) (rate(scrape_unified_latency_seconds_bucket[1m])))",
+          "legendFormat": "p99 {{provider}}/{{stage}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Inflight por provider/etapa e fila",
+      "targets": [
+        {
+          "expr": "sum by (provider, stage) (scrape_unified_inflight_requests)",
+          "legendFormat": "inflight {{provider}}/{{stage}}"
+        },
+        {
+          "expr": "sum by (stage) (scrape_unified_queue_depth)",
+          "legendFormat": "queue {{stage}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    }
+  ]
+}
