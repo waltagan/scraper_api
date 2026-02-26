@@ -193,6 +193,15 @@ class ScrapeMainUnifiedBatchRequest(BaseModel):
         ge=1,
         description="Quantidade processada antes de persistir checkpoint em lote",
     )
+    save_mode: str = Field(
+        "checkpoint",
+        description="Modo de persistência: 'checkpoint' (usa save_every) ou 'final_only' (salva só ao final)",
+    )
+    save_in_batches: int = Field(
+        500,
+        ge=1,
+        description="Tamanho do lote de persistência no flush final (especialmente no modo final_only)",
+    )
     timeout_seconds: int = Field(
         30,
         ge=5,
@@ -212,6 +221,8 @@ class ScrapeMainUnifiedBatchRequest(BaseModel):
                 "total_samples": 3200,
                 "batch_size": 3200,
                 "save_every": 50,
+                "save_mode": "final_only",
+                "save_in_batches": 500,
                 "timeout_seconds": 30,
                 "redis_ttl_seconds": 600,
             }

@@ -389,17 +389,28 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
     requested_total = request.total_samples
     batch_size = request.batch_size
     save_every = request.save_every
+    save_mode = (request.save_mode or "checkpoint").strip().lower()
+    save_in_batches = request.save_in_batches
     timeout_seconds = request.timeout_seconds
     redis_ttl_seconds = request.redis_ttl_seconds
 
-    processed = 0
+    completed = 0
+    persisted = 0
     after_id = 0
     pending_results: List[Dict[str, Any]] = []
     started_at = time.perf_counter()
 
+    if save_mode not in {"checkpoint", "final_only"}:
+        logger.warning(
+            "[BATCH-UNIFIED] run_id=%s save_mode inválido '%s', usando 'checkpoint'",
+            run_id,
+            save_mode,
+        )
+        save_mode = "checkpoint"
+
     logger.info(
-        "[BATCH-UNIFIED] Iniciado run_id=%s total=%s batch_size=%s save_every=%s timeout=%ss redis_ttl=%ss",
-        run_id, requested_total, batch_size, save_every, timeout_seconds, redis_ttl_seconds,
+        "[BATCH-UNIFIED] Iniciado run_id=%s total=%s batch_size=%s save_mode=%s save_every=%s save_in_batches=%s timeout=%ss redis_ttl=%ss",
+        run_id, requested_total, batch_size, save_mode, save_every, save_in_batches, timeout_seconds, redis_ttl_seconds,
     )
 
     await proxy_pool.preload()
@@ -416,8 +427,8 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         return
 
     try:
-        while processed < requested_total:
-            remaining = requested_total - processed
+        while completed < requested_total:
+            remaining = requested_total - completed
             fetch_limit = min(5000, remaining)
             companies = await db_service.get_pending_scrape_main_unified_companies(
                 limit=fetch_limit,
@@ -465,33 +476,54 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
                         provider_results = await asyncio.gather(*provider_jobs, return_exceptions=False)
                         for result_list in provider_results:
                             pending_results.extend(result_list)
+                            completed += len(result_list)
 
-                    while len(pending_results) >= save_every:
-                        flush = pending_results[:save_every]
-                        pending_results = pending_results[save_every:]
-                        saved = await db_service.save_scrape_main_unified_batch(flush)
-                        processed += saved
-                        logger.info("[BATCH-UNIFIED] run_id=%s checkpoint: %s/%s", run_id, processed, requested_total)
+                    if save_mode == "checkpoint":
+                        while len(pending_results) >= save_every:
+                            flush = pending_results[:save_every]
+                            pending_results = pending_results[save_every:]
+                            saved = await db_service.save_scrape_main_unified_batch(flush)
+                            persisted += saved
+                            logger.info(
+                                "[BATCH-UNIFIED] run_id=%s checkpoint: persisted=%s completed=%s/%s",
+                                run_id,
+                                persisted,
+                                completed,
+                                requested_total,
+                            )
 
-                        if processed >= requested_total:
-                            break
-
-                    if processed >= requested_total:
+                    if completed >= requested_total:
                         break
-                if processed >= requested_total:
+                if completed >= requested_total:
                     break
 
-        if pending_results and processed < requested_total:
-            max_to_save = min(len(pending_results), requested_total - processed)
-            saved = await db_service.save_scrape_main_unified_batch(pending_results[:max_to_save])
-            processed += saved
-            logger.info("[BATCH-UNIFIED] run_id=%s flush final: %s/%s", run_id, processed, requested_total)
+        if pending_results:
+            flush_size = save_in_batches if save_mode == "final_only" else save_every
+            while pending_results:
+                flush = pending_results[:flush_size]
+                pending_results = pending_results[flush_size:]
+                saved = await db_service.save_scrape_main_unified_batch(flush)
+                persisted += saved
+                logger.info(
+                    "[BATCH-UNIFIED] run_id=%s flush final: persisted=%s completed=%s/%s",
+                    run_id,
+                    persisted,
+                    completed,
+                    requested_total,
+                )
     except Exception as e:
         logger.error("[BATCH-UNIFIED] run_id=%s erro fatal: %s", run_id, e, exc_info=True)
     finally:
         unified_queue_depth.labels(stage="unified_batch").set(0)
         elapsed_s = round(time.perf_counter() - started_at, 2)
-        logger.info("[BATCH-UNIFIED] run_id=%s concluído processados=%s/%s elapsed_s=%s", run_id, processed, requested_total, elapsed_s)
+        logger.info(
+            "[BATCH-UNIFIED] run_id=%s concluído completed=%s persisted=%s/%s elapsed_s=%s",
+            run_id,
+            completed,
+            persisted,
+            requested_total,
+            elapsed_s,
+        )
 
 
 async def _process_unified_single_background(request: ScrapeMainUnifiedRequest, run_id: str):
