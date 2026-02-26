@@ -7,6 +7,7 @@ import time
 import asyncio
 import json
 import uuid
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -474,7 +475,10 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         return
 
     batch_status = "success"
-    parse_executor = ProcessPoolExecutor(max_workers=parse_workers)
+    parse_executor = ProcessPoolExecutor(
+        max_workers=parse_workers,
+        mp_context=multiprocessing.get_context("spawn"),
+    )
     try:
         while completed < requested_total:
             remaining = requested_total - completed
