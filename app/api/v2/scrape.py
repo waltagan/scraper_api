@@ -28,6 +28,12 @@ from app.services.scraper import (
 from app.services.scraper_manager.proxy_manager import proxy_pool
 from app.services.database_service import get_db_service
 from app.core.chunking import process_content
+try:
+    from curl_cffi.requests import AsyncSession
+    HAS_CURL_CFFI = True
+except ImportError:
+    AsyncSession = None
+    HAS_CURL_CFFI = False
 
 logger = logging.getLogger(__name__)
 
@@ -169,15 +175,21 @@ async def _run_unified_one(
     timeout_seconds: int,
     proxy_url: str = "",
     proxy_provider: str = "",
+    shared_session: Any = None,
 ) -> Dict[str, Any]:
     """
     Executa etapas 1/2/3 em memória, sem persistir raw_content.
     """
+    t_total_start = time.perf_counter()
+    t1_start = time.perf_counter()
     final_url, status_code, raw_content, step1_error = await scrape_main_page_raw(
         website_url,
         timeout=timeout_seconds,
         proxy=proxy_url,
+        session=shared_session,
+        strict_timeout=True,
     )
+    t1_ms = (time.perf_counter() - t1_start) * 1000.0
 
     result: Dict[str, Any] = {
         "cnpj_basico": cnpj_basico,
@@ -188,6 +200,10 @@ async def _run_unified_one(
         "error_step2": None,
         "mainpage_processada": None,
         "error_step3": None,
+        "__phase1_ms": t1_ms,
+        "__phase2_ms": 0.0,
+        "__phase3_ms": 0.0,
+        "__total_ms": 0.0,
     }
 
     if step1_error:
@@ -195,6 +211,7 @@ async def _run_unified_one(
             f"step1:{step1_error} | status={status_code} | final_url={final_url}"
             + (f" | provider={proxy_provider}" if proxy_provider else "")
         )
+        result["__total_ms"] = (time.perf_counter() - t_total_start) * 1000.0
         return result
 
     # Etapa 1 concluída sem erro (sem salvar raw_content)
@@ -202,23 +219,30 @@ async def _run_unified_one(
 
     # Etapa 2
     try:
+        t2_start = time.perf_counter()
         links = extract_subpage_links_from_raw(raw_content or "", final_url or website_url)
         result["subpage_links"] = json.dumps(links, ensure_ascii=False)
         result["num_subpages"] = len(links)
         result["error_step2"] = None
+        result["__phase2_ms"] = (time.perf_counter() - t2_start) * 1000.0
     except Exception as exc:
         result["error_step2"] = f"step2:exception:{type(exc).__name__}:{str(exc)[:300]}"
+        result["__phase2_ms"] = (time.perf_counter() - t2_start) * 1000.0
 
     # Etapa 3
     try:
+        t3_start = time.perf_counter()
         processed_text = extract_mainpage_text_from_raw(raw_content or "", final_url or website_url)
         if not processed_text.strip():
             raise ValueError("não foi possível extrair texto útil")
         result["mainpage_processada"] = processed_text
         result["error_step3"] = None
+        result["__phase3_ms"] = (time.perf_counter() - t3_start) * 1000.0
     except Exception as exc:
         result["error_step3"] = f"step3:exception:{type(exc).__name__}:{str(exc)[:300]}"
+        result["__phase3_ms"] = (time.perf_counter() - t3_start) * 1000.0
 
+    result["__total_ms"] = (time.perf_counter() - t_total_start) * 1000.0
     return result
 
 
@@ -425,6 +449,11 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
     processed = 0
     after_id = 0
     pending_results: List[Dict[str, Any]] = []
+    phase1_time_ms = 0.0
+    phase2_time_ms = 0.0
+    phase3_time_ms = 0.0
+    total_item_time_ms = 0.0
+    processed_items_for_timing = 0
 
     logger.info(
         "[BATCH-UNIFIED] Iniciado: total=%s batch_size=%s save_every=%s timeout=%ss",
@@ -444,65 +473,85 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
         logger.error("[BATCH-UNIFIED] Nenhum proxy carregado para execução")
         return
 
-    while processed < requested_total:
-        remaining = requested_total - processed
-        fetch_limit = min(5000, remaining)
-        companies = await db_service.get_pending_scrape_main_step1_companies(
-            limit=fetch_limit,
-            after_id=after_id,
+    shared_session = None
+    if HAS_CURL_CFFI:
+        # Igual ao stress test: sessão compartilhada para a onda inteira de coleta.
+        shared_session = AsyncSession(
+            impersonate="chrome131",
+            verify=False,
+            max_clients=max(batch_size + 100, 1100),
         )
-        if not companies:
-            break
 
-        after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
+    try:
+        while processed < requested_total:
+            remaining = requested_total - processed
+            fetch_limit = min(5000, remaining)
+            companies = await db_service.get_pending_scrape_main_step1_companies(
+                limit=fetch_limit,
+                after_id=after_id,
+            )
+            if not companies:
+                break
 
-        async def run_provider_slice(
-            provider: str,
-            company_slice: List[Dict[str, Any]],
-            proxy_urls: List[str],
-        ) -> List[Dict[str, Any]]:
-            tasks = [
-                _run_unified_one(
-                    cnpj_basico=company["cnpj_basico"],
-                    website_url=company["website_url"],
-                    timeout_seconds=timeout_seconds,
-                    proxy_url=proxy_urls[i % len(proxy_urls)],
-                    proxy_provider=provider,
-                )
-                for i, company in enumerate(company_slice)
-            ]
-            return await asyncio.gather(*tasks, return_exceptions=False)
+            after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
 
-        for chunk in _chunk_list(companies, batch_size):
-            provider_capacity = 1000 * len(active_providers)
-            for start_idx in range(0, len(chunk), provider_capacity):
-                provider_window = chunk[start_idx:start_idx + provider_capacity]
-                allocation = _allocate_provider_slices(
-                    total_items=len(provider_window),
-                    providers=active_providers,
-                    per_provider_cap=1000,
-                )
-                cursor = 0
-                jobs = []
-                for provider in active_providers:
-                    take = allocation.get(provider, 0)
-                    company_slice = provider_window[cursor:cursor + take]
-                    cursor += take
-                    if not company_slice:
-                        continue
-                    jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
+            async def run_provider_slice(
+                provider: str,
+                company_slice: List[Dict[str, Any]],
+                proxy_urls: List[str],
+            ) -> List[Dict[str, Any]]:
+                tasks = [
+                    _run_unified_one(
+                        cnpj_basico=company["cnpj_basico"],
+                        website_url=company["website_url"],
+                        timeout_seconds=timeout_seconds,
+                        proxy_url=proxy_urls[i % len(proxy_urls)],
+                        proxy_provider=provider,
+                        shared_session=shared_session,
+                    )
+                    for i, company in enumerate(company_slice)
+                ]
+                return await asyncio.gather(*tasks, return_exceptions=False)
 
-                if jobs:
-                    provider_results = await asyncio.gather(*jobs, return_exceptions=False)
-                    for results in provider_results:
-                        pending_results.extend(results)
-                        processed += len(results)
-                        if processed >= requested_total:
-                            break
+            for chunk in _chunk_list(companies, batch_size):
+                provider_capacity = 1000 * len(active_providers)
+                for start_idx in range(0, len(chunk), provider_capacity):
+                    provider_window = chunk[start_idx:start_idx + provider_capacity]
+                    allocation = _allocate_provider_slices(
+                        total_items=len(provider_window),
+                        providers=active_providers,
+                        per_provider_cap=1000,
+                    )
+                    cursor = 0
+                    jobs = []
+                    for provider in active_providers:
+                        take = allocation.get(provider, 0)
+                        company_slice = provider_window[cursor:cursor + take]
+                        cursor += take
+                        if not company_slice:
+                            continue
+                        jobs.append(run_provider_slice(provider, company_slice, provider_proxy_lists[provider]))
+
+                    if jobs:
+                        provider_results = await asyncio.gather(*jobs, return_exceptions=False)
+                        for results in provider_results:
+                            for item in results:
+                                phase1_time_ms += float(item.get("__phase1_ms") or 0.0)
+                                phase2_time_ms += float(item.get("__phase2_ms") or 0.0)
+                                phase3_time_ms += float(item.get("__phase3_ms") or 0.0)
+                                total_item_time_ms += float(item.get("__total_ms") or 0.0)
+                                processed_items_for_timing += 1
+                            pending_results.extend(results)
+                            processed += len(results)
+                            if processed >= requested_total:
+                                break
+                    if processed >= requested_total:
+                        break
                 if processed >= requested_total:
                     break
-            if processed >= requested_total:
-                break
+    finally:
+        if shared_session is not None:
+            await shared_session.close()
 
     if pending_results:
         max_to_save = min(len(pending_results), requested_total)
@@ -520,9 +569,25 @@ async def _run_unified_batch_background(request: ScrapeMainPageBatchRequest):
         )
 
     elapsed_s = round(time.perf_counter() - started_at, 2)
+    avg_p1 = (phase1_time_ms / processed_items_for_timing) if processed_items_for_timing else 0.0
+    avg_p2 = (phase2_time_ms / processed_items_for_timing) if processed_items_for_timing else 0.0
+    avg_p3 = (phase3_time_ms / processed_items_for_timing) if processed_items_for_timing else 0.0
+    avg_total = (total_item_time_ms / processed_items_for_timing) if processed_items_for_timing else 0.0
     logger.info(
         "[BATCH-UNIFIED] Concluído: processados=%s solicitados=%s elapsed_s=%s",
         processed, requested_total, elapsed_s,
+    )
+    logger.info(
+        "[BATCH-UNIFIED][TIME-MARKERS] itens=%s avg_ms{p1=%.1f,p2=%.1f,p3=%.1f,total=%.1f} sum_s{p1=%.2f,p2=%.2f,p3=%.2f,total=%.2f}",
+        processed_items_for_timing,
+        avg_p1,
+        avg_p2,
+        avg_p3,
+        avg_total,
+        phase1_time_ms / 1000.0,
+        phase2_time_ms / 1000.0,
+        phase3_time_ms / 1000.0,
+        total_item_time_ms / 1000.0,
     )
 
 

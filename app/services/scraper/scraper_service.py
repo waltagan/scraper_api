@@ -9,7 +9,7 @@ import asyncio
 import random
 import time
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from .models import ScrapedPage, ScrapeResult
 from .constants import (
@@ -423,6 +423,8 @@ async def scrape_main_page_raw(
     url: str,
     timeout: int = REQUEST_TIMEOUT,
     proxy: str = "",
+    session: Optional[Any] = None,
+    strict_timeout: bool = False,
 ) -> Tuple[str, int, str, str]:
     """
     Faz um GET único da main page (estilo stress test) e retorna:
@@ -432,21 +434,23 @@ async def scrape_main_page_raw(
         return url, 0, "", "curl_cffi_not_available"
 
     target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
-    session = AsyncSession(impersonate="chrome131", verify=False, max_clients=200)
+    owns_session = session is None
+    active_session = session or AsyncSession(impersonate="chrome131", verify=False, max_clients=200)
     error = ""
 
     try:
-        resp = await asyncio.wait_for(
-            session.get(
-                target_url,
-                headers=_MAIN_PAGE_HEADERS,
-                proxy=(proxy or None),
-                timeout=timeout,
-                allow_redirects=True,
-                max_redirects=5,
-            ),
-            timeout=timeout + 5,
+        request_coro = active_session.get(
+            target_url,
+            headers=_MAIN_PAGE_HEADERS,
+            proxy=(proxy or None),
+            timeout=timeout,
+            allow_redirects=True,
+            max_redirects=5,
         )
+        if strict_timeout:
+            resp = await request_coro
+        else:
+            resp = await asyncio.wait_for(request_coro, timeout=timeout + 5)
         status_code = int(getattr(resp, "status_code", 0) or 0)
         final_url = str(getattr(resp, "url", target_url))
         raw_html = (resp.content or b"").decode("utf-8", errors="ignore")
@@ -460,7 +464,8 @@ async def scrape_main_page_raw(
     except Exception as exc:
         return target_url, 0, "", f"{type(exc).__name__}: {str(exc)[:200]}"
     finally:
-        await session.close()
+        if owns_session:
+            await active_session.close()
 
 
 def extract_subpage_links_from_raw(raw_content: str, base_url: str) -> List[str]:
