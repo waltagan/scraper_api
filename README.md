@@ -49,4 +49,5 @@ Documentação interativa: `/docs`
 - Probe simplificado para GET único (sem fallback/retry), usando proxy gateway único, headers fixos, sessão compartilhada por execução e timeout hard (`asyncio.wait_for`) alinhado ao comportamento do stress test.
 - Fluxo unificado para `scrape_main` executa 3 microetapas e **não persiste `raw_content` no PostgreSQL** (usa Redis com TTL).
 - Persistência do novo fluxo com upsert por `cnpj_basico` na tabela `scrape_main`.
-- Observabilidade por provider/etapa com Prometheus: taxa de sucesso, erro, latência, inflight e fila.
+- Observabilidade por provider/etapa com Prometheus: taxa de sucesso, erro, latência, inflight, fila, tempo total por empresa, tempo de flush e duração de run batch.
+- Métricas de saturação do servidor no `/metrics`: CPU, memória RSS, open file descriptors, load average, lag de event loop, latência HTTP e requisições HTTP em voo.

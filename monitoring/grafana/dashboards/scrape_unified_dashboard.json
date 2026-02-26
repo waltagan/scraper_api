@@ -1,69 +1,233 @@
 {
-  "title": "Scrape Unified Proxy Health",
+  "title": "Scrape Unified - Operations & Saturation",
   "timezone": "browser",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "1s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "panels": [
     {
       "id": 1,
       "type": "timeseries",
-      "title": "Throughput por provider/etapa",
+      "title": "Throughput/s por Provider e Etapa (success)",
       "targets": [
         {
           "expr": "sum by (provider, stage) (rate(scrape_unified_requests_total{status=\"success\"}[1m]))",
           "legendFormat": "{{provider}}/{{stage}}"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 0 }
     },
     {
       "id": 2,
       "type": "timeseries",
-      "title": "Erro por provider/etapa/tipo",
+      "title": "Erro/s por Provider/Etapa/Tipo",
       "targets": [
         {
           "expr": "sum by (provider, stage, error_type) (rate(scrape_unified_errors_total[1m]))",
           "legendFormat": "{{provider}}/{{stage}}/{{error_type}}"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 0 }
     },
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Latência p50/p90/p99 por provider/etapa",
+      "title": "Taxa de Sucesso Step1 por Provider (%)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (le, provider, stage) (rate(scrape_unified_latency_seconds_bucket[1m])))",
-          "legendFormat": "p50 {{provider}}/{{stage}}"
-        },
-        {
-          "expr": "histogram_quantile(0.9, sum by (le, provider, stage) (rate(scrape_unified_latency_seconds_bucket[1m])))",
-          "legendFormat": "p90 {{provider}}/{{stage}}"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum by (le, provider, stage) (rate(scrape_unified_latency_seconds_bucket[1m])))",
-          "legendFormat": "p99 {{provider}}/{{stage}}"
+          "expr": "100 * sum by (provider) (rate(scrape_unified_requests_total{stage=\"step1\",status=\"success\"}[1m])) / clamp_min(sum by (provider) (rate(scrape_unified_requests_total{stage=\"step1\"}[1m])), 0.0001)",
+          "legendFormat": "{{provider}}"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 }
     },
     {
       "id": 4,
       "type": "timeseries",
-      "title": "Inflight por provider/etapa e fila",
+      "title": "Latência Step1 p50/p90/p99 (s)",
       "targets": [
         {
-          "expr": "sum by (provider, stage) (scrape_unified_inflight_requests)",
-          "legendFormat": "inflight {{provider}}/{{stage}}"
+          "expr": "histogram_quantile(0.50, sum by (le, provider) (rate(scrape_unified_latency_seconds_bucket{stage=\"step1\"}[1m])))",
+          "legendFormat": "p50 {{provider}}"
         },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, provider) (rate(scrape_unified_latency_seconds_bucket{stage=\"step1\"}[1m])))",
+          "legendFormat": "p90 {{provider}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, provider) (rate(scrape_unified_latency_seconds_bucket{stage=\"step1\"}[1m])))",
+          "legendFormat": "p99 {{provider}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 7 }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Latência Step2/Step3 p90 (s)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, stage, provider) (rate(scrape_unified_latency_seconds_bucket{stage=~\"step2|step3\"}[1m])))",
+          "legendFormat": "{{stage}} {{provider}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Tempo Total por Empresa p50/p90/p99 (s)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, provider) (rate(scrape_unified_company_total_seconds_bucket[1m])))",
+          "legendFormat": "p50 {{provider}}"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, provider) (rate(scrape_unified_company_total_seconds_bucket[1m])))",
+          "legendFormat": "p90 {{provider}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, provider) (rate(scrape_unified_company_total_seconds_bucket[1m])))",
+          "legendFormat": "p99 {{provider}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Backlog e Fila de Persistência",
+      "targets": [
         {
           "expr": "sum by (stage) (scrape_unified_queue_depth)",
           "legendFormat": "queue {{stage}}"
+        },
+        {
+          "expr": "sum by (mode) (scrape_unified_pending_results_depth)",
+          "legendFormat": "pending {{mode}}"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Inflight por Etapa/Provider",
+      "targets": [
+        {
+          "expr": "sum by (provider, stage) (scrape_unified_inflight_requests)",
+          "legendFormat": "{{provider}}/{{stage}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Persistência no Banco - Latência Flush p50/p90/p99 (s)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, mode) (rate(scrape_unified_batch_flush_seconds_bucket[1m])))",
+          "legendFormat": "p50 {{mode}}"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, mode) (rate(scrape_unified_batch_flush_seconds_bucket[1m])))",
+          "legendFormat": "p90 {{mode}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, mode) (rate(scrape_unified_batch_flush_seconds_bucket[1m])))",
+          "legendFormat": "p99 {{mode}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Persistência no Banco - Registros por Flush (avg)",
+      "targets": [
+        {
+          "expr": "rate(scrape_unified_batch_flush_records_sum[1m]) / clamp_min(rate(scrape_unified_batch_flush_records_count[1m]), 0.0001)",
+          "legendFormat": "{{mode}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Duração do Run Batch p50/p90/p99 (s)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, mode, status) (rate(scrape_unified_batch_run_seconds_bucket[10m])))",
+          "legendFormat": "p50 {{mode}}/{{status}}"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, mode, status) (rate(scrape_unified_batch_run_seconds_bucket[10m])))",
+          "legendFormat": "p90 {{mode}}/{{status}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, mode, status) (rate(scrape_unified_batch_run_seconds_bucket[10m])))",
+          "legendFormat": "p99 {{mode}}/{{status}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 35 }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "HTTP da API - Inflight e P95",
+      "targets": [
+        {
+          "expr": "scrape_http_inflight_requests",
+          "legendFormat": "http inflight"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(scrape_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95 {{path}}"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 35 }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Saturação do Servidor - CPU%, Memória RSS, FD",
+      "targets": [
+        {
+          "expr": "scrape_server_cpu_percent",
+          "legendFormat": "cpu%"
+        },
+        {
+          "expr": "scrape_server_memory_rss_bytes / 1024 / 1024",
+          "legendFormat": "memory_rss_mb"
+        },
+        {
+          "expr": "scrape_server_open_fds",
+          "legendFormat": "open_fds"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 42 }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Saturação do Servidor - Event Loop Lag e Load",
+      "targets": [
+        {
+          "expr": "scrape_server_event_loop_lag_seconds",
+          "legendFormat": "event_loop_lag_s"
+        },
+        {
+          "expr": "scrape_server_loadavg_1m",
+          "legendFormat": "loadavg_1m"
+        }
+      ],
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 42 }
     }
   ]
 }

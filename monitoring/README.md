@@ -12,8 +12,13 @@
 - Painéis:
   - throughput por provider e etapa,
   - erros por provider/etapa/tipo,
-  - latência p50/p90/p99 por provider/etapa,
-  - inflight + fila do batch.
+  - taxa de sucesso da etapa 1 por provider,
+  - latência p50/p90/p99 por etapa/provider e tempo total por empresa,
+  - backlog/fila de persistência,
+  - latência e tamanho do flush no banco,
+  - duração do run batch por modo (`checkpoint`/`final_only`),
+  - saturação do servidor (CPU, memória RSS, FD, event loop lag, load),
+  - saturação HTTP (inflight e p95 por rota).
 
 ## Alertas recomendados
 
@@ -23,3 +28,7 @@
   - `sum(rate(scrape_unified_errors_total{error_type=~"TimeoutError|ReadTimeout|ConnectTimeout"}[2m])) > 5`
 - Saturação:
   - `max(scrape_unified_inflight_requests) > 1100` por provider/etapa (ajustar ao cap operacional real).
+- Event loop degradado:
+  - `avg_over_time(scrape_server_event_loop_lag_seconds[2m]) > 0.05`
+- CPU sustentada:
+  - `avg_over_time(scrape_server_cpu_percent[5m]) > 85`

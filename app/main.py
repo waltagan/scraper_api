@@ -35,6 +35,12 @@ from app.services.llm_manager import start_health_monitor
 from app.core.database import get_pool, close_pool, test_connection
 from app.core.vllm_client import check_vllm_health
 from app.api.v2.router import router as v2_router
+from app.core.metrics import (
+    http_inflight_requests,
+    observe_http_request,
+    start_server_metrics_collector,
+    stop_server_metrics_collector,
+)
 
 # Configurar Logging (JSON Structured)
 setup_logging()
@@ -42,6 +48,25 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="B2B Flash Profiler")
 app.mount("/metrics", make_asgi_app())
+
+
+@app.middleware("http")
+async def prometheus_http_metrics_middleware(request: Request, call_next):
+    http_inflight_requests.inc()
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        observe_http_request(
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            elapsed_s=time.perf_counter() - started,
+        )
+        http_inflight_requests.dec()
 
 # Registrar router v2
 app.include_router(v2_router, prefix="/v2")
@@ -69,6 +94,7 @@ async def startup_event():
         logger.warning(f"⚠️ Erro ao verificar saúde do SGLang: {e}")
     
     start_health_monitor()
+    start_server_metrics_collector(interval_seconds=1.0)
 
     logger.info("🚀 Aplicação inicializada com sucesso")
 
@@ -76,6 +102,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Executado quando a aplicação encerra"""
+    await stop_server_metrics_collector()
     await close_pool()
     logger.info("🔌 Aplicação encerrada")
 
