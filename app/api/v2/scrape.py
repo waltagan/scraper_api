@@ -7,9 +7,8 @@ import time
 import asyncio
 import json
 import uuid
-import multiprocessing
 import traceback
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Query
@@ -71,19 +70,17 @@ def _parse_html_standalone(raw_content: str, base_url: str):
 
 
 def _create_parse_executor(parse_workers: int):
-    """Tenta criar ProcessPoolExecutor; fallback para ThreadPoolExecutor."""
+    """Cria executor para parsing HTML: loky (ProcessPool) com fallback para ThreadPool."""
     try:
-        executor = ProcessPoolExecutor(
-            max_workers=parse_workers,
-            mp_context=multiprocessing.get_context("spawn"),
-        )
+        from loky import get_reusable_executor
+        executor = get_reusable_executor(max_workers=parse_workers)
         future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
-        future.result(timeout=10)
-        logger.info("[PARSE-EXECUTOR] ProcessPoolExecutor(workers=%s, spawn) inicializado com sucesso", parse_workers)
-        return executor, "process"
+        future.result(timeout=15)
+        logger.info("[PARSE-EXECUTOR] loky ReusableExecutor(workers=%s) inicializado com sucesso", parse_workers)
+        return executor, "loky"
     except Exception as e:
         logger.warning(
-            "[PARSE-EXECUTOR] ProcessPoolExecutor falhou (%s: %s), usando ThreadPoolExecutor como fallback",
+            "[PARSE-EXECUTOR] loky falhou (%s: %s), usando ThreadPoolExecutor como fallback",
             type(e).__name__, str(e)[:200],
         )
         return ThreadPoolExecutor(max_workers=parse_workers), "thread"
@@ -350,7 +347,7 @@ async def _run_unified_pipeline_for_company(
     proxy_provider: str,
     timeout_seconds: int,
     redis_ttl_seconds: int,
-    parse_executor: Optional[ProcessPoolExecutor] = None,
+    parse_executor=None,
 ) -> Dict[str, Any]:
     pipeline_started = time.perf_counter()
     cnpj = company["cnpj_basico"]
