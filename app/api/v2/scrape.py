@@ -25,6 +25,7 @@ from app.schemas.v2.scrape import (
     ScrapeMainUnifiedBatchRequest,
     ScrapeMainUnifiedResponse,
     ScrapeMainUnifiedBatchResponse,
+    ScrapeMainUnifiedBatchSyncResponse,
 )
 from app.services.scraper import (
     scrape_all_subpages,
@@ -664,6 +665,17 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
             parse_workers,
         )
 
+    return {
+        "run_id": run_id,
+        "status": batch_status,
+        "completed": completed,
+        "persisted": persisted,
+        "total_requested": requested_total,
+        "elapsed_s": elapsed_s,
+        "parse_workers": parse_workers,
+        "executor_type": executor_type,
+    }
+
 
 async def _process_unified_single_background(request: ScrapeMainUnifiedRequest, run_id: str):
     company = {"cnpj_basico": request.cnpj_basico, "website_url": request.website_url}
@@ -1187,6 +1199,34 @@ async def scrape_main_page_unified_batch(
     except Exception as e:
         logger.error("Erro ao aceitar batch unificado: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erro ao aceitar batch unificado: {str(e)}")
+
+
+@router.post("/scrape/main-page/unified/batch/sync", response_model=ScrapeMainUnifiedBatchSyncResponse)
+async def scrape_main_page_unified_batch_sync(
+    request: ScrapeMainUnifiedBatchRequest,
+) -> ScrapeMainUnifiedBatchSyncResponse:
+    """
+    Endpoint unificado batch SÍNCRONO:
+    Só retorna a resposta HTTP após a conclusão total do processamento.
+    Ideal para scripts de automação que disparam runs em sequência.
+    """
+    try:
+        run_id = str(uuid.uuid4())
+        result = await _run_unified_batch_background(request=request, run_id=run_id)
+        return ScrapeMainUnifiedBatchSyncResponse(
+            success=result["status"] == "success",
+            run_id=result["run_id"],
+            status=result["status"],
+            completed=result["completed"],
+            persisted=result["persisted"],
+            total_requested=result["total_requested"],
+            elapsed_s=result["elapsed_s"],
+            parse_workers=result["parse_workers"],
+            executor_type=result["executor_type"],
+        )
+    except Exception as e:
+        logger.error("Erro no batch unificado sync: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro no batch unificado sync: {str(e)}")
 
 
 @router.post("/scrape/main-page/subpage-links/batch", response_model=ScrapeMainBatchResponse)

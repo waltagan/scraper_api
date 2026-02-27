@@ -259,6 +259,19 @@ class ScrapeMainUnifiedBatchResponse(BaseModel):
     message: str = Field(..., description="Mensagem de aceite")
 
 
+class ScrapeMainUnifiedBatchSyncResponse(BaseModel):
+    """Response síncrona — retornada somente após conclusão total do batch."""
+    success: bool = Field(..., description="Se o batch completou sem erro fatal")
+    run_id: str = Field(..., description="ID da execução")
+    status: str = Field(..., description="Status final: success ou error")
+    completed: int = Field(..., description="Empresas processadas")
+    persisted: int = Field(..., description="Empresas persistidas no banco")
+    total_requested: int = Field(..., description="Total solicitado")
+    elapsed_s: float = Field(..., description="Duração total em segundos")
+    parse_workers: int = Field(..., description="Workers de parsing usados")
+    executor_type: str = Field(..., description="Tipo de executor: loky ou thread")
+
+
 class ScrapeMainBatchRequest(BaseModel):
     """Request para processamento em lote das etapas 2 e 3."""
     total_samples: int = Field(100000, ge=1, description="Total de registros a processar")
