@@ -94,26 +94,16 @@ class _Undaemonize:
 
 def _create_parse_executor(parse_workers: int):
     """Cria executor para parsing HTML: loky → ProcessPool → ThreadPool."""
-    with _Undaemonize():
-        try:
-            from loky import get_reusable_executor
-            executor = get_reusable_executor(max_workers=parse_workers)
-            future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
-            future.result(timeout=15)
-            logger.info("[PARSE-EXECUTOR] loky ReusableExecutor(workers=%s) OK", parse_workers)
-            return executor, "loky"
-        except Exception as e:
-            logger.warning("[PARSE-EXECUTOR] loky falhou (%s: %s), tentando ProcessPoolExecutor...", type(e).__name__, str(e)[:200])
-            try:
-                from concurrent.futures import ProcessPoolExecutor
-                executor = ProcessPoolExecutor(max_workers=parse_workers)
-                future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
-                future.result(timeout=15)
-                logger.info("[PARSE-EXECUTOR] ProcessPoolExecutor(workers=%s) OK", parse_workers)
-                return executor, "process"
-            except Exception as e2:
-                logger.warning("[PARSE-EXECUTOR] ProcessPool falhou (%s: %s), usando ThreadPoolExecutor", type(e2).__name__, str(e2)[:200])
-                return ThreadPoolExecutor(max_workers=parse_workers), "thread"
+    try:
+        from loky import get_reusable_executor
+        executor = get_reusable_executor(max_workers=parse_workers)
+        future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
+        future.result(timeout=15)
+        logger.info("[PARSE-EXECUTOR] loky ReusableExecutor(workers=%s) OK", parse_workers)
+        return executor, "loky"
+    except Exception as e:
+        logger.warning("[PARSE-EXECUTOR] loky falhou (%s: %s), usando ThreadPoolExecutor", type(e).__name__, str(e)[:200])
+        return ThreadPoolExecutor(max_workers=parse_workers), "thread"
 
 
 def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
@@ -491,6 +481,9 @@ async def _run_unified_pipeline_for_company(
 
 
 async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, run_id: str):
+    _undaemon = _Undaemonize()
+    _undaemon.__enter__()
+
     requested_total = request.total_samples
     batch_size = request.batch_size
     save_every = request.save_every
@@ -656,6 +649,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         logger.error("[BATCH-UNIFIED] run_id=%s erro fatal: %s", run_id, e, exc_info=True)
     finally:
         parse_executor.shutdown(wait=False)
+        _undaemon.__exit__(None, None, None)
         unified_queue_depth.labels(stage="unified_batch", run=run_id).set(0)
         unified_pending_results_depth.labels(mode=save_mode, run=run_id).set(0)
         elapsed_s = round(time.perf_counter() - started_at, 2)
