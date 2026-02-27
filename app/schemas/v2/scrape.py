@@ -270,6 +270,13 @@ class ScrapeMainUnifiedBatchSyncResponse(BaseModel):
     elapsed_s: float = Field(..., description="Duração total em segundos")
     parse_workers: int = Field(..., description="Workers de parsing usados")
     executor_type: str = Field(..., description="Tipo de executor: loky ou thread")
+    loaded_from_db: int = Field(..., description="Empresas carregadas do banco (carga)")
+    step1_success_pct: float = Field(..., description="% sucesso Step1 (proxy/scrape)")
+    step1_errors: int = Field(..., description="Qtd erros Step1")
+    step2_success_pct: float = Field(..., description="% sucesso Step2 (parse HTML)")
+    step2_errors: int = Field(..., description="Qtd erros Step2")
+    step3_success_pct: float = Field(..., description="% sucesso Step3 (validação texto)")
+    step3_errors: int = Field(..., description="Qtd erros Step3")
 
 
 class ScrapeMainBatchRequest(BaseModel):

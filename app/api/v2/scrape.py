@@ -499,6 +499,8 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
     after_id = 0
     pending_results: List[Dict[str, Any]] = []
     started_at = time.perf_counter()
+    loaded_from_db = 0
+    stats = {"step1_ok": 0, "step1_err": 0, "step2_ok": 0, "step2_err": 0, "step3_ok": 0, "step3_err": 0}
 
     if save_mode not in {"checkpoint", "final_only"}:
         logger.warning(
@@ -552,6 +554,7 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
             )
             if not companies:
                 break
+            loaded_from_db += len(companies)
 
             after_id = max(int(c["wd_id"]) for c in companies if c.get("wd_id") is not None)
             unified_queue_depth.labels(stage="unified_batch", run=run_id).set(len(companies))
@@ -592,6 +595,11 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
                     if provider_jobs:
                         provider_results = await asyncio.gather(*provider_jobs, return_exceptions=False)
                         for result_list in provider_results:
+                            for r in result_list:
+                                stats["step1_err" if r.get("error_step1") else "step1_ok"] += 1
+                                if not r.get("error_step1"):
+                                    stats["step2_err" if r.get("error_step2") else "step2_ok"] += 1
+                                    stats["step3_err" if r.get("error_step3") else "step3_ok"] += 1
                             pending_results.extend(result_list)
                             completed += len(result_list)
                         unified_pending_results_depth.labels(mode=save_mode, run=run_id).set(len(pending_results))
@@ -665,6 +673,10 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
             parse_workers,
         )
 
+    s1_total = stats["step1_ok"] + stats["step1_err"]
+    s2_total = stats["step2_ok"] + stats["step2_err"]
+    s3_total = stats["step3_ok"] + stats["step3_err"]
+
     return {
         "run_id": run_id,
         "status": batch_status,
@@ -674,6 +686,13 @@ async def _run_unified_batch_background(request: ScrapeMainUnifiedBatchRequest, 
         "elapsed_s": elapsed_s,
         "parse_workers": parse_workers,
         "executor_type": executor_type,
+        "loaded_from_db": loaded_from_db,
+        "step1_success_pct": round(100 * stats["step1_ok"] / max(s1_total, 1), 1),
+        "step1_errors": stats["step1_err"],
+        "step2_success_pct": round(100 * stats["step2_ok"] / max(s2_total, 1), 1),
+        "step2_errors": stats["step2_err"],
+        "step3_success_pct": round(100 * stats["step3_ok"] / max(s3_total, 1), 1),
+        "step3_errors": stats["step3_err"],
     }
 
 
@@ -1223,6 +1242,13 @@ async def scrape_main_page_unified_batch_sync(
             elapsed_s=result["elapsed_s"],
             parse_workers=result["parse_workers"],
             executor_type=result["executor_type"],
+            loaded_from_db=result["loaded_from_db"],
+            step1_success_pct=result["step1_success_pct"],
+            step1_errors=result["step1_errors"],
+            step2_success_pct=result["step2_success_pct"],
+            step2_errors=result["step2_errors"],
+            step3_success_pct=result["step3_success_pct"],
+            step3_errors=result["step3_errors"],
         )
     except Exception as e:
         logger.error("Erro no batch unificado sync: %s", e, exc_info=True)

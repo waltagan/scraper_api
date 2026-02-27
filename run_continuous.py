@@ -33,14 +33,14 @@ def run_batch(base_url: str, payload: dict, timeout: int) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Loop contínuo do batch unificado")
     parser.add_argument("--url", default=DEFAULT_URL, help="URL base da API")
-    parser.add_argument("--total", type=int, default=1000, help="Empresas por run")
-    parser.add_argument("--batch-size", type=int, default=3600, help="Tamanho do lote concorrente")
+    parser.add_argument("--total", type=int, default=3000, help="Empresas por run")
+    parser.add_argument("--batch-size", type=int, default=3000, help="Tamanho do lote concorrente")
     parser.add_argument("--workers", type=int, default=6, help="Parse workers (loky)")
-    parser.add_argument("--timeout-seconds", type=int, default=30, help="Timeout HTTP por empresa")
+    parser.add_argument("--timeout-seconds", type=int, default=35, help="Timeout HTTP por empresa")
     parser.add_argument("--save-mode", default="final_only", help="checkpoint ou final_only")
     parser.add_argument("--save-in-batches", type=int, default=200, help="Tamanho do flush")
-    parser.add_argument("--max-runs", type=int, default=0, help="Máximo de runs (0=infinito)")
-    parser.add_argument("--pause", type=int, default=5, help="Pausa entre runs (segundos)")
+    parser.add_argument("--max-runs", type=int, default=300, help="Máximo de runs (0=infinito)")
+    parser.add_argument("--pause", type=int, default=1, help="Pausa entre runs (segundos)")
     parser.add_argument("--http-timeout", type=int, default=600, help="Timeout HTTP total da request (segundos)")
     args = parser.parse_args()
 
@@ -86,14 +86,22 @@ def main():
                 elapsed = result.get("elapsed_s", 0)
                 run_id = result.get("run_id", "?")[:8]
                 executor = result.get("executor_type", "?")
+                loaded = result.get("loaded_from_db", 0)
+                s1_pct = result.get("step1_success_pct", 0)
+                s1_err = result.get("step1_errors", 0)
+                s2_pct = result.get("step2_success_pct", 0)
+                s2_err = result.get("step2_errors", 0)
+                s3_pct = result.get("step3_success_pct", 0)
+                s3_err = result.get("step3_errors", 0)
 
                 total_completed += completed
                 total_persisted += persisted
                 total_elapsed += elapsed
 
                 icon = "✅" if status == "success" else "⚠️"
-                print(f"  {icon} run={run_id} | {completed} processadas | {persisted} salvas | {elapsed}s server | {wall}s wall | {executor}")
-                print(f"  📊 Acumulado: {total_completed} processadas | {total_persisted} salvas | {round(total_elapsed, 1)}s total\n")
+                print(f"  {icon} run={run_id} | {elapsed}s | {executor} | carga={loaded}")
+                print(f"     Step1: {s1_pct}% ok ({s1_err} erros) | Step2: {s2_pct}% ok ({s2_err} erros) | Step3: {s3_pct}% ok ({s3_err} erros)")
+                print(f"     Salvas: {persisted}/{completed} | Acumulado: {total_persisted} salvas | {round(total_elapsed, 1)}s total\n")
 
             except HTTPError as e:
                 print(f"  ❌ HTTP {e.code}: {e.read().decode('utf-8', errors='ignore')[:200]}\n")
