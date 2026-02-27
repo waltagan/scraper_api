@@ -69,39 +69,51 @@ def _parse_html_standalone(raw_content: str, base_url: str):
     return text, links
 
 
+class _Undaemonize:
+    """
+    Context manager que temporariamente remove o flag daemon do processo atual.
+    No Python 3.x, a propriedade `daemon` lê de `_config['daemon']`, não de `_daemonic`.
+    Deletar a chave faz `_config.get('daemon', False)` retornar False, permitindo
+    criação de subprocessos a partir de daemon workers (Hypercorn/Uvicorn/Gunicorn).
+    """
+    def __init__(self):
+        import multiprocessing.process
+        self._proc = multiprocessing.process.current_process()
+        self._had_key = "daemon" in self._proc._config
+        self._original = self._proc._config.get("daemon")
+
+    def __enter__(self):
+        if self._had_key:
+            del self._proc._config["daemon"]
+        return self
+
+    def __exit__(self, *args):
+        if self._had_key:
+            self._proc._config["daemon"] = self._original
+
+
 def _create_parse_executor(parse_workers: int):
-    """
-    Cria executor para parsing HTML com paralelismo real.
-    Temporariamente desativa o flag daemon do processo atual para permitir
-    criação de subprocessos (Hypercorn/Uvicorn rodam workers como daemon).
-    """
-    import multiprocessing
-    current = multiprocessing.current_process()
-    original_daemon = current.daemon
-
-    try:
-        current._daemonic = False
-
-        from loky import get_reusable_executor
-        executor = get_reusable_executor(max_workers=parse_workers)
-        future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
-        future.result(timeout=15)
-        logger.info("[PARSE-EXECUTOR] loky ReusableExecutor(workers=%s) OK (daemon bypass)", parse_workers)
-        return executor, "loky"
-    except Exception as e:
-        logger.warning("[PARSE-EXECUTOR] loky falhou (%s: %s), tentando ProcessPoolExecutor...", type(e).__name__, str(e)[:200])
+    """Cria executor para parsing HTML: loky → ProcessPool → ThreadPool."""
+    with _Undaemonize():
         try:
-            from concurrent.futures import ProcessPoolExecutor
-            executor = ProcessPoolExecutor(max_workers=parse_workers)
+            from loky import get_reusable_executor
+            executor = get_reusable_executor(max_workers=parse_workers)
             future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
             future.result(timeout=15)
-            logger.info("[PARSE-EXECUTOR] ProcessPoolExecutor(workers=%s) OK (daemon bypass)", parse_workers)
-            return executor, "process"
-        except Exception as e2:
-            logger.warning("[PARSE-EXECUTOR] ProcessPool falhou (%s: %s), usando ThreadPoolExecutor", type(e2).__name__, str(e2)[:200])
-            return ThreadPoolExecutor(max_workers=parse_workers), "thread"
-    finally:
-        current._daemonic = original_daemon
+            logger.info("[PARSE-EXECUTOR] loky ReusableExecutor(workers=%s) OK", parse_workers)
+            return executor, "loky"
+        except Exception as e:
+            logger.warning("[PARSE-EXECUTOR] loky falhou (%s: %s), tentando ProcessPoolExecutor...", type(e).__name__, str(e)[:200])
+            try:
+                from concurrent.futures import ProcessPoolExecutor
+                executor = ProcessPoolExecutor(max_workers=parse_workers)
+                future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
+                future.result(timeout=15)
+                logger.info("[PARSE-EXECUTOR] ProcessPoolExecutor(workers=%s) OK", parse_workers)
+                return executor, "process"
+            except Exception as e2:
+                logger.warning("[PARSE-EXECUTOR] ProcessPool falhou (%s: %s), usando ThreadPoolExecutor", type(e2).__name__, str(e2)[:200])
+                return ThreadPoolExecutor(max_workers=parse_workers), "thread"
 
 
 def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
