@@ -70,20 +70,38 @@ def _parse_html_standalone(raw_content: str, base_url: str):
 
 
 def _create_parse_executor(parse_workers: int):
-    """Cria executor para parsing HTML: loky (ProcessPool) com fallback para ThreadPool."""
+    """
+    Cria executor para parsing HTML com paralelismo real.
+    Temporariamente desativa o flag daemon do processo atual para permitir
+    criação de subprocessos (Hypercorn/Uvicorn rodam workers como daemon).
+    """
+    import multiprocessing
+    current = multiprocessing.current_process()
+    original_daemon = current.daemon
+
     try:
+        current._daemonic = False
+
         from loky import get_reusable_executor
         executor = get_reusable_executor(max_workers=parse_workers)
         future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
         future.result(timeout=15)
-        logger.info("[PARSE-EXECUTOR] loky ReusableExecutor(workers=%s) inicializado com sucesso", parse_workers)
+        logger.info("[PARSE-EXECUTOR] loky ReusableExecutor(workers=%s) OK (daemon bypass)", parse_workers)
         return executor, "loky"
     except Exception as e:
-        logger.warning(
-            "[PARSE-EXECUTOR] loky falhou (%s: %s), usando ThreadPoolExecutor como fallback",
-            type(e).__name__, str(e)[:200],
-        )
-        return ThreadPoolExecutor(max_workers=parse_workers), "thread"
+        logger.warning("[PARSE-EXECUTOR] loky falhou (%s: %s), tentando ProcessPoolExecutor...", type(e).__name__, str(e)[:200])
+        try:
+            from concurrent.futures import ProcessPoolExecutor
+            executor = ProcessPoolExecutor(max_workers=parse_workers)
+            future = executor.submit(_parse_html_standalone, "<html><body>test</body></html>", "https://test.com")
+            future.result(timeout=15)
+            logger.info("[PARSE-EXECUTOR] ProcessPoolExecutor(workers=%s) OK (daemon bypass)", parse_workers)
+            return executor, "process"
+        except Exception as e2:
+            logger.warning("[PARSE-EXECUTOR] ProcessPool falhou (%s: %s), usando ThreadPoolExecutor", type(e2).__name__, str(e2)[:200])
+            return ThreadPoolExecutor(max_workers=parse_workers), "thread"
+    finally:
+        current._daemonic = original_daemon
 
 
 def _chunk_list(items: List[Any], size: int) -> List[List[Any]]:
